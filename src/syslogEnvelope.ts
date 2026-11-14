@@ -1,4 +1,5 @@
 import { isSupportedRfc5424Version } from './grammar/syslogHeader';
+import { scanStructuredData } from './rfc5424Subset';
 import { SYSLOG_HEADER_TOKENS as T } from './grammar/syslogHeaderGrammar.generated';
 
 export type SyslogEnvelopeVariant=
@@ -104,33 +105,13 @@ function fieldTokenValid(value:string,max:number):boolean{
 }
 
 function parseStructuredData(input:string):{structuredData:string;message:string}|null{
-  if(input.startsWith('-')){
-    const rest=input.slice(1);
-    // Exactly one SP separates STRUCTURED-DATA from MSG; further spaces and a BOM are message bytes
-    // (the Ruby export keeps them), so they are not trimmed.
-    if(rest===''||rest.startsWith(' '))return {structuredData:'-',message:rest.slice(1)};
-    return null;
-  }
-  if(!input.startsWith('['))return null;
-  let cursor=0;
-  while(cursor<input.length&&input[cursor]==='['){
-    let quoted=false,escaped=false,closed=false;
-    cursor++;
-    while(cursor<input.length){
-      const ch=input[cursor]!;
-      if(escaped){escaped=false;cursor++;continue;}
-      if(ch==='\\'&&quoted){escaped=true;cursor++;continue;}
-      if(ch==='"'){quoted=!quoted;cursor++;continue;}
-      if(ch===']'&&!quoted){cursor++;closed=true;break;}
-      if(ch==='\r'||ch==='\n')return null;
-      cursor++;
-    }
-    if(!closed||quoted||escaped)return null;
-  }
-  const structuredData=input.slice(0,cursor);
-  const rest=input.slice(cursor);
-  if(rest!==''&&!rest.startsWith(' '))return null;
-  return {structuredData,message:rest.slice(1)};
+  // One STRUCTURED-DATA grammar for this envelope and for the RFC 5424 format (scanStructuredData in
+  // rfc5424Subset.ts): SD-ID and PARAM-NAME are 1..32 printable ASCII characters without '=', ']', '"' and SP,
+  // no identifier or parameter is repeated, and exactly one SP separates STRUCTURED-DATA from MSG. The
+  // generated Ruby does the same (both call parserstudio_rfc5424_sd); the bracket-only scan that stood here
+  // accepted an SD-NAME that Ruby declines.
+  const scanned=scanStructuredData(input);
+  return scanned?{structuredData:scanned.structured,message:scanned.message??''}:null;
 }
 
 // Host tokens are delimited by ASCII white space ([^ \t\n\r\f\v]), which is what Ruby's \S means; JavaScript's

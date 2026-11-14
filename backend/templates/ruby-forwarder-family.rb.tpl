@@ -111,9 +111,11 @@ end
 def parserstudio_assert_no_field_loss(text, result)
   return result unless result.is_a?(Hash)
   # A TAG ("kernel:") or a pair ("srcip=10.1.1.1") read as the RFC 3164 host name is a misread header, whatever
-  # the grammar matched. RFC 5424 HOSTNAME is positional and may hold any printable text, so it is exempt.
-  host = result['syslog_hostname']
-  if host.is_a?(String) && !/\A<[0-9]{1,3}>[0-9]{1,3} /.match?(text)
+  # the grammar matched. Only a record built by parserstudio_syslog_rfc3164 is judged (it carries the mark):
+  # a JSON, key=value, CSV or regex field called syslog_hostname is data, and an RFC 5424 HOSTNAME is
+  # positional and may hold any printable text.
+  host = result.instance_variable_get(:@parserstudio_rfc3164_header) ? result['syslog_hostname'] : nil
+  if host.is_a?(String)
     raise ArgumentError, 'Header misread: a TAG or a key=value pair was taken as the host name' if host.include?('=') || host.end_with?(':')
   end
   body = result['body']
@@ -154,6 +156,12 @@ def parserstudio_independent_pairs(text)
     positional = /\A<[0-9]{1,3}>[0-9]{1,3} (?:[^ ]* ){5}/.match(text)
     return [] if positional.nil?
     rest = positional.post_match
+    # RFC 5424 6.3: STRUCTURED-DATA (NILVALUE or SD-ELEMENTs) follows the header. An SD-PARAM is written
+    # NAME="value" but is not a key=value pair of the MSG; it is stored under its SD-ELEMENT, with an encoded
+    # name when the name is not a plain identifier. Pair accounting starts after well-formed STRUCTURED-DATA;
+    # anything else is not skipped and every pair in it is accounted for.
+    structured = /\A(?:-|(?:\[(?:[^"\]]|"__PS_GRAMMAR_TOKEN_KV_DQ__")*\])+)(?: |\z)/.match(rest)
+    rest = structured.post_match if structured
   end
   pairs = []
   rest.scan(/(__PS_GRAMMAR_TOKEN_KV_KEY__)=(?:"(__PS_GRAMMAR_TOKEN_KV_DQ__)"|'(__PS_GRAMMAR_TOKEN_KV_SQ__)'|((?:\\.|[^ \t\\])*\\?))|[^ \t]+|[ \t]+/m) do |key, double, single, bare|
@@ -554,6 +562,8 @@ def parserstudio_syslog_rfc3164(text, settings)
     'syslog_timestamp' => timestamp,
     'syslog_time_policy' => 'YEAR_AND_ZONE_UNKNOWN'
   }
+  # Marks the record as read by the RFC 3164 header grammar for the run-time host-name check.
+  record.instance_variable_set(:@parserstudio_rfc3164_header, true)
   record['syslog_hostname'] = header['hostname'] if header['hostname']
   record['syslog_pri'] = priority if priority
   tagged = rule == 'rfc3164_tagged'

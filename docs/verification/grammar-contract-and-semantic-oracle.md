@@ -315,14 +315,47 @@ After the fixes: 6,123 lines parsed identically, 15 one-sided, 0 tree difference
 `ts-generic-json-unsafe-integer-accepted`, `ts-generic-pri-space-kv-stops-at-u2028`,
 `rb-generic-calendar-rollover`, `rb-generic-positional-150-columns` keep them.
 
-Open, larger class. A second run put Unicode white space and separators (U+2028, U+2029, NBSP, U+0085, U+3000,
-U+FEFF) and edge white space into 26,000 variants of parsing lines: 12,282 parse identically, 1,244 parse with
-a different tree, 258 only in the browser, 194 only in Ruby. The cause is one difference used throughout the
-hand-written sub-profiles: in JavaScript `\s`, `.` and `trim()` know Unicode white space and line separators,
-in Ruby they are ASCII. The generated Ruby is the reference (the contract's KV_GAP already says SP and TAB
-only). The remedy is on the browser side only (ASCII classes and an ASCII trim in `src/genericStructural.ts`)
-and does not change the Ruby templates; it is not done yet, and this differential is not yet a CI gate. The
-harness and both corpora are kept on dev-atlas in `~aella/.local/state/psgc-w4-differential/`.
+Unicode white space and separators (second run, 26,000 variants with U+2028, U+2029, NBSP, U+0085, U+3000,
+U+FEFF and edge white space): 1,244 lines parsed with a different tree, 258 only in the browser, 194 only in
+Ruby. Classified by cause and closed on 2026-11-15:
+
+| Cause | Lines | Decision |
+|---|---|---|
+| JavaScript `\s` / `\S` also match Unicode white space; Ruby's are ASCII | most of the tree differences in `space_kv`, `comma_kv`, `delimited_kv` | supported input: NBSP, U+2028 and the like are value data (contract KV_GAP). The browser spells the ASCII class out everywhere |
+| JavaScript `trim()` removes Unicode white space; Ruby `strip` does not | value edges | browser trims ASCII white space only (`ASCII_EDGE_SPACE`); the CEF extension slot likewise |
+| `.` stops at U+2028 / U+2029 in JavaScript | lines parsed by Ruby only (WatchGuard, bracket PID, session envelope) | every expression carries the dotAll flag |
+| a line feed or NUL inside the event | positional CSV, key=value | unsupported input: declined by both engines up front (one event is one line) |
+| impossible calendar values (30 February, hour 24, second 60): `Time.iso8601` and `Date.parse` roll them over, each differently | timestamps of nine Ruby and five browser routes | unsupported input: one arithmetic timestamp rule in both engines (`parserstudio_generic_iso_timestamp!`, `isoTimestampOk`) |
+| SD-NAME validity (browser envelope accepted any bracketed text) | 14 + 46 | unsupported input: the envelope uses the strict STRUCTURED-DATA scanner of the RFC 5424 format, as Ruby does |
+| IP token (browser lexical, Ruby `IPAddr.new`); WatchGuard envelope counted IPv4 only in Ruby | found by the gate itself | one lexical rule in both engines; IPv6 addresses count on every WatchGuard route |
+
+Result on the same corpora: 58,430 lines - 0 one-sided, 0 tree differences; 26,000 Unicode variants - 0 and 0
+after the CEF extension fix. No line that both engines parsed before is declined now except the 14 with an
+invalid SD-NAME.
+
+CI gate. `scripts/verification/semantic-oracle.ts differential` runs in the required job
+`native-isolated-synthetic` on Ruby 2.4.9: 50 seed lines (`contracts/generic-differential-seeds.v1.json`, two
+per result mode) and the Generic Structural goldens, about 90 derived variants each (PRI, VERSION, month,
+host, key and address mutations, Unicode separators, control characters, impossible dates), both routes
+(legacy and dedicated): 12,942 cases, the same decision and the same field tree required for every one. Eight
+injected faults (four in the browser extractor, four in the compiled Ruby) must each be reported:
+`ts-diff-unicode-trim`, `ts-diff-impossible-date-accepted`, `ts-diff-json-unsafe-integer`,
+`ts-diff-ip-token-clock-time`, `rb-diff-calendar-rollover`, `rb-diff-positional-150-columns`,
+`rb-diff-line-feed-accepted`, `rb-diff-ip-token-library`. The differential says the engines agree; the
+hand-authored goldens (`genericCases`) say what is right.
+
+The independently authored semantic identity oracle (`independent-semantic-identity-oracle.ts`) now runs before
+the template-hash gate, with its own fault injection
+(`independent-semantic-identity-oracle.fault.test.mjs`: an unmodified copy must pass, a swapped policy must fail).
+
+## Run-time guard: PR #311 review (2026-11-15)
+
+- The host-name check applies only to a result of the RFC 3164 header grammar (a mark on the result, not the
+  field name): a JSON, key=value, CSV or regex field called `syslog_hostname` is data.
+- RFC 5424 STRUCTURED-DATA is not key=value text: pair accounting starts after well-formed STRUCTURED-DATA,
+  so an SD-PARAM (stored under an encoded name) is not demanded as a body field. Goldens
+  `rfc5424-sd-dotted-param-kv`, `rfc5424-sd-two-elements-pair-text-in-value-kv`; fault
+  `rb-guard-structured-data-counted-as-pairs`.
 
 ## RFC 5424 model (W8)
 

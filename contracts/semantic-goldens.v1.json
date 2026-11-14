@@ -308,6 +308,68 @@
       }
     },
     {
+      "id": "rfc5424-sd-dotted-param-kv",
+      "grammar": "syslog_rfc5424",
+      "body": "kv",
+      "raw": "<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [meta a.b=\"x\"] srcip=10.1.1.1 dstip=10.2.2.2 dstport=443 action=accept",
+      "provenance": "RFC 5424 6.3: one SD-ELEMENT whose SD-PARAM name contains a dot (a legal SD-NAME), then a key=value MSG. The SD-PARAM is structured data, not a key=value pair of the MSG, so it is not demanded as a body field (PR #311 review: the run-time field-loss check rejected this complete event).",
+      "expect": {
+        "status": "FULL",
+        "source": {
+          "syslog_pri": 165,
+          "syslog_version": 1,
+          "syslog_timestamp": "2003-10-11T22:14:15.003Z",
+          "syslog_hostname": "mymachine.example.com",
+          "syslog_appname": "evntslog",
+          "syslog_procid": "-",
+          "syslog_msgid": "ID47",
+          "body.srcip": "10.1.1.1",
+          "body.dstip": "10.2.2.2",
+          "body.dstport": "443",
+          "body.action": "accept"
+        },
+        "event": {
+          "srcip": "10.1.1.1",
+          "dstip": "10.2.2.2",
+          "dstport": 443,
+          "action": "accept",
+          "Synthetic.syslog_hostname": "mymachine.example.com",
+          "stellar_log_index": "session"
+        }
+      }
+    },
+    {
+      "id": "rfc5424-sd-two-elements-pair-text-in-value-kv",
+      "grammar": "syslog_rfc5424",
+      "body": "kv",
+      "raw": "<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [origin ip=\"192.0.2.1\"][meta note=\"k=v \\] z\" seq=\"1\"] srcip=10.1.1.1 dstip=10.2.2.2 dstport=443 action=accept",
+      "provenance": "RFC 5424 6.3.3: two SD-ELEMENTs; a PARAM-VALUE with an escaped right bracket and text that looks like a pair. Pair accounting is for the MSG only.",
+      "expect": {
+        "status": "FULL",
+        "source": {
+          "syslog_pri": 165,
+          "syslog_version": 1,
+          "syslog_timestamp": "2003-10-11T22:14:15.003Z",
+          "syslog_hostname": "mymachine.example.com",
+          "syslog_appname": "evntslog",
+          "syslog_procid": "-",
+          "syslog_msgid": "ID47",
+          "body.srcip": "10.1.1.1",
+          "body.dstip": "10.2.2.2",
+          "body.dstport": "443",
+          "body.action": "accept"
+        },
+        "event": {
+          "srcip": "10.1.1.1",
+          "dstip": "10.2.2.2",
+          "dstport": 443,
+          "action": "accept",
+          "Synthetic.syslog_hostname": "mymachine.example.com",
+          "stellar_log_index": "session"
+        }
+      }
+    },
+    {
       "id": "rfc5424-v1-sd-element-kv",
       "grammar": "syslog_rfc5424",
       "body": "kv",
@@ -898,6 +960,57 @@
           "generic.fields.src": "10.0.0.0",
           "generic.fields.action": "allow"
         }
+      }
+    },
+    {
+      "id": "generic-space-kv-nbsp-is-value-data",
+      "raw": "<13>srcip=10.1.1.1 dstip=10.2.2.2 dstport=443 note=a b action=accept",
+      "provenance": "Found by the browser/Ruby differential of 2026-11-15. Pairs are separated by SP or TAB only (contract KV_GAP); NBSP is value data. The browser used JavaScript \\s, which also matches NBSP, U+2028, U+3000 and U+FEFF, and cut the value there.",
+      "expect": {
+        "fields": {
+          "generic.mode": "space_kv",
+          "generic.kv.note": "a b",
+          "generic.kv.action": "accept"
+        }
+      }
+    },
+    {
+      "id": "generic-line-feed-declined",
+      "raw": "<13>srcip=10.1.1.1 dstip=10.2.2.2 dstport=443 action=accept\nx=1",
+      "provenance": "Found by the browser/Ruby differential of 2026-11-15. One event is one line. A line feed inside the text handed to Generic Structural is not supported; the event is declined by both engines instead of being read differently by each.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-envelope-sd-name-33-characters-declined",
+      "raw": "<134>1 2026-10-16T15:44:21Z waf01 aws-waf - WAF [meta@32473 kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk=\"x\"] {\"action\":\"BLOCK\"}",
+      "provenance": "Found by the browser/Ruby differential of 2026-11-15. RFC 5424 6.3.2/6.3.3: SD-NAME is 1*32 PRINTUSASCII. A 33-character PARAM-NAME is not structured data; the browser envelope accepted any bracketed text, the generated Ruby declined it.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-watchguard-ipv6-addresses",
+      "raw": "<139>Jan 16 15:19:05 WatchGuard-Firebox FVE6035FD3AE3: (2024-01-19T08:48:15) firewall: msg_id=\"1BFF-000F\" Allow 1-Trusted 0-External tcp 2001:db8::1 175.16.199.1 39398 25 msg=\"SMTP request\" proxy_act=\"SMTP-Outgoing.1\" rcvd_bytes=\"272\" sent_bytes=\"282\" sender=\"tester@testnet.com\" recipients=\"wg@localhost\" (SMTP-proxy-00)",
+      "provenance": "Found by the browser/Ruby differential of 2026-11-15. WatchGuard Fireware traffic message with an IPv6 source address (RFC 4291 text form). The envelope route of the generated Ruby counted IPv4 addresses only and read the event as a plain tagged message.",
+      "expect": {
+        "fields": {
+          "watchguard_header.app_tag": "firewall",
+          "watchguard.kv.msg_id": "1BFF-000F"
+        },
+        "absent": [
+          "generic.message"
+        ]
+      }
+    },
+    {
+      "id": "generic-cef-extension-of-u2028-only-declined",
+      "raw": "CEF:0|Acme|EDR|1.0|100|File CREATED|5| ",
+      "familyGrammar": "dedicated",
+      "provenance": "Found by the browser/Ruby differential of 2026-11-15. ArcSight CEF: the extension is key=value pairs. U+2028 is not white space in CEF (contract CEF_WS: SP and TAB), so an extension that holds only U+2028 is text that is not a pair. The browser trimmed it away with trim() and reported an event with no extension.",
+      "expect": {
+        "reject": true
       }
     }
   ],

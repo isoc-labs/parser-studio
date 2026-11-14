@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { classifyStructuredParse } from './parseStatus';
+import { RFC3164_HEADER_RESULT } from '../structuredFamilies';
+
+/** Marks a hand-made result the way the RFC 3164 extractor marks its own. */
+const rfc3164 = <T extends object>(outcome: T): T => Object.defineProperty(outcome, RFC3164_HEADER_RESULT, { value: true });
 
 const ok = (fields: Record<string, unknown>) => ({ fields, errors: [] });
 
@@ -27,11 +31,13 @@ describe('Parsing Success Contract: what makes a key=value result FULL', () => {
 
   it('is PARTIAL when a TAG or a pair was taken as the RFC 3164 host name, whatever the body format', () => {
     for (const [raw, host] of [['<134>Nov 14 09:30:00 kernel: started', 'kernel:'], ['<134>Nov 14 09:30:00 srcip=10.1.1.1 x', 'srcip=10.1.1.1']] as const) {
-      const verdict = classifyStructuredParse(raw, ok({ syslog_hostname: host, message: 'x' }), 'other');
+      const verdict = classifyStructuredParse(raw, rfc3164(ok({ syslog_hostname: host, message: 'x' })), 'other');
       expect(verdict.status).toBe('PARTIAL');
       expect(verdict.reasons.join()).toContain('host name');
+      // The same fields without the mark of the RFC 3164 header grammar are data (a JSON field of that name).
+      expect(classifyStructuredParse(raw, ok({ syslog_hostname: host, message: 'x' }), 'other').status).toBe('FULL');
     }
-    expect(classifyStructuredParse('<134>Nov 14 09:30:00 2001:db8::1 started', ok({ syslog_hostname: '2001:db8::1', message: 'started' }), 'other').status).toBe('FULL');
+    expect(classifyStructuredParse('<134>Nov 14 09:30:00 2001:db8::1 started', rfc3164(ok({ syslog_hostname: '2001:db8::1', message: 'started' })), 'other').status).toBe('FULL');
   });
 
   it('exempts the positional RFC 5424 HOSTNAME, which may hold any printable text', () => {

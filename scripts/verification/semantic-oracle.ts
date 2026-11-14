@@ -206,7 +206,7 @@ function mutateContract(text: string, mutant: Mutant): string {
 const TS_MUTANTS: Mutant[] = [
   ...CONTRACT_MUTANTS,
   { id: 'ts-hostname-wrong-capture', file: 'src/structuredFamilies.ts', find: 'syslog_hostname:header.hostname', replace: 'syslog_hostname:header.timestamp' },
-  { id: 'ts-body-fields-dropped', file: 'src/structuredFamilies.ts', find: 'return body.errors.length?body:withBodyKind({fields:{...fields,...body.fields},errors:[]},bodyKindOf(body));', replace: 'return body.errors.length?body:withBodyKind({fields:{...fields},errors:[]},bodyKindOf(body));' },
+  { id: 'ts-body-fields-dropped', file: 'src/structuredFamilies.ts', find: 'const result=withBodyKind({fields:{...fields,...body.fields},errors:[]},bodyKindOf(body));', replace: 'const result=withBodyKind({fields:{...fields},errors:[]},bodyKindOf(body));' },
   { id: 'ts-procid-wrong-capture', file: 'src/structuredFamilies.ts', find: 'syslog_procid:header.procid', replace: 'syslog_procid:header.tag' },
   { id: 'ts-tagged-first-field-lost', file: 'src/structuredFamilies.ts', find: ' const message=header.message;', replace: " const message=tagged?header.message.replace(/^\\S+ /,''):header.message;" },
   { id: 'ts-pri-range-dropped', file: 'src/grammar/syslogHeader.ts', find: 'pri !== undefined && pri > SYSLOG_HEADER_SEMANTICS.priMax', replace: 'false' },
@@ -353,6 +353,8 @@ async function runTs(): Promise<number> {
 // ---------------------------------------------------------------------- Ruby
 const RUNTIME_GUARDED_FAULTS = ['contract-hostname-any-printable', 'contract-hostname-trailing-colon'];
 const RUBY_MUTANTS: Array<Mutant & { grammar: OracleCase['grammar']; target?: string; unguarded?: boolean }> = [
+  // PR #311 review: the run-time check reads STRUCTURED-DATA as key=value text again and rejects a complete event.
+  { id: 'rb-guard-structured-data-counted-as-pairs', grammar: 'syslog_rfc5424', file: 'fragment', find: "    rest = structured.post_match if structured\n", replace: '' },
   // Forwarder-family template: the relay probe must not reject a direct event that has no TAG.
   { id: 'rb-forwarder-probe-rejects-tagless', grammar: 'syslog_rfc3164', target: 'forwarder:syslog_rfc3164', file: 'fragment', find: "{'syslogBodyFormat'=>'raw','taglessStructuredRouter'=>true}", replace: "{'syslogBodyFormat'=>'raw'}" },
   // Faults whose wrong events the run-time guard turns into error records are judged with that guard removed
@@ -1223,8 +1225,159 @@ function runPython(): number {
   return ok ? 0 : 1;
 }
 
+// ------------------------------------------------------------ Generic Structural: browser versus generated Ruby
+// The sub-profile bodies of Generic Structural are written twice by hand (src/genericStructural.ts and
+// backend/templates/generic-structural-helper.rb.tpl). This stage holds the two to each other: for every seed
+// line and every derived variant, both engines must take the same decision (parsed or declined) and, when they
+// parse, return the same field tree. It then injects faults into each side and requires the difference to be
+// reported. Which behaviour is right is decided by the hand-authored goldens, not here.
+interface DifferentialCase { id: string; raw: string; familyGrammar?: 'dedicated' }
+const DIFFERENTIAL_SEPARATORS = [' ', ' ', ' ', '\u0085', '　', '﻿', '\u000b'];
+function differentialVariants(raw: string): string[] {
+  const out = new Set<string>([raw]);
+  const add = (value: string) => { if (value.length > 0 && value.length <= 6000) out.add(value); };
+  const pri = /^<(\d{1,3})>/.exec(raw);
+  if (pri) {
+    const rest = raw.slice(pri[0].length);
+    for (const value of ['0', '191', '192', '999', '1000', '', '٣']) add('<' + value + '>' + rest);
+    add(rest);
+    const version = /^(\d{1,3}) /.exec(rest);
+    if (version) for (const value of ['2', '12', '0']) add(pri[0] + value + rest.slice(version[1]!.length));
+  } else add('<13>' + raw);
+  const month = /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/.exec(raw);
+  if (month) for (const value of ['JAN', 'jan', 'Sept']) add(raw.slice(0, month.index) + value + raw.slice(month.index + 3));
+  const tokens = raw.split(' ');
+  for (let index = 0; index < Math.min(tokens.length, 6); index += 1) {
+    const token = tokens[index]!;
+    if (!token || token.includes('=')) continue;
+    for (const value of [token + 'é', token + '\u007f', token + ':', 'h'.repeat(255), 'h'.repeat(256), '[::1]', '12:34:56', 'fe80::1'])
+      add([...tokens.slice(0, index), value, ...tokens.slice(index + 1)].join(' '));
+  }
+  // An address token anywhere in the line: the two engines must agree on what an IP address is.
+  tokens.map((token, index) => (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(token) ? index : -1)).filter(index => index >= 0).slice(0, 2).forEach(index => {
+    for (const value of ['12:34:56', '[::1]', 'fe80::1', '2001:db8::1', '1:2:3:4:5:6:7:8', '1:2:3', '256.1.1.1', '::ffff:192.0.2.1'])
+      add([...tokens.slice(0, index), value, ...tokens.slice(index + 1)].join(' '));
+  });
+  const key = /([A-Za-z_][A-Za-z0-9_.-]*)=/.exec(raw);
+  if (key) for (const value of ['k'.repeat(96), 'k'.repeat(97), '9key', 'kéy']) add(raw.slice(0, key.index) + value + raw.slice(key.index + key[1]!.length));
+  const spaces = [...raw.matchAll(/ /g)].map(match => match.index!);
+  const alnum = [...raw.matchAll(/[A-Za-z0-9]/g)].map(match => match.index!);
+  DIFFERENTIAL_SEPARATORS.forEach((ch, n) => {
+    if (spaces.length) {
+      const first = spaces[0]!, middle = spaces[Math.floor(spaces.length / 2)]!;
+      add(raw.slice(0, first) + ch + raw.slice(first + 1));
+      add(raw.slice(0, middle) + ch + raw.slice(middle + 1));
+      add(raw.slice(0, middle + 1) + ch + raw.slice(middle + 1));
+    }
+    if (alnum.length) {
+      const at = alnum[(n * 7 + 3) % alnum.length]!, last = alnum[alnum.length - 1]!;
+      add(raw.slice(0, at) + ch + raw.slice(at));
+      add(raw.slice(0, last + 1) + ch + raw.slice(last + 1));
+    }
+  });
+  for (const value of [raw + ' ', raw + ' x', ' ' + raw, raw + ' ', raw + '\t', raw + '\n', raw + '\nx=1', raw + '\u0000', raw.replace(' ', '  '), raw.replace(' ', '\t')]) add(value);
+  add(raw.replace(/\d{4}\/\d{2}\/\d{2}/, '2026/02/30'));
+  add(raw.replace(/\d{4}-\d{2}-\d{2}/, '2026-02-30'));
+  add(raw.replace(/\d{4}-\d{2}-\d{2}/, '2025-02-29'));
+  add(raw.replace(/\b\d{2}:\d{2}:\d{2}\b/, '24:00:00'));
+  add(raw.replace(/\b\d{2}:\d{2}:\d{2}\b/, '23:59:60'));
+  add(raw.replace(/[A-Z][a-z]{2} +\d{1,2} /, 'Feb 30 '));
+  return [...out];
+}
+const canonicalTree = (value: unknown): string => JSON.stringify(value, (_key, node: unknown) =>
+  node !== null && typeof node === 'object' && !Array.isArray(node)
+    ? Object.fromEntries(Object.entries(node as Record<string, unknown>).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)))
+    : node);
+interface RubyExtract { value?: unknown; declined?: string; raised?: string }
+function differentialProblems(extract: GenericExtract, cases: DifferentialCase[], results: Record<string, RubyExtract>, prefix: string): { problems: string[]; parsed: number; declined: number } {
+  const problems: string[] = [];
+  let parsed = 0, declined = 0;
+  for (const item of cases) {
+    const ruby = results[prefix + item.id];
+    if (!ruby || ruby.raised) { problems.push(`${item.id}: the generated Ruby ${ruby ? 'raised ' + ruby.raised : 'returned nothing'}`); continue; }
+    let browser: { fields: Record<string, unknown>; errors: string[] };
+    try { browser = extract(item.raw, undefined, item.familyGrammar); } catch (error) { problems.push(`${item.id}: the browser extractor raised ${String(error).slice(0, 80)}`); continue; }
+    const browserParsed = browser.errors.length === 0 && Object.keys(browser.fields).length > 0;
+    const rubyParsed = ruby.value !== undefined && ruby.value !== null;
+    if (browserParsed !== rubyParsed) problems.push(`${item.id}: parsed only by ${browserParsed ? 'the browser' : 'the generated Ruby'}: ${JSON.stringify(item.raw).slice(0, 160)}`);
+    else if (browserParsed && canonicalTree(browser.fields) !== canonicalTree(ruby.value)) problems.push(`${item.id}: different field tree: ${JSON.stringify(item.raw).slice(0, 160)}`);
+    else if (browserParsed) parsed += 1; else declined += 1;
+  }
+  return { problems, parsed, declined };
+}
+const DIFFERENTIAL_TS_FAULTS: Mutant[] = [
+  // JavaScript's trim() also removes NBSP, U+2028 and U+FEFF, which the generated Ruby keeps as data.
+  { id: 'ts-diff-unicode-trim', file: 'src/genericStructural.ts', find: 'const ASCII_EDGE_SPACE=/^[ \\t\\n\\v\\f\\r]+|[ \\t\\n\\v\\f\\r]+$/g;', replace: 'const ASCII_EDGE_SPACE=/^\\s+|\\s+$/g;' },
+  // The calendar check of the shared timestamp rule is removed: 30 February is accepted by the browser only.
+  { id: 'ts-diff-impossible-date-accepted', file: 'src/genericStructural.ts', find: '  if(day>[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][month-1]!)return false;\n  if(Number(match[4])>23', replace: '  if(Number(match[4])>23' },
+  // The browser's JSON bodies accept an integer beyond 2^53 again.
+  { id: 'ts-diff-json-unsafe-integer', file: 'src/genericStructural.ts', find: 'return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)?undefined:value;', replace: 'return hasDuplicateJsonObjectKeys(text)?undefined:value;' },
+  // The browser's IP token takes a clock time (12:34:56) as an address again.
+  { id: 'ts-diff-ip-token-clock-time', file: 'src/genericStructural.ts', find: '  return sides.length===2?groups.length<=7:groups.length===8;', replace: '  return groups.length>=2;' },
+];
+const DIFFERENTIAL_RUBY_FAULTS: Mutant[] = [
+  { id: 'rb-diff-calendar-rollover', file: 'fragment', find: "  return false unless d<=[31,leap ? 29 : 28,31,30,31,30,31,31,30,31,30,31][mo-1]\n", replace: '' },
+  { id: 'rb-diff-positional-150-columns', file: 'fragment', find: 'values.length.between?(12, 100)', replace: 'values.length.between?(12, 150)' },
+  { id: 'rb-diff-line-feed-accepted', file: 'fragment', find: "text.match?(/[\\x00\\x0a-\\x0d\\x1c-\\x1f]/)", replace: "text.match?(/[\\x0b\\x0c\\x0d\\x1c-\\x1f]/)" },
+  { id: 'rb-diff-ip-token-library', file: 'fragment', find: "  sides.length == 2 ? groups.length <= 7 : groups.length == 8\n", replace: "  groups.length >= 2\n" },
+];
+
+async function runDifferential(): Promise<number> {
+  const expectedRuby = process.env.PARSER_STUDIO_EXPECT_RUBY ?? '2.4.9';
+  const seeds = (JSON.parse(readFileSync(join(REPO, 'contracts/generic-differential-seeds.v1.json'), 'utf8')) as { seeds: Array<{ id: string; raw: string }> }).seeds;
+  const lines = new Map<string, string>();
+  for (const seed of [...seeds, ...goldens.genericCases.map(item => ({ id: 'golden-' + item.id, raw: item.raw }))])
+    differentialVariants(seed.raw).forEach((raw, index) => { if (![...raw].some(ch => ch >= '\ud800' && ch <= '\udfff')) lines.set(`${seed.id}#${index}`, raw); });
+  const cases: DifferentialCase[] = [];
+  for (const [id, raw] of lines) { cases.push({ id: id + '@legacy', raw }); cases.push({ id: id + '@dedicated', raw, familyGrammar: 'dedicated' }); }
+  const project = sampleProject() as unknown as Record<string, any>;
+  project.normalization.topFields = {};
+  project.normalization.nsFields = {};
+  project.normalization.vendorFields = { 'generic.mode': { normalized_name: 'differential_mode', data_type: 'string' } };
+  project.classification = { defaultIndex: 'syslog', rules: [] };
+  const fragments: Record<string, string> = {};
+  project.extraction = { format: 'generic_structural' };
+  fragments.legacy = compilePair(project).files.find(file => !file.name.endsWith('.conf'))!.content;
+  project.extraction = { format: 'generic_structural', genericStructuralFamilyGrammar: 'dedicated' };
+  fragments.dedicated = compilePair(project).files.find(file => !file.name.endsWith('.conf'))!.content;
+  const fragmentOf = (item: DifferentialCase) => (item.familyGrammar === 'dedicated' ? 'dedicated' : 'legacy');
+  const payload: Array<{ id: string; fragment: string; raw: string; call: string }> = cases.map(item => ({ id: item.id, fragment: fragmentOf(item), raw: item.raw, call: 'generic_extract' }));
+  for (const fault of DIFFERENTIAL_RUBY_FAULTS) {
+    for (const route of ['legacy', 'dedicated']) fragments[`${fault.id}@${route}`] = applyMutant(fragments[route]!, fault);
+    for (const item of cases) payload.push({ id: `${fault.id}::${item.id}`, fragment: `${fault.id}@${fragmentOf(item)}`, raw: item.raw, call: 'generic_extract' });
+  }
+  const run = spawnSync('ruby', ['-e', readFileSync(join(REPO, 'scripts/verification/semantic-oracle-runner.rb'), 'utf8')], {
+    input: JSON.stringify({ fragments, cases: payload }), encoding: 'utf8', maxBuffer: 1 << 30, timeout: 900000,
+  });
+  if (run.status !== 0) { process.stderr.write(`GENERIC_DIFFERENTIAL_RUBY_RUNNER_FAILED status=${String(run.status)} ${String(run.stderr).slice(0, 600)}\n`); return 1; }
+  const output = JSON.parse(run.stdout) as { ruby: string; results: Record<string, RubyExtract> };
+  if (output.ruby !== expectedRuby) { process.stderr.write(`GENERIC_DIFFERENTIAL_RUBY_VERSION_MISMATCH expected=${expectedRuby} actual=${output.ruby}\n`); return 1; }
+  const product = differentialProblems(extractGenericStructural as GenericExtract, cases, output.results, '');
+  report('GENERIC_DIFFERENTIAL', product.problems.slice(0, 40));
+  const undetected: string[] = [];
+  for (const fault of DIFFERENTIAL_RUBY_FAULTS) {
+    const found = differentialProblems(extractGenericStructural as GenericExtract, cases, output.results, `${fault.id}::`).problems.length;
+    process.stdout.write(`DIFFERENTIAL_FAULT ${fault.id} ${found > product.problems.length ? 'DETECTED' : 'UNDETECTED'} differences=${found}\n`);
+    if (found <= product.problems.length) undetected.push(fault.id);
+  }
+  for (const fault of DIFFERENTIAL_TS_FAULTS) {
+    const loaded = await extractorFromCopy(fault);
+    const found = differentialProblems(loaded.extractGeneric, cases, output.results, '').problems.length;
+    loaded.dispose();
+    process.stdout.write(`DIFFERENTIAL_FAULT ${fault.id} ${found > product.problems.length ? 'DETECTED' : 'UNDETECTED'} differences=${found}\n`);
+    if (found <= product.problems.length) undetected.push(fault.id);
+  }
+  if (undetected.length) report('DIFFERENTIAL_FAULT_UNDETECTED', undetected);
+  const ok = product.problems.length === 0 && undetected.length === 0 && product.parsed > 0 && product.declined > 0;
+  const faults = DIFFERENTIAL_RUBY_FAULTS.length + DIFFERENTIAL_TS_FAULTS.length;
+  process.stdout.write(`${ok ? 'GENERIC_DIFFERENTIAL_PASS' : 'GENERIC_DIFFERENTIAL_FAIL'} ruby=${output.ruby} seeds=${seeds.length + goldens.genericCases.length} lines=${lines.size} cases=${cases.length} parsed_identically=${product.parsed} declined_by_both=${product.declined} differences=${product.problems.length} faults_detected=${faults - undetected.length}/${faults}\n`);
+  return ok ? 0 : 1;
+}
+
+
 const mode = process.argv[2];
 if (mode === 'ts') process.exit(await runTs());
 else if (mode === 'native') process.exit(runNative());
 else if (mode === 'python') process.exit(runPython());
-else { process.stderr.write('usage: semantic-oracle.ts ts|native|python\n'); process.exit(2); }
+else if (mode === 'differential') process.exit(await runDifferential());
+else { process.stderr.write('usage: semantic-oracle.ts ts|native|python|differential\n'); process.exit(2); }

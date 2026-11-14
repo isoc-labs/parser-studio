@@ -45,7 +45,7 @@ function safeParameterKey(name:string):string {
     .map(byte=>byte.toString(16).padStart(2,'0')).join('');
 }
 
-function scanStructuredData(rest: string): {
+export function scanStructuredData(rest: string): {
   structured: string; message: string | null;
   elements: Record<string,Rfc5424SdElement>;
 } | null {

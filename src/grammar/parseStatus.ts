@@ -20,6 +20,8 @@ export interface RawPair { key: string; value: string; rawValue: string }
 export interface ParseVerdict { status: ParseStatus; lostPairs: RawPair[]; reasons: string[] }
 
 const KEY_AT_TOKEN_START = /^[A-Za-z_][A-Za-z0-9_.-]{0,95}=/;
+/** The mark src/structuredFamilies.ts puts on a result of the RFC 3164 header grammar (a registered symbol). */
+const RFC3164_HEADER_RESULT = Symbol.for('parserstudio.rfc3164HeaderResult');
 
 /**
  * RFC 5424 section 6: after "<PRI>VERSION" come five header fields, each separated by exactly one SP and
@@ -35,7 +37,35 @@ function positionalHeaderEnd(raw: string): number {
     if (space < 0) return raw.length;
     index = space + 1;
   }
-  return index;
+  return structuredDataEnd(raw, index);
+}
+
+/**
+ * RFC 5424 section 6.3: STRUCTURED-DATA follows the header, as NILVALUE or as SD-ELEMENTs. An SD-PARAM is
+ * written NAME="value" but it is not a key=value pair of the MSG: the extractor stores it under its
+ * SD-ELEMENT (and encodes a name that is not a plain identifier), so pair accounting starts after it
+ * (PR #311 review). Text that is not well-formed STRUCTURED-DATA is not skipped: the index is returned
+ * unchanged and every pair in it is accounted for.
+ */
+function structuredDataEnd(raw: string, start: number): number {
+  const after = (index: number) => (index === raw.length ? index : raw[index] === ' ' ? index + 1 : -1);
+  if (raw[start] === '-') { const end = after(start + 1); return end < 0 ? start : end; }
+  let index = start;
+  while (raw[index] === '[') {
+    let cursor = index + 1;
+    let quoted = false;
+    for (; cursor < raw.length; cursor += 1) {
+      const ch = raw[cursor];
+      if (quoted && ch === '\\') { cursor += 1; continue; }
+      if (ch === '"') { quoted = !quoted; continue; }
+      if (ch === ']' && !quoted) break;
+    }
+    if (cursor >= raw.length) return start;
+    index = cursor + 1;
+  }
+  if (index === start) return start;
+  const end = after(index);
+  return end < 0 ? start : end;
 }
 
 /**
@@ -111,9 +141,10 @@ export function classifyStructuredParse(
   if (outcome.errors.length > 0) return { status: 'UNKNOWN', lostPairs: [], reasons: outcome.errors.slice(0, 4) };
   if (Object.keys(outcome.fields).length === 0) return { status: 'UNKNOWN', lostPairs: [], reasons: ['no field was extracted'] };
   // A TAG ("kernel:") or a pair ("srcip=10.1.1.1") read as the RFC 3164 host name is a misread header, whatever
-  // the grammar matched. RFC 5424 HOSTNAME is positional and may hold any printable text, so it is exempt.
-  const host = outcome.fields.syslog_hostname;
-  const headerReasons = typeof host === 'string' && !/^<[0-9]{1,3}>[0-9]{1,3} /.test(raw) && (host.includes('=') || host.endsWith(':'))
+  // the grammar matched. Only a result of the RFC 3164 header grammar is judged (it carries the mark below): a
+  // JSON or key=value field called syslog_hostname is data, and an RFC 5424 HOSTNAME is positional.
+  const host = (outcome as unknown as Record<symbol, unknown>)[RFC3164_HEADER_RESULT] === true ? outcome.fields.syslog_hostname : undefined;
+  const headerReasons = typeof host === 'string' && (host.includes('=') || host.endsWith(':'))
     ? ['a TAG or a key=value pair was taken as the host name'] : [];
   if (bodyFormat !== 'kv') return { status: headerReasons.length ? 'PARTIAL' : 'FULL', lostPairs: [], reasons: headerReasons };
   const leaves = new Map<string, string[]>();

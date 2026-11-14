@@ -2,9 +2,10 @@
 # Emitted only for generic_structural projects; no arbitrary user code executes.
 
 def parserstudio_generic_structural(text)
-  # Do not reinterpret physical C0 record separators as KV/token whitespace.
+  # Do not reinterpret physical C0 record separators as KV/token whitespace, and one event is one line: NUL,
+  # LF, VT, FF, CR and the information separators decline the event, exactly as in the browser extractor.
   raise ArgumentError, 'Unsupported generic structural control separator' if
-    text.match?(/[\x0b\x0c\x0d\x1c-\x1f]/)
+    text.match?(/[\x00\x0a-\x0d\x1c-\x1f]/)
   # VERSION 1 only (contracts/syslog-header-grammar.v1.json): a line that claims to be RFC 5424 with another
   # VERSION is not parsed by any generic grammar either.
   version_head = /__PS_GRAMMAR_FRAGMENT_RFC5424_VERSION_HEAD__/.match(text)
@@ -130,7 +131,7 @@ def parserstudio_generic_short_rfc5424_structured(text)
   return nil unless priority.between?(0, 191)
   return nil unless match[3].match?(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})\z/)
   begin
-    Time.iso8601(match[3])
+    parserstudio_generic_iso_timestamp!(match[3])
     body = match[5].start_with?('CEF:') ? parserstudio_cef(match[5]) : parserstudio_leef(match[5])
   rescue StandardError
     return nil
@@ -151,7 +152,7 @@ def parserstudio_generic_short_rfc5424_json(text)
   return nil unless priority.between?(0, 191)
   return nil unless match[3].match?(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})\z/)
   begin
-    Time.iso8601(match[3])
+    parserstudio_generic_iso_timestamp!(match[3])
     body = parserstudio_json_object(match[5])
   rescue StandardError
     return nil
@@ -224,7 +225,7 @@ def parserstudio_generic_junos_rfc5424_sd(text)
   return nil unless priority.between?(0, 191)
   return nil unless match[3].match?(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})\z/)
   begin
-    Time.iso8601(match[3])
+    parserstudio_generic_iso_timestamp!(match[3])
   rescue StandardError
     return nil
   end
@@ -286,11 +287,27 @@ def parserstudio_generic_structural_timestamp_valid(value)
     value.match?(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\z/) ? value + 'Z' : nil
   return false unless candidate
   begin
-    parsed = Time.iso8601(candidate)
-    parsed.year.between?(1, 9999)
+    parserstudio_generic_iso_timestamp!(candidate)
   rescue StandardError
     false
   end
+end
+
+# One timestamp rule for every Generic Structural route, the same as isoTimestampOk in the browser: the
+# lexical form YYYY-MM-DDTHH:MM:SS[.fraction][Z or +HH:MM] and a calendar checked by arithmetic.
+# Time.iso8601 is not used for validation: it rolls 30 February over to 2 March and accepts hour 24 and
+# second 60, and the browser's Date.parse disagrees with it on some of those.
+def parserstudio_generic_iso_timestamp!(value)
+  match = /\A(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))?\z/.match(value.to_s)
+  raise ArgumentError, 'Invalid timestamp' unless match
+  y=Integer(match[1],10); mo=Integer(match[2],10); d=Integer(match[3],10)
+  leap=(y%4).zero? && (!(y%100).zero? || (y%400).zero?)
+  valid = y.between?(1,9999) && mo.between?(1,12) && d>=1 &&
+    d<=[31,leap ? 29 : 28,31,30,31,30,31,31,30,31,30,31][mo-1] &&
+    Integer(match[4],10)<=23 && Integer(match[5],10)<=59 && Integer(match[6],10)<=59 &&
+    (match[7].nil? || (Integer(match[7],10)<=23 && Integer(match[8],10)<=59))
+  raise ArgumentError, 'Invalid timestamp' unless valid
+  true
 end
 
 def parserstudio_generic_bracket_colon_kv(text)
@@ -592,16 +609,19 @@ def parserstudio_generic_profile_tokens(text, start)
 end
 
 def parserstudio_generic_ip_token(value)
-  # A port/decimal integer is not an IP host, even when an IP library
-  # accepts abbreviated integer notation. Require a full IPv4 lexical
-  # address or an IPv6 colon form before semantic address validation.
+  # One lexical rule, the same as ipToken in the browser extractor: dotted IPv4 with four octets up to 255,
+  # or IPv6 as hexadecimal groups of up to four digits with at most one "::" (eight groups without it, at
+  # most seven with it). IPAddr.new is not used: it also takes "[::1]", a zone id and an embedded IPv4, which
+  # the browser does not, and a port or a clock time is never an address.
   return false unless value.is_a?(String)
-  ipv4 = value.match?(/\A(?:[0-9]{1,3}\.){3}[0-9]{1,3}\z/)
-  return false unless ipv4 || value.include?(':')
-  IPAddr.new(value)
-  true
-rescue StandardError
-  false
+  return true if value.match?(/\A(?:[0-9]{1,3}\.){3}[0-9]{1,3}\z/) &&
+    value.split('.').all? { |part| Integer(part, 10) <= 255 }
+  return false unless value.match?(/\A[0-9A-Fa-f:]+\z/) && !value.include?(':::')
+  sides = value.split('::', -1)
+  return false if sides.length > 2 || sides.any? { |side| side.start_with?(':') || side.end_with?(':') }
+  groups = value.split(':').reject(&:empty?)
+  return false if groups.any? { |part| part.length > 4 }
+  sides.length == 2 ? groups.length <= 7 : groups.length == 8
 end
 
 # Time.iso8601 may normalize invalid Gregorian dates on some Ruby runtimes.
@@ -676,7 +696,7 @@ def parserstudio_generic_watchguard(text)
   return nil if match[1] && !Integer(match[1], 10).between?(0, 191)
   if match[7]
     begin
-      Time.iso8601(match[7])
+      parserstudio_generic_iso_timestamp!(match[7])
     rescue StandardError
       return nil
     end
@@ -702,7 +722,7 @@ def parserstudio_generic_watchguard_message(text)
   return nil unless parserstudio_generic_valid_bsd_clock(match[2], match[3], match[4])
   return nil if match[1] && !Integer(match[1], 10).between?(0, 191)
   begin
-    Time.iso8601(match[7])
+    parserstudio_generic_iso_timestamp!(match[7])
   rescue StandardError
     return nil
   end
@@ -724,8 +744,8 @@ def parserstudio_generic_dual_timestamp_session(text)
   return nil unless match
   return nil unless parserstudio_generic_valid_bsd_clock(match[1], match[2], match[3])
   begin
-    Time.iso8601(match[5])
-    Time.iso8601("#{match[8]}T#{match[9]}Z")
+    parserstudio_generic_iso_timestamp!(match[5])
+    parserstudio_generic_iso_timestamp!("#{match[8]}T#{match[9]}Z")
   rescue StandardError
     return nil
   end
@@ -1011,8 +1031,7 @@ def parserstudio_generic_syslog_envelope(text)
       throw :parserstudio_not_rfc5424 unless timestamp=='-' ||
         (timestamp.match?(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})\z/) &&
          begin
-           parsed_time=Time.iso8601(timestamp)
-           parsed_time.month==timestamp[5,2].to_i && parsed_time.day==timestamp[8,2].to_i
+           parserstudio_generic_iso_timestamp!(timestamp)
          rescue StandardError
            false
          end)
@@ -1066,7 +1085,7 @@ def parserstudio_generic_syslog_envelope(text)
   rfc3339=/\A(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})?) +(\S{1,255})(?: +(.*))?\z/m.match(rest)
   if rfc3339
     begin
-      Time.iso8601(rfc3339[1])
+      parserstudio_generic_iso_timestamp!(rfc3339[1])
       syslog={'variant'=>'rfc3339_loose','confidence'=>'strong'}.merge(pri_fields).merge(
               'timestamp'=>rfc3339[1],'hostname'=>rfc3339[2])
       return parserstudio_generic_envelope_decorate(syslog,rfc3339[3].to_s)
@@ -1157,7 +1176,7 @@ def parserstudio_generic_envelope_watchguard(text)
   head=/\A(?:([A-Za-z0-9.-]{2,64}) +)?(?:\(([0-9T:+-]{19,35})\) +)?(firewall(?:\[\d{1,8}\])?): +/.match(text)
   return nil unless head
   begin
-    Time.iso8601(head[2]) if head[2]
+    parserstudio_generic_iso_timestamp!(head[2]) if head[2]
   rescue StandardError
     return nil
   end
@@ -1166,9 +1185,9 @@ def parserstudio_generic_envelope_watchguard(text)
     ['Allow','Deny','Drop'].include?(body['tokens'][0])
   msg_id=body['kv']['msg_id']
   return nil unless msg_id.is_a?(String) && msg_id.match?(/\A[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}\z/)
-  ip=/\A(?:\d{1,3}\.){3}\d{1,3}\z/
-  ips=body['tokens'].count { |value| value.match?(ip) &&
-    value.split('.').all? { |part| Integer(part,10).between?(0,255) rescue false } }
+  # The same address rule as every other WatchGuard route and as the browser (IPv4 or IPv6): this route used
+  # to count IPv4 only, so a WatchGuard event with IPv6 addresses was read as a plain tagged message here.
+  ips=body['tokens'].count { |value| parserstudio_generic_ip_token(value) }
   return nil if ips<2
   header={'app_tag'=>head[3]}
   header['serial']=head[1] if head[1]

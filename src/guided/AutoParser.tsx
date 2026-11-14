@@ -1248,6 +1248,14 @@ export default function AutoParser({
        {currentPair&&<div className="auto-parser-download" aria-label="Generated parser files">
          <strong><CheckCircle2 size={17}/> Parser files created successfully</strong>
          <span>The browser samples passed and DRAFT files were generated. Native runtime and Stellar target verification are separate; nothing was deployed.</span>
+         {/* Parsing Success Contract: a partially parsed sample is never presented as a complete success. */}
+         {(suite?.events??[]).some(event=>event.parseStatus==='PARTIAL')&&<span role="note" aria-label="Partially parsed sample events">
+           {(suite?.events??[]).filter(event=>event.parseStatus==='PARTIAL').length} of {suite?.events.length??0} sample events are only partially parsed, not completely.{' '}
+           {(suite?.events??[]).find(event=>event.parseStatus==='PARTIAL')?.diagnostics.find(item=>
+             item.code==='GENERIC_STRUCTURAL_NOT_FULL'||item.code==='FIELD_LOSS_NOT_FULL'||item.code==='HEADER_MISREAD_NOT_FULL')?.message
+             ??'Part of the original text is not in a field.'}{' '}
+           The original text is kept unchanged. This parser keeps the reading it was created with.
+         </span>}
          <details className="auto-parser-recipe" aria-label="Parser file verification details">
            <summary>Technical verification details</summary>
            <span>File integrity checked · Native parser runtime and Stellar Cyber target not verified</span>

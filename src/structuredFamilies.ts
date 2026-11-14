@@ -23,6 +23,13 @@ const withBodyKind = <T extends StructuredExtraction>(extraction: T, kind: strin
   if (kind !== undefined && extraction.errors.length === 0) BODY_KIND.set(extraction, kind);
   return extraction;
 };
+/**
+ * Set, not enumerable, on a result whose syslog_* fields were read by the RFC 3164 header grammar. The
+ * Parsing Success Contract checks the host name of such a result only; a JSON, key=value, CSV or regex field
+ * that happens to be called syslog_hostname is data (PR #311 review). A registered symbol, so that a second
+ * copy of this module (the oracle's fault-injection copies) marks results the same way.
+ */
+export const RFC3164_HEADER_RESULT = Symbol.for('parserstudio.rfc3164HeaderResult');
 /** 'kv', 'json', 'cef', 'leef', 'regex' or 'raw' when the extractor resolved a body dialect for this result (also for `auto`). */
 export const bodyKindOf = (extraction: StructuredExtraction): string | undefined => BODY_KIND.get(extraction);
 
@@ -30,7 +37,7 @@ export function detectStructuredFamily(input: string): StructuredFamily | null {
   if (/^CEF:\d+\|/.test(input)) return 'cef';
   if (/^LEEF:(?:1\.0|2\.0)\|/.test(input)) return 'leef';
   // An RFC 5424 shaped header is labelled RFC 5424 only for a VERSION the contract supports.
-  const ietf = /^<\d{1,3}>([1-9]\d?) \S+ \S+ \S+ /.exec(input);
+  const ietf = /^<\d{1,3}>([1-9]\d?) [^ \t\n\r\f\v]+ [^ \t\n\r\f\v]+ [^ \t\n\r\f\v]+ /.exec(input);
   if (ietf && isSupportedRfc5424Version(ietf[1]!)) return 'syslog_rfc5424';
   if (/^<\d{1,3}>[A-Z][a-z]{2} +\d{1,2} +\d{2}:\d{2}:\d{2} /.test(input)) return 'syslog_rfc3164';
   // Bounded BSD security envelope without TAG: timestamp, an optional host
@@ -209,7 +216,10 @@ function parseRfc3164Strict(input:string,choice:'raw'|'json'|'kv'|'cef'|'leef'|'
  if(!tagged&&mode==='raw')
   return failure('Tagless RFC3164 requires an explicit structured security body');
  const body=parsedBody(message,mode,regexPattern);
- return body.errors.length?body:withBodyKind({fields:{...fields,...body.fields},errors:[]},bodyKindOf(body));
+ if(body.errors.length)return body;
+ const result=withBodyKind({fields:{...fields,...body.fields},errors:[]},bodyKindOf(body));
+ Object.defineProperty(result,RFC3164_HEADER_RESULT,{value:true});
+ return result;
 }
 
 export function extractStructuredFamily(input: string, format: StructuredFamily, bodyFormat: 'raw' | 'json' | 'kv' | 'cef' | 'leef' | 'regex' | 'auto' = 'raw', regexPattern?:string): StructuredExtraction {
@@ -249,7 +259,9 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
       cef_device_product: parts[1], cef_device_version: parts[2],
       cef_signature_id: parts[3], cef_name: parts[4], cef_severity: parts[5],
     };
-    if (parts[6].trim()) {
+    // An extension slot that holds nothing but ASCII white space is empty, as in the generated Ruby (strip).
+    // trim() would also call U+2028 or NBSP empty and silently drop them; they are extension text.
+    if (/[^ \t\n\v\f\r\0]/.test(parts[6])) {
       const extension = cefExtensionValues(parts[6]);
       if (extension.errors.length) return extension;
       for (const [key, value] of Object.entries(extension.fields)) {

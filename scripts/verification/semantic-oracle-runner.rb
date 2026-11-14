@@ -72,6 +72,23 @@ input['cases'].each do |item|
   abort "DUPLICATE_CASE #{id}" if results.key?(id)
   parser = parsers[item['fragment'].to_s]
   abort "UNKNOWN_FRAGMENT #{id}" unless parser
+  if item['call'] == 'generic_extract'
+    # The Generic Structural extraction tree itself (no mapping, no normalization), for the browser/Ruby
+    # differential. The first parse call loads the rule set of the artifact.
+    begin
+      parser.parse('') { |_time, _record| } unless parser.instance_variable_get(:@parser_rule_set)
+    rescue StandardError
+      nil
+    end
+    begin
+      results[id] = { 'value' => oracle_plain(parser.send(:parserstudio_generic_structural, item['raw'].to_s)) }
+    rescue ArgumentError => e
+      results[id] = { 'declined' => e.message }
+    rescue StandardError => e
+      results[id] = { 'raised' => e.class.to_s }
+    end
+    next
+  end
   calls = []
   begin
     parser.parse(item['raw'].to_s) { |time, record| calls << [oracle_plain(time), oracle_plain(record)] }
