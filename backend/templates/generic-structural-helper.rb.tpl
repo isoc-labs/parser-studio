@@ -297,8 +297,12 @@ end
 # lexical form YYYY-MM-DDTHH:MM:SS[.fraction][Z or +HH:MM] and a calendar checked by arithmetic.
 # Time.iso8601 is not used for validation: it rolls 30 February over to 2 March and accepts hour 24 and
 # second 60, and the browser's Date.parse disagrees with it on some of those.
-def parserstudio_generic_iso_timestamp!(value)
-  match = /\A(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))?\z/.match(value.to_s)
+# The Syslog envelope recognizers write the offset as [+-]HH:?MM; they pass basic_offset (the browser's
+# validIsoTimestamp), so that what the recognizer accepts is not declined here for a missing colon.
+def parserstudio_generic_iso_timestamp!(value, basic_offset = false)
+  match = (basic_offset ?
+    /\A(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):?(\d{2}))?\z/ :
+    /\A(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))?\z/).match(value.to_s)
   raise ArgumentError, 'Invalid timestamp' unless match
   y=Integer(match[1],10); mo=Integer(match[2],10); d=Integer(match[3],10)
   leap=(y%4).zero? && (!(y%100).zero? || (y%400).zero?)
@@ -511,11 +515,22 @@ def parserstudio_generic_valid_bsd_clock(month, day_text, time)
           'Jul'=>31,'Aug'=>31,'Sep'=>30,'Oct'=>31,'Nov'=>30,'Dec'=>31}
   return false unless days.key?(month)
   day = Integer(day_text, 10)
-  hour, minute, second = time.split(':').map { |value| Integer(value, 10) }
-  day.between?(1, days[month]) && hour.between?(0, 23) &&
-    minute.between?(0, 59) && second.between?(0, 59)
+  # A fraction of a second is part of the clock where the recognizer admits one (the browser's validClock).
+  clock = /\A(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?\z/.match(time)
+  return false unless clock
+  day.between?(1, days[month]) && Integer(clock[1], 10) <= 23 &&
+    Integer(clock[2], 10) <= 59 && Integer(clock[3], 10) <= 59
 rescue StandardError
   false
+end
+
+# The numeric offset of a timestamp: Z, +HH:MM or +HHMM, hour at most 23 and minute at most 59 (the browser's
+# validZone). Checked as text: Time.new and Time.iso8601 of the target Ruby accept only some of these
+# spellings and do not bound the minute.
+def parserstudio_generic_zone_valid(zone)
+  return true if zone == 'Z'
+  match = /\A[+-](\d{2}):?(\d{2})\z/.match(zone.to_s)
+  !match.nil? && Integer(match[1], 10) <= 23 && Integer(match[2], 10) <= 59
 end
 
 def parserstudio_generic_profile_tokens(text, start)
@@ -628,11 +643,9 @@ end
 # The source calendar and wall clock must round-trip unchanged. This is a
 # format-level invariant shared by positional and mixed ISO Syslog parsing.
 def parserstudio_generic_iso_calendar_valid(date, clock, zone)
-  return false unless date.match?(/\A\d{4}-\d{2}-\d{2}\z/)
-  return false unless clock.match?(/\A\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?\z/)
-  parsed = Time.iso8601("#{date}T#{clock}#{zone}")
-  parsed.strftime('%Y-%m-%d') == date &&
-    parsed.strftime('%H:%M:%S') == clock[0, 8]
+  parts = /\A(\d{4})-(\d{2})-(\d{2})\z/.match(date)
+  return false unless parts
+  parserstudio_generic_envelope_calendar(parts[1], parts[2], parts[3], clock, zone)
 rescue StandardError
   false
 end
@@ -934,6 +947,8 @@ def parserstudio_generic_rfc3164_positional_csv(text)
   return nil if head[1] && !Integer(head[1], 10).between?(0, 191)
   body = text[head.end(0)..-1].to_s
   return nil if body.match?(/\A[A-Za-z_][A-Za-z0-9_.-]*=/)
+  # RFC 4180 as text first: the library alone also takes ""a"" as a quoted field (see parserstudio_csv_rfc4180?).
+  return nil unless parserstudio_csv_rfc4180?(body, ',', false)
   begin
     values = CSV.parse_line(body, col_sep: ',', liberal_parsing: false)
   rescue CSV::MalformedCSVError
@@ -974,9 +989,10 @@ rescue StandardError
   nil
 end
 
-def parserstudio_generic_envelope_calendar(year,month,day,time,zone='+00:00')
+def parserstudio_generic_envelope_calendar(year,month,day,time,zone=nil)
   match=/\A(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?\z/.match(time)
   return false unless match
+  return false unless zone.nil? || parserstudio_generic_zone_valid(zone)
   y=Integer(year,10); mo=Integer(month,10); d=Integer(day,10)
   # Time.new rolls an impossible day over (30 February becomes 2 March) instead of raising, so the calendar
   # is checked by arithmetic, as the browser does (validCalendarDate / validIsoPriClock).
@@ -984,7 +1000,6 @@ def parserstudio_generic_envelope_calendar(year,month,day,time,zone='+00:00')
   return false unless Integer(match[1],10)<=23 && Integer(match[2],10)<=59 && Integer(match[3],10)<=59
   leap=(y%4).zero? && (!(y%100).zero? || (y%400).zero?)
   return false unless d<=[31,leap ? 29 : 28,31,30,31,30,31,31,30,31,30,31][mo-1]
-  Time.new(y,mo,d,Integer(match[1],10),Integer(match[2],10),Integer(match[3],10),zone)
   true
 rescue StandardError
   false
@@ -1031,7 +1046,7 @@ def parserstudio_generic_syslog_envelope(text)
       throw :parserstudio_not_rfc5424 unless timestamp=='-' ||
         (timestamp.match?(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})\z/) &&
          begin
-           parserstudio_generic_iso_timestamp!(timestamp)
+           parserstudio_generic_iso_timestamp!(timestamp, true)
          rescue StandardError
            false
          end)
@@ -1085,7 +1100,7 @@ def parserstudio_generic_syslog_envelope(text)
   rfc3339=/\A(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})?) +(\S{1,255})(?: +(.*))?\z/m.match(rest)
   if rfc3339
     begin
-      parserstudio_generic_iso_timestamp!(rfc3339[1])
+      parserstudio_generic_iso_timestamp!(rfc3339[1], true)
       syslog={'variant'=>'rfc3339_loose','confidence'=>'strong'}.merge(pri_fields).merge(
               'timestamp'=>rfc3339[1],'hostname'=>rfc3339[2])
       return parserstudio_generic_envelope_decorate(syslog,rfc3339[3].to_s)
@@ -1095,7 +1110,7 @@ def parserstudio_generic_syslog_envelope(text)
   end
 
   iso=/\A(\d{4})-(\d{2})-(\d{2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)(?: +(Z|[+-]\d{2}:?\d{2}))? +(\S{1,255})(?: +(.*))?\z/m.match(rest)
-  if iso && parserstudio_generic_envelope_calendar(iso[1],iso[2],iso[3],iso[4],iso[5]||'+00:00')
+  if iso && parserstudio_generic_envelope_calendar(iso[1],iso[2],iso[3],iso[4],iso[5])
     syslog={'variant'=>'iso_space','confidence'=>'strong'}.merge(pri_fields).merge(
             'year'=>iso[1],'timestamp'=>"#{iso[1]}-#{iso[2]}-#{iso[3]} #{iso[4]}",
             'time'=>iso[4],'hostname'=>iso[6])
@@ -1104,7 +1119,7 @@ def parserstudio_generic_syslog_envelope(text)
   end
 
   slash=/\A(\d{4})\/(\d{2})\/(\d{2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)(?: +(Z|[+-]\d{2}:?\d{2}))? +(\S{1,255})(?: +(.*))?\z/m.match(rest)
-  if slash && parserstudio_generic_envelope_calendar(slash[1],slash[2],slash[3],slash[4],slash[5]||'+00:00')
+  if slash && parserstudio_generic_envelope_calendar(slash[1],slash[2],slash[3],slash[4],slash[5])
     syslog={'variant'=>'slash_date','confidence'=>'strong'}.merge(pri_fields).merge(
             'year'=>slash[1],'timestamp'=>"#{slash[1]}/#{slash[2]}/#{slash[3]} #{slash[4]}",
             'time'=>slash[4],'hostname'=>slash[6])
@@ -1196,6 +1211,7 @@ def parserstudio_generic_envelope_watchguard(text)
 end
 
 def parserstudio_generic_envelope_csv(text)
+  return nil unless parserstudio_csv_rfc4180?(text, ',', false)
   CSV.parse_line(text,col_sep:',',liberal_parsing:false)
 rescue CSV::MalformedCSVError
   nil

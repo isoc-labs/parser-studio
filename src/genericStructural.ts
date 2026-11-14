@@ -6,6 +6,7 @@ import {GENERIC_STRUCTURAL_MIXED_PROFILE_V1,type GenericStructuralProfile} from 
 import {GRAMMAR_FRAGMENTS,SYSLOG_HEADER_SEMANTICS,SYSLOG_HEADER_TOKENS as T} from './grammar/syslogHeaderGrammar.generated';
 import {hasDuplicateJsonObjectKeys} from './jsonDuplicateKeys';
 import {hasUnsafeJsonNumbers} from './jsonNumberSafety';
+import {jsonSourceValueValid} from './jsonSourceSafety';
 export type {GenericStructuralProfile} from './genericStructuralProfiles';
 
 // The header tokens of the sub-profile expressions below are the grammar contract's (contracts/
@@ -28,7 +29,9 @@ const ASCII_TRAIL_SPACE=/[ \t\n\v\f\r]+$/;
 function parseJsonBody(text:string):unknown{
   let value:unknown;
   try{value=JSON.parse(text);}catch{return undefined;}
-  return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)?undefined:value;
+  // The JSON source contract of the JSON format applies here too (jsonSourceValueValid): at most 8 nested
+  // levels and no lone surrogate, which is what parserstudio_json_object enforces in the generated Ruby.
+  return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)||!jsonSourceValueValid(value)?undefined:value;
 }
 
 /**
@@ -631,25 +634,41 @@ function rfc3164DelimitedCommaKv(raw:string):Record<string,unknown>|null{
   return {syslog,...body};
 }
 
+/**
+ * One comma-separated row, read like Ruby's CSV.parse_line(col_sep: ',', liberal_parsing: false) in the
+ * generated parser (RFC 4180): a field is either unquoted and holds no quotation mark at all, or it opens
+ * with a quotation mark at its first character, writes a quotation mark inside as two, and closes directly
+ * before the comma or the end of the row. Anything else is not a row: the event is declined instead of a
+ * quotation mark being dropped from a value.
+ */
 function positionalCsvValues(text:string):string[]|null{
   if(!text||text.includes('\0'))return null;
-  const values:string[]=[];let token='';let quoted=false;
-  for(let i=0;i<text.length;i++){
-    const ch=text[i]!;
-    if(quoted){
-      if(ch==='"'){
-        if(text[i+1]==='"'){token+='"';i++;continue;}
-        quoted=false;continue;
+  const values:string[]=[];
+  let index=0;
+  for(;;){
+    let token='';
+    if(text[index]==='"'){
+      index++;
+      for(;;){
+        if(index>=text.length)return null;
+        const ch=text[index]!;
+        if(ch==='"'){
+          if(text[index+1]==='"'){token+='"';index+=2;continue;}
+          index++;break;
+        }
+        token+=ch;index++;
       }
-      token+=ch;continue;
+      if(index<text.length&&text[index]!==',')return null;
+    }else{
+      while(index<text.length&&text[index]!==','){
+        if(text[index]==='"')return null;
+        token+=text[index]!;index++;
+      }
     }
-    if(ch==='"'){quoted=true;continue;}
-    if(ch===','){values.push(token);token='';continue;}
-    token+=ch;
+    values.push(token);
+    if(index>=text.length)return values;
+    index++;
   }
-  if(quoted)return null;
-  values.push(token);
-  return values;
 }
 
 const PANOS_TRAFFIC_53=[

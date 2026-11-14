@@ -1246,8 +1246,12 @@ export default function AutoParser({
          </small>}
        </div>}
        {currentPair&&<div className="auto-parser-download" aria-label="Generated parser files">
-         <strong><CheckCircle2 size={17}/> Parser files created successfully</strong>
-         <span>The browser samples passed and DRAFT files were generated. Native runtime and Stellar target verification are separate; nothing was deployed.</span>
+         {/* Parsing Success Contract: with a partially parsed sample the headline does not say that the samples passed. */}
+         {(suite?.events??[]).some(event=>event.parseStatus==='PARTIAL')
+           ?<><strong>Parser files created; some sample events are only partially parsed</strong>
+             <span>DRAFT files were generated. Native runtime and Stellar target verification are separate; nothing was deployed.</span></>
+           :<><strong><CheckCircle2 size={17}/> Parser files created successfully</strong>
+             <span>The browser samples passed and DRAFT files were generated. Native runtime and Stellar target verification are separate; nothing was deployed.</span></>}
          {/* Parsing Success Contract: a partially parsed sample is never presented as a complete success. */}
          {(suite?.events??[]).some(event=>event.parseStatus==='PARTIAL')&&<span role="note" aria-label="Partially parsed sample events">
            {(suite?.events??[]).filter(event=>event.parseStatus==='PARTIAL').length} of {suite?.events.length??0} sample events are only partially parsed, not completely.{' '}

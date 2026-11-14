@@ -131,9 +131,10 @@ export function tokenizeCSV(raw: string, delimiter: string): (string | null)[] |
   // cannot combine strip:true with a TAB column separator. Retain TAB-space
   // cells exactly, including whitespace-only values (not missing/null).
   const stripUnquoted = delimiter !== '\t';
-  // Ruby CSV strip:true removes ASCII whitespace, not Unicode NBSP/EM SPACE.
-  // Preserve source Unicode values to keep browser/native mapped fields equal.
-  const trimCsvAscii=(text:string)=>text.replace(/^[ \t\n\v\f\r]+|[ \t\n\v\f\r]+$/g,'');
+  // The generated parser strips SP and TAB at the edges of an unquoted field (parserstudio_csv_strip_field_edges
+  // on the target Ruby 2.4.9, whose CSV has no strip option). Form feed, vertical tab, NBSP and EM SPACE are
+  // field data there, so they are kept here too (re-audit 2026-11-15: the browser also removed FF and VT).
+  const trimCsvAscii=(text:string)=>text.replace(/^[ \t]+|[ \t]+$/g,'');
   let token = '';
   let state: 'start' | 'plain' | 'quoted' | 'afterQuote' = 'start';
   for (let i = 0; i < raw.length; i++) {
@@ -166,6 +167,9 @@ export function tokenizeCSV(raw: string, delimiter: string): (string | null)[] |
   if (state === 'quoted') return null;
   out.push(state === 'start' ? null : state === 'afterQuote' ? token :
     stripUnquoted ? trimCsvAscii(token) : token);
+  // A row that is empty (or, where field edges are stripped, only spaces and TABs) is no row: Ruby's
+  // CSV.parse_line returns nil for it and the generated parser reports "No CSV event parsed".
+  if (out.length === 1 && out[0] === null) return null;
   return out;
 }
 

@@ -25,6 +25,11 @@ IPv4_STRICT = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
 DEC = json.JSONDecoder()
 
 
+def _has_unpaired_surrogate(text: str) -> bool:
+    """True when a decoded JSON string holds a surrogate code point (the decoder joins a valid pair into one character)."""
+    return any(0xD800 <= ord(ch) <= 0xDFFF for ch in text)
+
+
 @dataclass(frozen=True)
 class Span:
     start: int
@@ -144,6 +149,8 @@ class SpanJsonDecoder:
                     key,self.i=DEC.raw_decode(self.raw,self.i)
                     if not isinstance(key,str) or key in out or key in {"__proto__","constructor","prototype"}:
                         raise ValueError("JSON_DUPLICATE_OR_UNSAFE_KEY")
+                    if _has_unpaired_surrogate(key):
+                        raise ValueError("JSON_UNPAIRED_SURROGATE")
                     self.whitespace()
                     if self.raw[self.i:self.i+1]!=":":
                         raise ValueError("JSON_COLON_MISSING")
@@ -184,6 +191,10 @@ class SpanJsonDecoder:
         # exponents. Neither may become a verified original numeric value.
         if isinstance(value,float) and not math.isfinite(value):
             raise ValueError("JSON_NUMBER_RANGE_OR_CONSTANT_UNSUPPORTED")
+        # RFC 8259 8.2 / RFC 3629: a surrogate escape without its partner names no character and has no UTF-8
+        # form. Python's decoder keeps it as a lone surrogate; the browser and the generated Ruby decline it.
+        if isinstance(value,str) and _has_unpaired_surrogate(value):
+            raise ValueError("JSON_UNPAIRED_SURROGATE")
         self.i=end
         self.count+=1
         self.nodes[path]=(value,start,end)

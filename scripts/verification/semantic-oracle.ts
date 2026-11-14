@@ -31,7 +31,7 @@ import { generateRfc5424KvCases } from '../../src/grammar/rfc5424Model';
 import { generateCefLeefCases, type FamilyCase } from '../../src/grammar/cefLeefModel';
 import { generateCsvCases, type CsvCase } from '../../src/grammar/csvModel';
 import { generateJsonCases, type JsonCase, type JsonValue } from '../../src/grammar/jsonModel';
-import { extractFields } from '../../src/parser';
+import { extractFields, preview, tokenizeCSV } from '../../src/parser';
 import { createDraft } from '../../src/model';
 import { matchHeaderRule } from '../../src/grammar/syslogHeader';
 import { SYSLOG_HEADER_RULES, type SyslogHeaderRuleName } from '../../src/grammar/syslogHeaderGrammar.generated';
@@ -281,7 +281,7 @@ function genericTsFailures(extract: GenericExtract, classify: GenericClassify): 
 }
 const TS_GENERIC_MUTANTS: Mutant[] = [
   // A JSON body inside Generic Structural with an integer beyond 2^53 is parsed (and silently rounded) again.
-  { id: 'ts-generic-json-unsafe-integer-accepted', file: 'src/genericStructural.ts', find: 'return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)?undefined:value;', replace: 'return hasDuplicateJsonObjectKeys(text)?undefined:value;' },
+  { id: 'ts-generic-json-unsafe-integer-accepted', file: 'src/genericStructural.ts', find: 'return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)||', replace: 'return hasDuplicateJsonObjectKeys(text)||' },
   // '.' instead of [^\\n] after PRI: the browser stops at U+2028 and reads the line through another route.
   { id: 'ts-generic-pri-space-kv-stops-at-u2028', file: 'src/genericStructural.ts', find: '>([^\\n]+)$`);', replace: '>(.+)$`);' },
   // Owner policy D-2: a new parser reads a CEF/LEEF claim through the generic key=value routes again.
@@ -835,7 +835,7 @@ const TS_CSV_MUTANTS: Mutant[] = [
 ];
 
 /** Loads the whole preview pipeline (src/parser.ts and what it imports) from a private copy with one injected fault. */
-async function pipelineFromCopy(mutant: Mutant): Promise<{ extractFields: typeof extractFields; createDraft: typeof createDraft; dispose: () => void }> {
+async function pipelineFromCopy(mutant: Mutant): Promise<{ extractFields: typeof extractFields; preview: typeof preview; tokenizeCSV: typeof tokenizeCSV; createDraft: typeof createDraft; dispose: () => void }> {
   const root = mkdtempSync(join(REPO, '.oracle-mutant-'));
   const source = join(REPO, 'src');
   cpSync(source, join(root, 'src'), { recursive: true, filter: path => statSync(path).isDirectory() || (/\.(ts|tsx|json)$/.test(path) && !/\.test\.tsx?$/.test(path)) });
@@ -844,9 +844,9 @@ async function pipelineFromCopy(mutant: Mutant): Promise<{ extractFields: typeof
   try {
     const target = join(root, mutant.file);
     writeFileSync(target, applyMutant(readFileSync(target, 'utf8'), mutant));
-    const parser = await import(pathToFileURL(join(root, 'src/parser.ts')).href) as { extractFields: typeof extractFields };
+    const parser = await import(pathToFileURL(join(root, 'src/parser.ts')).href) as { extractFields: typeof extractFields; preview: typeof preview; tokenizeCSV: typeof tokenizeCSV };
     const model = await import(pathToFileURL(join(root, 'src/model.ts')).href) as { createDraft: typeof createDraft };
-    return { extractFields: parser.extractFields, createDraft: model.createDraft, dispose };
+    return { extractFields: parser.extractFields, preview: parser.preview, tokenizeCSV: parser.tokenizeCSV, createDraft: model.createDraft, dispose };
   } catch (error) {
     dispose();
     throw error;
@@ -870,7 +870,9 @@ async function runCsvTs(): Promise<{ ok: boolean; summary: string }> {
 }
 
 const RUBY_CSV_MUTANTS: Mutant[] = [
-  { id: 'rb-csv-liberal-parsing', file: 'fragment', find: 'liberal_parsing: false', replace: 'liberal_parsing: true' },
+  // CSV.parse_line alone (even with liberal_parsing: false) takes ""a"" as the quoted field "a"; the RFC 4180 text
+  // rule in front of it is what declines the row. With that rule in place liberal_parsing no longer decides anything.
+  { id: 'rb-csv-rfc4180-rule-removed', file: 'fragment', find: "  raise ArgumentError, 'CSV row is outside RFC 4180' unless parserstudio_csv_rfc4180?(text, separator, strip_edges)\n", replace: '' },
   { id: 'rb-csv-column-count-unchecked', file: 'fragment', find: "  raise ArgumentError, 'CSV column count mismatch' unless row.length == fields.length\n", replace: '' },
 ];
 
@@ -994,7 +996,8 @@ function jsonTsFailures(extract: JsonExtract, cases: JsonCase[]): string[] {
     let out: { fields: Record<string, unknown>; errors: string[] };
     try { out = extract(item.raw); } catch (error) { failures.push(`${item.id}: extractor raised ${String(error)}`); continue; }
     const fields = out.fields;
-    const problems = jsonProblems(item, { parsed: out.errors.length === 0, value: path => deepGet(fields, path) });
+    // Parsing Success Contract: an event from which no field was extracted (an empty object) is not a parsed event.
+    const problems = jsonProblems(item, { parsed: out.errors.length === 0 && Object.keys(fields).length > 0, value: path => deepGet(fields, path) });
     if (problems.length) failures.push(`${item.id}: ${problems.slice(0, 3).join(' | ')}`);
   }
   return failures;
@@ -1023,6 +1026,8 @@ async function runJsonTs(): Promise<{ ok: boolean; summary: string }> {
 
 const RUBY_JSON_MUTANTS: Mutant[] = [
   { id: 'rb-json-repeated-name-accepted', file: 'fragment', find: "  raise ArgumentError, 'Duplicate JSON object key' if parserstudio_json_duplicate_keys?(text)\n", replace: '' },
+  // Re-audit of 2026-11-15: without the RFC 8259 token check the json library's comments, unknown escapes and unpaired high surrogates are back.
+  { id: 'rb-json-library-leniency', file: 'fragment', find: "  raise ArgumentError, 'JSON text is outside RFC 8259' unless parserstudio_json_strict_text?(text)\n", replace: '' },
 ];
 
 function jsonFragment(paths: string[]): string {
@@ -1077,7 +1082,7 @@ function jsonPythonFailures(cases: JsonCase[], results: PythonJson[]): string[] 
   const failures: string[] = [];
   cases.forEach((item, index) => {
     const result = results[index];
-    const problems = jsonProblems(item, result && { parsed: result.status === 'SOURCE_PARSED', value: path => deepGet(result.fields, path) });
+    const problems = jsonProblems(item, result && { parsed: result.status === 'SOURCE_PARSED' && Object.keys(result.fields ?? {}).length > 0, value: path => deepGet(result.fields, path) });
     if (problems.length) failures.push(`${item.id}: ${problems.slice(0, 3).join(' | ')}`);
   });
   return failures;
@@ -1110,6 +1115,8 @@ const PYTHON_MUTANTS: Mutant[] = [
   { id: 'py-csv-quote-inside-bare-field-accepted', file: 'engine.py', find: "if '\"' in value:", replace: 'if False:' },
   { id: 'py-json-repeated-name-accepted', file: 'engine.py', find: 'if not isinstance(key,str) or key in out or key in {"__proto__","constructor","prototype"}:', replace: 'if not isinstance(key,str) or key in {"__proto__","constructor","prototype"}:' },
   { id: 'py-json-text-after-object-accepted', file: 'engine.py', find: 'raise ValueError("JSON_TRAILING_DATA")', replace: 'pass' },
+  // Re-audit of 2026-11-15: Python's decoder keeps an unpaired surrogate escape as a lone surrogate.
+  { id: 'py-json-unpaired-surrogate-accepted', file: 'engine.py', find: 'if isinstance(value,str) and _has_unpaired_surrogate(value):', replace: 'if False:' },
   { id: 'py-generic-family-claim-gate-removed', file: 'generic_structural_poc.py', find: "if STRUCTURED_FAMILY_CLAIM.match(raw) is not None and standard.status!='SOURCE_PARSED':", replace: 'if False:' },
 ];
 
@@ -1235,7 +1242,7 @@ interface DifferentialCase { id: string; raw: string; familyGrammar?: 'dedicated
 const DIFFERENTIAL_SEPARATORS = [' ', ' ', ' ', '\u0085', '　', '﻿', '\u000b'];
 function differentialVariants(raw: string): string[] {
   const out = new Set<string>([raw]);
-  const add = (value: string) => { if (value.length > 0 && value.length <= 6000) out.add(value); };
+  const add = (value: string) => { if (value.length > 0 && value.length <= 20000) out.add(value); };
   const pri = /^<(\d{1,3})>/.exec(raw);
   if (pri) {
     const rest = raw.slice(pri[0].length);
@@ -1282,8 +1289,85 @@ function differentialVariants(raw: string): string[] {
   add(raw.replace(/\b\d{2}:\d{2}:\d{2}\b/, '24:00:00'));
   add(raw.replace(/\b\d{2}:\d{2}:\d{2}\b/, '23:59:60'));
   add(raw.replace(/[A-Z][a-z]{2} +\d{1,2} /, 'Feb 30 '));
+  // Re-audit of 2026-11-15. Time zone and fraction of a second directly after the first clock time: every
+  // spelling the recognizers admit, and the ones just outside (minute 60, hour 24, ten fraction digits).
+  const clock = /\d{2}:\d{2}:\d{2}/.exec(raw);
+  if (clock) {
+    const end = clock.index + 8;
+    for (const value of ['.915', '.123456789', '.1234567890', ' Z', ' +0200', ' -0000', ' +02:00', ' +0260', ' +2400', 'Z', '+0530', '+05:30', '+0560'])
+      add(raw.slice(0, end) + value + raw.slice(end));
+  }
+  const zone = /(\d{2}:\d{2}:\d{2}(?:\.\d+)?)(Z|[+-]\d{2}:\d{2})/.exec(raw);
+  if (zone) for (const value of ['+0530', '-0000', '+0560', '+24:00', ''])
+    add(raw.slice(0, zone.index) + zone[1]! + value + raw.slice(zone.index + zone[0].length));
+  // JSON token rules: escapes, surrogates, comments, nesting, repeated names and numbers, as a first member.
+  const brace = raw.indexOf('{"');
+  if (brace >= 0) {
+    const B = '\\';
+    for (const value of [`"x":"${B}q",`, `"x":"${B}x41",`, `"x":"${B}ud83d",`, `"x":"${B}ude00",`, `"x":"${B}ud83d${B}ud83d",`, `"x":"${B}ud83d${B}ude00",`,
+      '"x":[[[[[[[[1]]]]]]]],', '"x":[[[[[[[1]]]]]]],', '/* c */', '"x":1,"x":2,', '"x":9007199254740993,', '"x":NaN,', "'x':1,", '"x":"a\tb",'])
+      add(raw.slice(0, brace + 1) + value + raw.slice(brace + 1));
+    add(raw + ' // c');
+    add(raw + '/* c */');
+  }
+  // CSV quoting (RFC 4180) on the fourth field of a comma-separated row.
+  const commas = [...raw.matchAll(/,/g)].map(match => match.index!);
+  if (commas.length >= 5) {
+    const start = commas[2]! + 1, end = commas[3]!;
+    const field = raw.slice(start, end);
+    for (const value of [`"${field}"`, `"${field}""x"`, `${field}""x`, `"${field}"x`, ` "${field}"`, `"${field}" `, `"${field}`, `${field}"`, '"a,b"', '""', '""' + field + '""', '"""' + field + '"""'])
+      add(raw.slice(0, start) + value + raw.slice(end));
+  }
+  // The 8192-byte bound of the envelope routes, from both sides.
+  const bytes = Buffer.byteLength(raw, 'utf8');
+  if (bytes < 8000) for (const total of [8192, 8193]) add(raw + ' ' + 'x'.repeat(total - bytes - 1));
   return [...out];
 }
+
+/**
+ * A fixed pseudo-random stream (xorshift32, so every run sees the same lines) of what the hand-written variants
+ * above do not enumerate: a special token inserted, a character deleted or replaced, a word taken from another
+ * seed, a word dropped or doubled, and the head of one seed joined to the tail of another. The independent
+ * re-audit of 2026-11-15 found 378 browser/Ruby differences in 84,000 such lines while the enumerated variants
+ * reported none; the same generator is now part of the gate.
+ */
+const DIFFERENTIAL_SPECIAL = ['"', "'", '\\', '=', ':', ',', ';', '[', ']', '{', '}', '|', '<', '>', '(', ')', '/', '-', '.', '0', '9', 'a', 'Z', ' ', '\t', '%', '^', '#', '@', '+', '*', '?', '!', '~', '`', '$', '&', '_',
+  '\\"', '\\\\', '""', "''", '==', ': ', ', ', '; ', ' = ', '=""', '="', "='", '[]', '{}', '()', '::', '..', '--', '\u00e9', '\u4e2d', '\ud83d\ude00', 'e\u0301', '0x', '1e5', '-1', '1.5', 'null', 'true',
+  'CEF:0|', 'LEEF:2.0|', '{"a":1}', 'a=b', '<13>', 'Oct 1 00:00:00 ', '%ASA-1-1: ', '\\n', '\\t', '\\u0041', '\\x41', '\u007f', '\u001b'];
+function differentialRandomLines(seedLines: string[], seed: number, count: number): string[] {
+  let state = seed >>> 0;
+  const random = () => { state ^= state << 13; state >>>= 0; state ^= state >>> 17; state ^= state << 5; state >>>= 0; return state / 4294967296; };
+  const pick = <T,>(list: T[]): T => list[Math.floor(random() * list.length)]!;
+  const lines = new Set<string>();
+  while (lines.size < count) {
+    let raw = pick(seedLines);
+    const operations = 1 + Math.floor(random() * 3);
+    for (let operation = 0; operation < operations; operation += 1) {
+      const points = [...raw];
+      const at = Math.floor(random() * (points.length + 1));
+      const kind = random();
+      if (kind < 0.35) points.splice(at, 0, pick(DIFFERENTIAL_SPECIAL));
+      else if (kind < 0.55) points.splice(at, 1);
+      else if (kind < 0.7) points.splice(at, 1, pick(DIFFERENTIAL_SPECIAL));
+      else {
+        const words = raw.split(' ');
+        const index = Math.floor(random() * words.length);
+        if (kind < 0.8) { words[index] = pick(pick(seedLines).split(' ')); raw = words.join(' '); }
+        else if (kind < 0.88) { words.splice(index, 1); raw = words.join(' '); }
+        else if (kind < 0.94) { words.splice(index, 0, words[index] ?? ''); raw = words.join(' '); }
+        else { const other = pick(seedLines); const cut = Math.floor(random() * raw.length); raw = raw.slice(0, cut) + other.slice(Math.floor(random() * other.length)); }
+        continue;
+      }
+      raw = points.join('');
+    }
+    if (raw.length > 0 && !/[\n\r]/.test(raw) && !loneSurrogate(raw)) lines.add(raw);
+  }
+  return [...lines];
+}
+/** A surrogate code unit without its partner cannot be handed to the generated Ruby as UTF-8; a pair (an astral character) can. */
+const loneSurrogate = (raw: string): boolean => [...raw].some(ch => ch.length === 1 && ch >= '\ud800' && ch <= '\udfff');
+const DIFFERENTIAL_RANDOM_STREAMS = [101, 102, 103];
+const DIFFERENTIAL_RANDOM_LINES_PER_STREAM = 3000;
 const canonicalTree = (value: unknown): string => JSON.stringify(value, (_key, node: unknown) =>
   node !== null && typeof node === 'object' && !Array.isArray(node)
     ? Object.fromEntries(Object.entries(node as Record<string, unknown>).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)))
@@ -1311,25 +1395,69 @@ const DIFFERENTIAL_TS_FAULTS: Mutant[] = [
   // The calendar check of the shared timestamp rule is removed: 30 February is accepted by the browser only.
   { id: 'ts-diff-impossible-date-accepted', file: 'src/genericStructural.ts', find: '  if(day>[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][month-1]!)return false;\n  if(Number(match[4])>23', replace: '  if(Number(match[4])>23' },
   // The browser's JSON bodies accept an integer beyond 2^53 again.
-  { id: 'ts-diff-json-unsafe-integer', file: 'src/genericStructural.ts', find: 'return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)?undefined:value;', replace: 'return hasDuplicateJsonObjectKeys(text)?undefined:value;' },
+  { id: 'ts-diff-json-unsafe-integer', file: 'src/genericStructural.ts', find: 'return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)||', replace: 'return hasDuplicateJsonObjectKeys(text)||' },
   // The browser's IP token takes a clock time (12:34:56) as an address again.
   { id: 'ts-diff-ip-token-clock-time', file: 'src/genericStructural.ts', find: '  return sides.length===2?groups.length<=7:groups.length===8;', replace: '  return groups.length>=2;' },
+  // Re-audit I-7: a quotation mark inside an unquoted CSV field is taken as data by the browser only.
+  { id: 'ts-diff-csv-quote-in-unquoted-field', file: 'src/genericStructural.ts', find: "        if(text[index]==='\"')return null;\n", replace: '' },
+  // Re-audit I-4 and I-5: the browser's Generic Structural JSON drops the JSON source contract (8 levels, paired surrogates).
+  { id: 'ts-diff-json-source-contract-removed', file: 'src/genericStructural.ts', find: '||!jsonSourceValueValid(value)?undefined:value;', replace: '?undefined:value;' },
 ];
 const DIFFERENTIAL_RUBY_FAULTS: Mutant[] = [
   { id: 'rb-diff-calendar-rollover', file: 'fragment', find: "  return false unless d<=[31,leap ? 29 : 28,31,30,31,30,31,31,30,31,30,31][mo-1]\n", replace: '' },
   { id: 'rb-diff-positional-150-columns', file: 'fragment', find: 'values.length.between?(12, 100)', replace: 'values.length.between?(12, 150)' },
   { id: 'rb-diff-line-feed-accepted', file: 'fragment', find: "text.match?(/[\\x00\\x0a-\\x0d\\x1c-\\x1f]/)", replace: "text.match?(/[\\x0b\\x0c\\x0d\\x1c-\\x1f]/)" },
   { id: 'rb-diff-ip-token-library', file: 'fragment', find: "  sides.length == 2 ? groups.length <= 7 : groups.length == 8\n", replace: "  groups.length >= 2\n" },
+  // Re-audit I-8: the minute of a UTC offset is not bounded (what Time.iso8601 did).
+  { id: 'rb-diff-zone-minute-unbounded', file: 'fragment', find: '  !match.nil? && Integer(match[1], 10) <= 23 && Integer(match[2], 10) <= 59\n', replace: '  !match.nil?\n' },
+  // Re-audit I-2: a fraction of a second after a BSD clock time is refused (what Integer("07.915") did).
+  { id: 'rb-diff-bsd-clock-without-fraction', file: 'fragment', find: "  clock = /\\A(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d{1,9})?\\z/.match(time)\n", replace: "  clock = /\\A(\\d{2}):(\\d{2}):(\\d{2})\\z/.match(time)\n" },
+  // Re-audit I-1 and I-3: an offset without the colon is refused by the envelope's second check.
+  { id: 'rb-diff-zone-colon-required', file: 'fragment', find: 'parserstudio_generic_iso_timestamp!(rfc3339[1], true)', replace: 'parserstudio_generic_iso_timestamp!(rfc3339[1])' },
+  // Re-audit I-6: the json library's leniency (comments, unknown escapes, two high surrogates) is back.
+  { id: 'rb-diff-json-library-leniency', file: 'fragment', find: "  raise ArgumentError, 'JSON text is outside RFC 8259' unless parserstudio_json_strict_text?(text)\n", replace: '' },
+  // CSV.parse_line alone on the positional route: ""a"" is taken as the quoted field "a".
+  { id: 'rb-diff-csv-library-quote-counting', file: 'fragment', find: "  text.match?(rule)\nend\n\ndef parserstudio_unescape(text)", replace: "  true\nend\n\ndef parserstudio_unescape(text)" },
 ];
+
+/**
+ * Runs extraction cases on the target Ruby in batches, each batch in a process of its own with only the Fragments
+ * it needs. The CI interpreter is a container with 512 MB and one CPU; one process that holds the result tree of
+ * every case of this stage does not fit.
+ */
+const RUBY_BATCH = 6000;
+const FAULT_BATCH = 3000;
+function rubyExtractBatches(label: string, fragments: Record<string, string>, payload: Array<Record<string, string>>, expectedRuby: string): Record<string, RubyExtract> | null {
+  const runner = readFileSync(join(REPO, 'scripts/verification/semantic-oracle-runner.rb'), 'utf8');
+  const results: Record<string, RubyExtract> = {};
+  for (let start = 0; start < payload.length; start += RUBY_BATCH) {
+    const batch = payload.slice(start, start + RUBY_BATCH);
+    const used = Object.fromEntries([...new Set(batch.map(item => item.fragment!))].map(name => [name, fragments[name]!]));
+    const run = spawnSync('ruby', ['-e', runner], { input: JSON.stringify({ fragments: used, cases: batch }), encoding: 'utf8', maxBuffer: 1 << 30, timeout: 600000 });
+    if (run.status !== 0) { process.stderr.write(`${label}_RUBY_RUNNER_FAILED status=${String(run.status)} ${String(run.stderr).slice(0, 600)}\n`); return null; }
+    const output = JSON.parse(run.stdout) as { ruby: string; results: Record<string, RubyExtract> };
+    if (output.ruby !== expectedRuby) { process.stderr.write(`${label}_RUBY_VERSION_MISMATCH expected=${expectedRuby} actual=${output.ruby}\n`); return null; }
+    Object.assign(results, output.results);
+  }
+  return results;
+}
 
 async function runDifferential(): Promise<number> {
   const expectedRuby = process.env.PARSER_STUDIO_EXPECT_RUBY ?? '2.4.9';
   const seeds = (JSON.parse(readFileSync(join(REPO, 'contracts/generic-differential-seeds.v1.json'), 'utf8')) as { seeds: Array<{ id: string; raw: string }> }).seeds;
   const lines = new Map<string, string>();
   for (const seed of [...seeds, ...goldens.genericCases.map(item => ({ id: 'golden-' + item.id, raw: item.raw }))])
-    differentialVariants(seed.raw).forEach((raw, index) => { if (![...raw].some(ch => ch >= '\ud800' && ch <= '\udfff')) lines.set(`${seed.id}#${index}`, raw); });
+    differentialVariants(seed.raw).forEach((raw, index) => { if (!loneSurrogate(raw)) lines.set(`${seed.id}#${index}`, raw); });
   const cases: DifferentialCase[] = [];
   for (const [id, raw] of lines) { cases.push({ id: id + '@legacy', raw }); cases.push({ id: id + '@dedicated', raw, familyGrammar: 'dedicated' }); }
+  // The pseudo-random stream is compared on the product only; the injected faults are judged on the enumerated variants.
+  const randomCases: DifferentialCase[] = [];
+  const seedLines = [...new Set([...seeds.map(seed => seed.raw), ...goldens.genericCases.map(item => item.raw)])];
+  for (const stream of DIFFERENTIAL_RANDOM_STREAMS)
+    differentialRandomLines(seedLines, stream, DIFFERENTIAL_RANDOM_LINES_PER_STREAM).forEach((raw, index) => {
+      randomCases.push({ id: `random-${stream}#${index}@legacy`, raw });
+      randomCases.push({ id: `random-${stream}#${index}@dedicated`, raw, familyGrammar: 'dedicated' });
+    });
   const project = sampleProject() as unknown as Record<string, any>;
   project.normalization.topFields = {};
   project.normalization.nsFields = {};
@@ -1341,37 +1469,255 @@ async function runDifferential(): Promise<number> {
   project.extraction = { format: 'generic_structural', genericStructuralFamilyGrammar: 'dedicated' };
   fragments.dedicated = compilePair(project).files.find(file => !file.name.endsWith('.conf'))!.content;
   const fragmentOf = (item: DifferentialCase) => (item.familyGrammar === 'dedicated' ? 'dedicated' : 'legacy');
-  const payload: Array<{ id: string; fragment: string; raw: string; call: string }> = cases.map(item => ({ id: item.id, fragment: fragmentOf(item), raw: item.raw, call: 'generic_extract' }));
-  for (const fault of DIFFERENTIAL_RUBY_FAULTS) {
-    for (const route of ['legacy', 'dedicated']) fragments[`${fault.id}@${route}`] = applyMutant(fragments[route]!, fault);
-    for (const item of cases) payload.push({ id: `${fault.id}::${item.id}`, fragment: `${fault.id}@${fragmentOf(item)}`, raw: item.raw, call: 'generic_extract' });
-  }
-  const run = spawnSync('ruby', ['-e', readFileSync(join(REPO, 'scripts/verification/semantic-oracle-runner.rb'), 'utf8')], {
-    input: JSON.stringify({ fragments, cases: payload }), encoding: 'utf8', maxBuffer: 1 << 30, timeout: 900000,
-  });
-  if (run.status !== 0) { process.stderr.write(`GENERIC_DIFFERENTIAL_RUBY_RUNNER_FAILED status=${String(run.status)} ${String(run.stderr).slice(0, 600)}\n`); return 1; }
-  const output = JSON.parse(run.stdout) as { ruby: string; results: Record<string, RubyExtract> };
-  if (output.ruby !== expectedRuby) { process.stderr.write(`GENERIC_DIFFERENTIAL_RUBY_VERSION_MISMATCH expected=${expectedRuby} actual=${output.ruby}\n`); return 1; }
-  const product = differentialProblems(extractGenericStructural as GenericExtract, cases, output.results, '');
+  const toPayload = (item: DifferentialCase, fragment: string, prefix = '') => ({ id: prefix + item.id, fragment, raw: item.raw, call: 'generic_extract' });
+  const results = rubyExtractBatches('GENERIC_DIFFERENTIAL', fragments, [...cases, ...randomCases].map(item => toPayload(item, fragmentOf(item))), expectedRuby);
+  if (!results) return 1;
+  const product = differentialProblems(extractGenericStructural as GenericExtract, cases, results, '');
   report('GENERIC_DIFFERENTIAL', product.problems.slice(0, 40));
+  const random = differentialProblems(extractGenericStructural as GenericExtract, randomCases, results, '');
+  report('GENERIC_DIFFERENTIAL_RANDOM', random.problems.slice(0, 40));
   const undetected: string[] = [];
+  // A fault in the compiled Ruby is run batch by batch, until a batch reports more differences than the product
+  // does on the same cases; a fault that no batch reveals is undetected.
   for (const fault of DIFFERENTIAL_RUBY_FAULTS) {
-    const found = differentialProblems(extractGenericStructural as GenericExtract, cases, output.results, `${fault.id}::`).problems.length;
-    process.stdout.write(`DIFFERENTIAL_FAULT ${fault.id} ${found > product.problems.length ? 'DETECTED' : 'UNDETECTED'} differences=${found}\n`);
-    if (found <= product.problems.length) undetected.push(fault.id);
+    const faulty: Record<string, string> = {};
+    for (const route of ['legacy', 'dedicated']) faulty[`${fault.id}@${route}`] = applyMutant(fragments[route]!, fault);
+    let found = 0, ran = 0;
+    for (let start = 0; start < cases.length && found === 0; start += FAULT_BATCH) {
+      const batch = cases.slice(start, start + FAULT_BATCH);
+      const faultResults = rubyExtractBatches('GENERIC_DIFFERENTIAL', faulty, batch.map(item => toPayload(item, `${fault.id}@${fragmentOf(item)}`, `${fault.id}::`)), expectedRuby);
+      if (!faultResults) return 1;
+      ran += batch.length;
+      found = differentialProblems(extractGenericStructural as GenericExtract, batch, faultResults, `${fault.id}::`).problems.length -
+        differentialProblems(extractGenericStructural as GenericExtract, batch, results, '').problems.length;
+    }
+    process.stdout.write(`DIFFERENTIAL_FAULT ${fault.id} ${found > 0 ? 'DETECTED' : 'UNDETECTED'} new_differences=${found} cases_run=${ran}\n`);
+    if (found <= 0) undetected.push(fault.id);
   }
   for (const fault of DIFFERENTIAL_TS_FAULTS) {
     const loaded = await extractorFromCopy(fault);
-    const found = differentialProblems(loaded.extractGeneric, cases, output.results, '').problems.length;
+    const found = differentialProblems(loaded.extractGeneric, cases, results, '').problems.length - product.problems.length;
     loaded.dispose();
-    process.stdout.write(`DIFFERENTIAL_FAULT ${fault.id} ${found > product.problems.length ? 'DETECTED' : 'UNDETECTED'} differences=${found}\n`);
-    if (found <= product.problems.length) undetected.push(fault.id);
+    process.stdout.write(`DIFFERENTIAL_FAULT ${fault.id} ${found > 0 ? 'DETECTED' : 'UNDETECTED'} new_differences=${found} cases_run=${cases.length}\n`);
+    if (found <= 0) undetected.push(fault.id);
   }
   if (undetected.length) report('DIFFERENTIAL_FAULT_UNDETECTED', undetected);
-  const ok = product.problems.length === 0 && undetected.length === 0 && product.parsed > 0 && product.declined > 0;
+  const ok = product.problems.length === 0 && random.problems.length === 0 && undetected.length === 0 && product.parsed > 0 && product.declined > 0 &&
+    random.parsed > 0 && random.declined > 0;
   const faults = DIFFERENTIAL_RUBY_FAULTS.length + DIFFERENTIAL_TS_FAULTS.length;
-  process.stdout.write(`${ok ? 'GENERIC_DIFFERENTIAL_PASS' : 'GENERIC_DIFFERENTIAL_FAIL'} ruby=${output.ruby} seeds=${seeds.length + goldens.genericCases.length} lines=${lines.size} cases=${cases.length} parsed_identically=${product.parsed} declined_by_both=${product.declined} differences=${product.problems.length} faults_detected=${faults - undetected.length}/${faults}\n`);
-  return ok ? 0 : 1;
+  process.stdout.write(`${ok ? 'GENERIC_DIFFERENTIAL_PASS' : 'GENERIC_DIFFERENTIAL_FAIL'} ruby=${expectedRuby} seeds=${seeds.length + goldens.genericCases.length} lines=${lines.size} cases=${cases.length} parsed_identically=${product.parsed} declined_by_both=${product.declined} differences=${product.problems.length} random_streams=${DIFFERENTIAL_RANDOM_STREAMS.length} random_cases=${randomCases.length} random_parsed_identically=${random.parsed} random_declined_by_both=${random.declined} random_differences=${random.problems.length} faults_detected=${faults - undetected.length}/${faults}\n`);
+  const formats = await runFormatDifferential(expectedRuby);
+  return ok && formats ? 0 : 1;
+}
+
+// ---------------------------------------------------------------- every other format: browser versus generated Ruby
+// The Generic Structural stage above covers the format whose bodies are written twice by hand. The other formats
+// share one generated grammar for the Syslog header and the key=value body, but each still has code of its own on
+// both sides (the JSON reader, the CSV tokenizer, the CEF/LEEF reader, the run-time field-loss check) and leans on
+// a library of its engine (JSON.parse, CSV.parse_line). This stage holds the two sides to each other for every
+// format: the browser preview calls an event completely parsed (FULL) exactly when the generated Ruby returns a
+// record, and then the two field trees are the same. A PARTIAL or UNKNOWN preview is a record that the generated
+// Ruby declines. Found on 2026-11-15 this way: ""a"" taken as a quoted CSV field by Ruby only, a form feed at a
+// CSV field edge removed by the browser only, a row of spaces parsed by the browser only, an empty JSON object
+// emitted by Ruby only, and a form feed after the last key=value pair rejected by the run-time check.
+interface FormatConfig { name: string; extraction: Record<string, unknown>; draft: Record<string, unknown>; seeds: string[] }
+type PreviewFn = typeof preview;
+type TokenizeFn = typeof tokenizeCSV;
+const FORMAT_SPECIAL = ['"', "'", '\\', '=', ':', ',', ';', '[', ']', '{', '}', '|', '<', '>', '(', ')', '/', '-', '.', '0', '9', 'a', 'Z', ' ', '\t', '%', '^', '#', '@', '+', '*', '?', '!', '~', '`', '$', '&', '_',
+  '\\"', '\\\\', '""', "''", '==', ': ', ', ', '; ', ' = ', '=""', '="', "='", '[]', '{}', '()', '::', '..', '--', '\u00e9', '\u4e2d', '\ud83d\ude00', 'e\u0301', '0x', '1e5', '-1', '1.5', 'null', 'true',
+  'CEF:0|', 'LEEF:2.0|', '{"a":1}', 'a=b', '<13>', 'Oct 1 00:00:00 ', '\u00a0', '\u2028', '\ufeff', '\u0085', '\u000b', '\u000c', '\u001f', '\u007f', '\\n', '\\t', '\\u0041', '\\ud83d', '\\x41', '\\|', '\\=', '\\]',
+  '  ', '\t\t', '+0530', 'Z', '.123', '99', '00', '1 ', '2 ', '- ', '-', '[a b="c"] ', 'k=v ', 'k="v w" ', 'k= ', '=v', '/* c */'];
+function formatConfigs(): FormatConfig[] {
+  const kvBody = (raw: string) => { const match = /^(?:<\d+>)?(?:\d )?.*? (\S+=.*)$/.exec(raw); return match ? match[1]! : raw; };
+  const kvSeeds = [...new Set(goldens.cases.filter(item => item.body === 'kv').map(item => kvBody(item.raw)))].slice(0, 40);
+  const jsonSeeds = goldens.jsonCases.map(item => item.raw);
+  const cefSeeds = goldens.familyCases.filter(item => item.family === 'cef').map(item => item.raw);
+  const leefSeeds = goldens.familyCases.filter(item => item.family === 'leef').map(item => item.raw);
+  const csvSeeds = [...new Set([...goldens.csvCases.filter(item => item.delimiter === ',').map(item => item.raw),
+    'aaa,bbb,ccc', '"aaa","bbb","ccc"', 'aaa,"b,bb",ccc', 'aaa,"b""bb",ccc', ' aaa , bbb ,ccc', 'aaa,,ccc', '"a a", "b" ,c', '1,2026/10/16 15:44:21,TRAFFIC'])];
+  const bodies: Record<string, string[]> = { kv: kvSeeds, json: jsonSeeds, raw: ['plain text message here', 'a=b not kv: really'], cef: cefSeeds, leef: leefSeeds };
+  const heads = {
+    syslog_rfc3164: ['<134>Nov 14 09:30:00 fw01 ', '<134>Nov 14 09:30:00 fw01 app[12]: '],
+    syslog_rfc5424: ['<165>1 2026-11-14T09:30:00.123Z host app 123 ID47 - ', '<165>1 2026-11-14T09:30:00+09:00 host app - ID47 [meta@32473 a="b" c="d\\"e"] '],
+  };
+  const configs: FormatConfig[] = [
+    { name: 'kv', extraction: { format: 'kv' }, draft: { format: 'kv' }, seeds: kvSeeds },
+    { name: 'json', extraction: { format: 'json' }, draft: { format: 'json' }, seeds: jsonSeeds },
+    { name: 'cef', extraction: { format: 'cef' }, draft: { format: 'cef' }, seeds: cefSeeds },
+    { name: 'leef', extraction: { format: 'leef' }, draft: { format: 'leef' }, seeds: leefSeeds },
+  ];
+  for (const [label, delimiter] of [['comma', ','], ['semicolon', ';'], ['tab', '\t']] as const)
+    configs.push({ name: 'csv-' + label, extraction: { format: 'csv', csvDelimiter: delimiter, csvColumns: ['c1', 'c2', 'c3'] },
+      draft: { format: 'csv', csvDelimiter: delimiter, csvColumns: 'c1,c2,c3' }, seeds: csvSeeds.map(raw => raw.split(',').join(delimiter)) });
+  for (const body of Object.keys(bodies)) for (const grammar of ['syslog_rfc3164', 'syslog_rfc5424'] as const)
+    configs.push({ name: `${grammar}+${body}`, extraction: { format: grammar, syslogBodyFormat: body }, draft: { format: grammar, syslogBodyFormat: body },
+      seeds: [...bodies[body]!.flatMap(raw => heads[grammar].map(head => head + raw)), ...(body === 'kv' ? goldens.cases.filter(item => item.grammar === grammar).map(item => item.raw) : [])] });
+  return configs;
+}
+function formatLines(seeds: string[], seed: number, count: number): string[] {
+  let state = seed >>> 0;
+  const random = () => { state ^= state << 13; state >>>= 0; state ^= state >>> 17; state ^= state << 5; state >>>= 0; return state / 4294967296; };
+  const pick = <T,>(list: T[]): T => list[Math.floor(random() * list.length)]!;
+  const lines = new Set<string>(seeds.filter(raw => raw.length > 0 && !/[\n\r]/.test(raw) && !loneSurrogate(raw)));
+  const target = lines.size + count;
+  for (let attempt = 0; lines.size < target && attempt < count * 20; attempt += 1) {
+    let raw = pick(seeds);
+    const operations = 1 + Math.floor(random() * 3);
+    for (let operation = 0; operation < operations; operation += 1) {
+      const points = [...raw];
+      const at = Math.floor(random() * (points.length + 1));
+      const kind = random();
+      if (kind < 0.4) points.splice(at, 0, pick(FORMAT_SPECIAL));
+      else if (kind < 0.6) points.splice(at, 1);
+      else if (kind < 0.8) points.splice(at, 1, pick(FORMAT_SPECIAL));
+      else if (kind < 0.9) points.splice(at, 0, ...points.slice(at, at + 1 + Math.floor(random() * 10)));
+      else points.length = at;
+      raw = points.join('');
+    }
+    // One event is one line in every format compared here (LF and CR are framing, declined before extraction).
+    if (raw.length > 0 && !/[\n\r]/.test(raw) && !loneSurrogate(raw)) lines.add(raw);
+  }
+  return [...lines];
+}
+/** CSV rows for the tokenizer comparison: every string of up to six symbols over a, the quotation mark, the separator and SP, and a pseudo-random stream over a wider alphabet. */
+function csvRows(separator: string, seed: number, count: number): string[] {
+  const rows = new Set<string>();
+  const small = ['a', '"', separator, ' '];
+  const extend = (prefix: string, depth: number) => { if (prefix) rows.add(prefix); if (depth > 0) for (const symbol of small) extend(prefix + symbol, depth - 1); };
+  extend('', 6);
+  const alphabet = ['a', 'b', '"', '"', separator, separator, ' ', '\t', '""', 'x y', '\u00a0', '\u00e9', '\u2028', '\\', "'", '\u000b', '\u000c', '\ud83d\ude00'];
+  let state = seed >>> 0;
+  const random = () => { state ^= state << 13; state >>>= 0; state ^= state >>> 17; state ^= state << 5; state >>>= 0; return state / 4294967296; };
+  const target = rows.size + count;
+  while (rows.size < target) { let row = ''; const length = 1 + Math.floor(random() * 12); for (let at = 0; at < length; at += 1) row += alphabet[Math.floor(random() * alphabet.length)]!; rows.add(row); }
+  return [...rows];
+}
+const FORMAT_TS_FAULTS: Mutant[] = [
+  // The browser strips form feed and vertical tab at the edge of an unquoted CSV field again; the generated parser keeps them.
+  { id: 'ts-format-csv-form-feed-stripped', file: 'src/parser.ts', find: "text.replace(/^[ \\t]+|[ \\t]+$/g,'')", replace: "text.replace(/^[ \\t\\f\\v]+|[ \\t\\f\\v]+$/g,'')" },
+  // The browser returns one empty field for a row of spaces again.
+  { id: 'ts-format-csv-empty-row-parsed', file: 'src/parser.ts', find: '  if (out.length === 1 && out[0] === null) return null;\n', replace: '' },
+  // The JSON format drops its source contract (8 levels, paired surrogates) in the browser.
+  { id: 'ts-format-json-source-contract-removed', file: 'src/parser.ts', find: "    if(!jsonSourceValueValid(parsed))\n      return {fields:{},errors:['JSON source exceeds", replace: "    if(false)\n      return {fields:{},errors:['JSON source exceeds" },
+  // The browser's field-loss check splits tokens at SP and TAB only again: a form feed after the last pair makes a complete event PARTIAL.
+  { id: 'ts-format-guard-form-feed-in-value', file: 'src/grammar/parseStatus.ts', find: "ch === ' ' || ch === '\\t' || ch === '\\n' || ch === '\\v' || ch === '\\f' || ch === '\\r';", replace: "ch === ' ' || ch === '\\t';" },
+];
+const FORMAT_RUBY_FAULTS: Mutant[] = [
+  // CSV.parse_line alone: ""a"" is taken as the quoted field "a".
+  { id: 'rb-format-csv-library-quote-counting', file: 'fragment', find: "  raise ArgumentError, 'CSV row is outside RFC 4180' unless parserstudio_csv_rfc4180?(text, separator, strip_edges)\n", replace: '' },
+  // An empty JSON object is emitted as an event without fields.
+  { id: 'rb-format-empty-record-emitted', file: 'fragment', find: "  raise ArgumentError, 'No field was extracted' if result.is_a?(Hash) && result.empty?\n", replace: '' },
+  // JSON.parse alone: comments, unknown escapes and two high surrogates are accepted.
+  { id: 'rb-format-json-library-leniency', file: 'fragment', find: "  raise ArgumentError, 'JSON text is outside RFC 8259' unless parserstudio_json_strict_text?(text)\n", replace: '' },
+];
+const FORMAT_STREAM = 401;
+const FORMAT_LINES_PER_CONFIG = 1500;
+const CSV_ROWS_PER_SEPARATOR = 3000;
+
+interface FormatCase { id: string; config: string; raw: string }
+function formatProblems(run: PreviewFn, draft: typeof createDraft, configs: Map<string, FormatConfig>, cases: FormatCase[], results: Record<string, RubyExtract>, prefix: string): { problems: string[]; parsed: number; declined: number } {
+  const problems: string[] = [];
+  let parsed = 0, declined = 0;
+  for (const item of cases) {
+    const ruby = results[prefix + item.id];
+    if (!ruby || ruby.raised) { problems.push(`${item.id}: the generated Ruby ${ruby ? 'raised ' + ruby.raised : 'returned nothing'}: ${JSON.stringify(item.raw).slice(0, 140)}`); continue; }
+    let events: ReturnType<PreviewFn>['events'];
+    try { events = run(item.raw, { ...draft(), ...configs.get(item.config)!.draft } as ReturnType<typeof createDraft>).events; } catch (error) { problems.push(`${item.id}: the browser preview raised ${String(error).slice(0, 80)}`); continue; }
+    const full = events.length === 1 && events[0]!.parseStatus === 'FULL';
+    const rubyParsed = ruby.value !== undefined && ruby.value !== null;
+    if (full !== rubyParsed) problems.push(`${item.id}: ${full ? 'FULL in the browser, declined by the generated Ruby' : `parsed by the generated Ruby, ${events.length === 1 ? String(events[0]!.parseStatus) : events.length + ' events'} in the browser`}: ${JSON.stringify(item.raw).slice(0, 140)}`);
+    else if (full && canonicalTree(events[0]!.fields) !== canonicalTree(ruby.value)) problems.push(`${item.id}: different field tree: ${JSON.stringify(item.raw).slice(0, 140)}`);
+    else if (full) parsed += 1; else declined += 1;
+  }
+  return { problems, parsed, declined };
+}
+interface CsvRowCase { id: string; separator: string; raw: string }
+function csvRowProblems(tokenize: TokenizeFn, cases: CsvRowCase[], results: Record<string, RubyExtract>, prefix: string): { problems: string[]; parsed: number; declined: number } {
+  const problems: string[] = [];
+  let parsed = 0, declined = 0;
+  for (const item of cases) {
+    const ruby = results[prefix + item.id];
+    if (!ruby || ruby.raised) { problems.push(`${item.id}: the generated Ruby ${ruby ? 'raised ' + ruby.raised : 'returned nothing'}: ${JSON.stringify(item.raw)}`); continue; }
+    const browser = tokenize(item.raw, item.separator);
+    const rubyRow = ruby.value === undefined || ruby.value === null ? null : ruby.value;
+    if (JSON.stringify(browser) !== JSON.stringify(rubyRow)) problems.push(`${item.id}: browser ${JSON.stringify(browser)} generated Ruby ${JSON.stringify(rubyRow)} for ${JSON.stringify(item.raw)}`);
+    else if (browser) parsed += 1; else declined += 1;
+  }
+  return { problems, parsed, declined };
+}
+
+async function runFormatDifferential(expectedRuby: string): Promise<boolean> {
+  const configs = new Map(formatConfigs().map(config => [config.name, config]));
+  const fragments: Record<string, string> = {};
+  const cases: FormatCase[] = [];
+  for (const config of configs.values()) {
+    const project = sampleProject() as unknown as Record<string, any>;
+    project.extraction = config.extraction;
+    project.normalization.topFields = {};
+    project.normalization.nsFields = {};
+    project.normalization.vendorFields = { differential_probe: { normalized_name: 'differential_probe', data_type: 'string' } };
+    project.classification = { defaultIndex: 'syslog', rules: [] };
+    fragments[`format:${config.name}`] = compilePair(project).files.find(file => !file.name.endsWith('.conf'))!.content;
+    formatLines(config.seeds, FORMAT_STREAM, FORMAT_LINES_PER_CONFIG).forEach((raw, index) => {
+      cases.push({ id: `${config.name}#${index}`, config: config.name, raw });
+    });
+  }
+  const csvCasesList: CsvRowCase[] = [];
+  for (const [label, separator] of [['comma', ','], ['semicolon', ';'], ['tab', '\t']] as const)
+    csvRows(separator, FORMAT_STREAM, CSV_ROWS_PER_SEPARATOR).forEach((raw, index) => csvCasesList.push({ id: `csvrow-${label}#${index}`, separator, raw }));
+  const csvFragment = (separator: string) => `format:csv-${separator === ',' ? 'comma' : separator === ';' ? 'semicolon' : 'tab'}`;
+  const formatPayload = (item: FormatCase, fragment: string, prefix = '') => ({ id: prefix + item.id, fragment, raw: item.raw, call: 'format_extract' });
+  const csvPayload = (item: CsvRowCase, fragment: string, prefix = '') => ({ id: prefix + item.id, fragment, raw: item.raw, call: 'csv_tokens', separator: item.separator });
+  const results = rubyExtractBatches('FORMAT_DIFFERENTIAL', fragments, [
+    ...cases.map(item => formatPayload(item, `format:${item.config}`)),
+    ...csvCasesList.map(item => csvPayload(item, csvFragment(item.separator))),
+  ], expectedRuby);
+  if (!results) return false;
+  const product = formatProblems(preview, createDraft, configs, cases, results, '');
+  report('FORMAT_DIFFERENTIAL', product.problems.slice(0, 40));
+  const rows = csvRowProblems(tokenizeCSV, csvCasesList, results, '');
+  report('CSV_ROW_DIFFERENTIAL', rows.problems.slice(0, 40));
+  const undetected: string[] = [];
+  // A fault is compiled into every Fragment that holds its target text and run on the cases of those formats,
+  // batch by batch, until a batch reports more differences than the product does on the same cases.
+  for (const fault of FORMAT_RUBY_FAULTS) {
+    const hit = [...configs.keys()].filter(name => fragments[`format:${name}`]!.split(fault.find).length === 2);
+    if (hit.length === 0) throw new Error(`MUTANT_NOT_APPLICABLE ${fault.id}: target text is in no compiled Fragment`);
+    const faulty: Record<string, string> = Object.fromEntries(hit.map(name => [`${fault.id}@${name}`, applyMutant(fragments[`format:${name}`]!, fault)]));
+    const scopedCases = cases.filter(item => hit.includes(item.config));
+    // The row tokenizer is run again only for a fault that lives in the CSV Fragments alone.
+    const scopedRows = hit.every(name => name.startsWith('csv-')) ? csvCasesList.filter(item => hit.includes(csvFragment(item.separator).slice('format:'.length))) : [];
+    let found = 0, ran = 0;
+    for (let start = 0; start < scopedRows.length && found === 0; start += FAULT_BATCH) {
+      const batch = scopedRows.slice(start, start + FAULT_BATCH);
+      const faultResults = rubyExtractBatches('FORMAT_DIFFERENTIAL', faulty, batch.map(item => csvPayload(item, `${fault.id}@${csvFragment(item.separator).slice('format:'.length)}`, `${fault.id}::`)), expectedRuby);
+      if (!faultResults) return false;
+      ran += batch.length;
+      found = csvRowProblems(tokenizeCSV, batch, faultResults, `${fault.id}::`).problems.length - csvRowProblems(tokenizeCSV, batch, results, '').problems.length;
+    }
+    for (let start = 0; start < scopedCases.length && found === 0; start += FAULT_BATCH) {
+      const batch = scopedCases.slice(start, start + FAULT_BATCH);
+      const faultResults = rubyExtractBatches('FORMAT_DIFFERENTIAL', faulty, batch.map(item => formatPayload(item, `${fault.id}@${item.config}`, `${fault.id}::`)), expectedRuby);
+      if (!faultResults) return false;
+      ran += batch.length;
+      found = formatProblems(preview, createDraft, configs, batch, faultResults, `${fault.id}::`).problems.length - formatProblems(preview, createDraft, configs, batch, results, '').problems.length;
+    }
+    process.stdout.write(`FORMAT_DIFFERENTIAL_FAULT ${fault.id} ${found > 0 ? 'DETECTED' : 'UNDETECTED'} new_differences=${found} cases_run=${ran} fragments=${hit.length}\n`);
+    if (found <= 0) undetected.push(fault.id);
+  }
+  for (const fault of FORMAT_TS_FAULTS) {
+    const loaded = await pipelineFromCopy(fault);
+    const found = formatProblems(loaded.preview, loaded.createDraft, configs, cases, results, '').problems.length - product.problems.length +
+      csvRowProblems(loaded.tokenizeCSV, csvCasesList, results, '').problems.length - rows.problems.length;
+    loaded.dispose();
+    process.stdout.write(`FORMAT_DIFFERENTIAL_FAULT ${fault.id} ${found > 0 ? 'DETECTED' : 'UNDETECTED'} new_differences=${found} cases_run=${cases.length + csvCasesList.length}\n`);
+    if (found <= 0) undetected.push(fault.id);
+  }
+  if (undetected.length) report('FORMAT_DIFFERENTIAL_FAULT_UNDETECTED', undetected);
+  const faults = FORMAT_RUBY_FAULTS.length + FORMAT_TS_FAULTS.length;
+  const ok = product.problems.length === 0 && rows.problems.length === 0 && undetected.length === 0 && product.parsed > 0 && product.declined > 0 && rows.parsed > 0 && rows.declined > 0;
+  process.stdout.write(`${ok ? 'FORMAT_DIFFERENTIAL_PASS' : 'FORMAT_DIFFERENTIAL_FAIL'} ruby=${expectedRuby} formats=${configs.size} cases=${cases.length} full_and_identical=${product.parsed} declined_by_both=${product.declined} differences=${product.problems.length} csv_rows=${csvCasesList.length} csv_rows_identical=${rows.parsed} csv_rows_declined_by_both=${rows.declined} csv_row_differences=${rows.problems.length} faults_detected=${faults - undetected.length}/${faults}\n`);
+  return ok;
 }
 
 

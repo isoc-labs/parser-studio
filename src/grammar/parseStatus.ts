@@ -77,9 +77,13 @@ function structuredDataEnd(raw: string, start: number): number {
 export function independentKeyValuePairs(raw: string): RawPair[] {
   const pairs: RawPair[] = [];
   const length = raw.length;
+  // Tokens are separated by ASCII white space (SP, TAB, LF, VT, FF, CR): the key=value grammar never puts one
+  // of these into an unquoted value and allows them after the last pair (contract KV_BARE, KV_TRAILING), so a
+  // form feed at the end of the line is not part of the last value.
+  const gap = (ch: string | undefined): boolean => ch === ' ' || ch === '\t' || ch === '\n' || ch === '\v' || ch === '\f' || ch === '\r';
   let index = positionalHeaderEnd(raw);
   while (index < length) {
-    while (index < length && (raw[index] === ' ' || raw[index] === '\t')) index += 1;
+    while (index < length && gap(raw[index])) index += 1;
     const start = index;
     const key = KEY_AT_TOKEN_START.exec(raw.slice(index, index + 98));
     if (key) {
@@ -101,13 +105,13 @@ export function independentKeyValuePairs(raw: string): RawPair[] {
         }
       }
       let end = index;
-      while (end < length && raw[end] !== ' ' && raw[end] !== '\t') end += raw[end] === '\\' && end + 1 < length ? 2 : 1;
+      while (end < length && !gap(raw[end])) end += raw[end] === '\\' && end + 1 < length && !/[\n\v\f\r]/.test(raw[end + 1]!) ? 2 : 1;
       const value = raw.slice(index, end);
       pairs.push({ key: key[0].slice(0, -1), value, rawValue: value });
       index = end;
       continue;
     }
-    while (index < length && raw[index] !== ' ' && raw[index] !== '\t') index += 1;
+    while (index < length && !gap(raw[index])) index += 1;
     if (index === start) index += 1;
   }
   return pairs;
@@ -147,8 +151,13 @@ export function classifyStructuredParse(
   const headerReasons = typeof host === 'string' && (host.includes('=') || host.endsWith(':'))
     ? ['a TAG or a key=value pair was taken as the host name'] : [];
   if (bodyFormat !== 'kv') return { status: headerReasons.length ? 'PARTIAL' : 'FULL', lostPairs: [], reasons: headerReasons };
+  // The pairs of the raw line are looked up where the key=value parser put them: in the body of a Syslog
+  // result, or in the result itself when the whole event is key=value. Header fields and RFC 5424 structured
+  // data are not searched, so an SD-PARAM with the name and value of a lost pair cannot stand in for it.
+  const body = outcome.fields.body;
+  const scope = body !== null && typeof body === 'object' && !Array.isArray(body) ? body : outcome.fields;
   const leaves = new Map<string, string[]>();
-  collectLeaves(outcome.fields, '', leaves);
+  collectLeaves(scope, '', leaves);
   // Every pair of the raw line needs a value of its own in the result: a field written twice and present
   // once is a lost occurrence (owner policy D-1), so a matched value is consumed.
   const taken = new Map<string, Set<number>>();

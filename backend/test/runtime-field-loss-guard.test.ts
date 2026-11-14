@@ -123,3 +123,35 @@ test('RFC 5424 structured data does not count as key=value pairs; a pair lost fr
     }
   }
 });
+
+// Re-audit of 2026-11-15 (M-1): the pairs of the MSG are looked up in the key=value body, not in the whole
+// record. An SD-PARAM with the same name and value as a pair that the body parser lost must not stand in for it.
+test('an SD-PARAM with the name and value of a lost MSG pair does not hide the loss',{skip:!rubyAvailable},()=>{
+  const raw='<165>1 2026-11-14T09:30:00Z host app - ID47 [a srcip="10.1.1.1"] srcip=10.1.1.1 action=deny';
+  const dropped="alias parserstudio_key_values_real parserstudio_key_values\ndef parserstudio_key_values(text); record=parserstudio_key_values_real(text); record.delete('srcip'); record; end";
+  for(const template of templates){
+    const clean=run(template,{format:'syslog_rfc5424',syslogBodyFormat:'kv'},FAULTS.none!,raw);
+    assert.match(clean,/^OK /,template+' '+clean.slice(0,200));
+    const out=run(template,{format:'syslog_rfc5424',syslogBodyFormat:'kv'},dropped,raw);
+    assert.match(out,/^REJECTED Field loss: /,template+' -> '+out.slice(0,200));
+  }
+});
+
+// Format-level browser/Ruby fuzz of 2026-11-15. Contract KV_TRAILING: ASCII white space may follow the last
+// pair. The check must not take that white space as part of the last value and reject a complete event.
+test('white space after the last pair is not part of its value',{skip:!rubyAvailable},()=>{
+  for(const template of templates)for(const tail of ['\f','\v',' \f','\t']){
+    const out=run(template,{format:'kv'},FAULTS.none!,'srcip=10.1.1.1 action=deny'+tail);
+    assert.match(out,/^OK \{"srcip":"10\.1\.1\.1","action":"deny"\}$/,template+' '+JSON.stringify(tail)+' -> '+out.slice(0,120));
+    const lost=run(template,{format:'kv'},FAULTS['value truncated']!,'srcip=10.1.1.1 action=deny'+tail);
+    assert.match(lost,/^REJECTED Field loss: /,template+' -> '+lost.slice(0,120));
+  }
+});
+
+// An event from which no field was extracted is not a parsed event (the browser reports UNKNOWN).
+test('an empty JSON object is rejected, not emitted as an event without fields',{skip:!rubyAvailable},()=>{
+  for(const template of templates){
+    assert.match(run(template,{format:'json'},FAULTS.none!,'{}'),/^REJECTED No field was extracted$/);
+    assert.match(run(template,{format:'json'},FAULTS.none!,'{"a":1}'),/^OK \{"a":1\}$/);
+  }
+});

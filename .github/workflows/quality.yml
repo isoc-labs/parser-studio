@@ -144,7 +144,7 @@ jobs:
           export PATH="$PWD/scripts/verification/ruby24-docker-shim:$PATH"
           ruby -v | grep -F 'ruby 2.4.9'
           PARSER_STUDIO_EXPECT_RUBY=2.4.9 node backend/node_modules/tsx/dist/cli.mjs scripts/verification/semantic-oracle.ts native
-      - name: Generic Structural browser versus generated Ruby differential and fault injection on the Ruby 2.4.9 target
+      - name: Browser versus generated Ruby differential for every format (Generic Structural, key=value, JSON, CSV, CEF, LEEF, Syslog bodies) and fault injection on the Ruby 2.4.9 target
         run: |
           set -euo pipefail
           image=$(node -e 'const c=require("./contracts/target-runtime-profiles.v1.json");const p=c.profiles.find(x=>x.id==="stellar70-observed-ruby24");if(!p?.ciContainerImage?.startsWith("ruby:2.4.9@sha256:"))process.exit(1);process.stdout.write(p.ciContainerImage)')

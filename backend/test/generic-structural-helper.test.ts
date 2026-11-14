@@ -206,8 +206,13 @@ test("Generic Structural IP tokens do not reinterpret decimal ports as addresses
 
 test("ISO Syslog variants share a non-normalizing calendar/clock guard",()=>{
   assert.match(helper,/def parserstudio_generic_iso_calendar_valid\(date, clock, zone\)/);
-  assert.match(helper,/parsed\.strftime\('%Y-%m-%d'\) == date/);
-  assert.match(helper,/parsed\.strftime\('%H:%M:%S'\) == clock\[0, 8\]/);
+  // Re-audit of 2026-11-15: the calendar, the clock and the UTC offset are checked as text and by arithmetic.
+  // No library call that normalizes or half-accepts a value (Time.iso8601, Time.new, Time.parse) validates a
+  // timestamp in the helper any more; a date is never round-tripped through a Time object.
+  assert.match(helper,/parserstudio_generic_envelope_calendar\(parts\[1\], parts\[2\], parts\[3\], clock, zone\)/);
+  assert.match(helper,/def parserstudio_generic_zone_valid\(zone\)/);
+  const helperTemplate=readFileSync(new URL('../templates/generic-structural-helper.rb.tpl',import.meta.url),'utf8');
+  assert.doesNotMatch(helperTemplate,/^[^#\n]*\bTime\.(?:iso8601|new|parse|strptime)\b/m);
   assert.equal((helper.match(/parserstudio_generic_iso_calendar_valid\(match\[2\],match\[3\],normalized_zone\)/g)||[]).length,2);
 });
 

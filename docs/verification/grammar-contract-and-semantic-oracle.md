@@ -333,16 +333,87 @@ Result on the same corpora: 58,430 lines - 0 one-sided, 0 tree differences; 26,0
 after the CEF extension fix. No line that both engines parsed before is declined now except the 14 with an
 invalid SD-NAME.
 
+Independent re-audit (2026-11-15, commit `3b9e3f5`). A reviewer that had not seen the work ran its own
+pseudo-random stream against both engines (a special token inserted, a character deleted or replaced, words
+moved between seed lines): 378 differences in 84,000 cases, while the gate of that commit reported none. Eight
+causes, all closed:
+
+| Cause | Before | Decision |
+|---|---|---|
+| UTC offset `Z` or `+hhmm` after a space-separated date (`iso_space`, `slash_date`): validated in Ruby with `Time.new`, which on 2.4.9 takes only `+HH:MM` | browser parsed, Ruby declined | supported input (both recognizers write `[+-]HH:?MM`): the offset is checked as text, `parserstudio_generic_zone_valid` = `validZone` |
+| fraction of a second after a BSD clock time: `Integer("07.915")` in Ruby | browser parsed, Ruby declined | supported input (both recognizers admit the fraction): the clock is matched as text |
+| offset without colon in an RFC 5424 or loose RFC 3339 envelope timestamp: second, narrower check in Ruby | browser parsed, Ruby declined | supported input: the envelope sites pass `basic_offset`, like the browser's `validIsoTimestamp` |
+| offset minute 60 and above on the ISO-PRI routes: `Time.iso8601` does not bound it | Ruby parsed, browser declined | unsupported input: declined by both (same text rule) |
+| JSON below 8 nested levels, lone surrogate escape: the browser's Generic Structural JSON reader did not apply the JSON source contract | browser parsed, Ruby declined | unsupported input: `parseJsonBody` applies `jsonSourceValueValid`, as the JSON format does |
+| JSON that is not RFC 8259 (`/* */` and `//` comments, unknown escapes such as `\x41`, two high surrogates): the json library of Ruby 2.4.9 accepts and alters it (`10.5.5.\x416` became `10.5.5.x416`) | Ruby parsed with a changed value, browser declined | unsupported input: `parserstudio_json_strict_text?` checks the RFC 8259 token rules before `JSON.parse`, for the JSON format and every JSON body |
+| quotation mark inside an unquoted CSV field (`TRA""FFIC`): the browser dropped the marks and reported a complete parse | browser parsed with characters removed, Ruby declined | unsupported input: `positionalCsvValues` is RFC 4180 strict, like `CSV.parse_line(liberal_parsing: false)` |
+| astral characters: the gate excluded every line that held one (a string comparison that also matched surrogate pairs) | not compared | compared; only an unpaired surrogate, which has no UTF-8 form, is left out |
+
+After the fixes the reviewer's generator reports 0 differences on its seeds 101 to 103 (84,000 cases) and on
+further seeds (see the PR). Goldens: `generic-envelope-iso-space-basic-offset`, `generic-envelope-iso-space-zulu`,
+`generic-envelope-rfc3339-loose-basic-offset`, `generic-envelope-bsd-fraction-of-second`,
+`generic-envelope-rfc5424-basic-offset-asa`, `generic-iso-pri-offset-minute-60-declined`,
+`generic-json-nesting-depth-9-declined`, `generic-json-lone-surrogate-escape-declined`,
+`generic-json-two-high-surrogates-declined`, `generic-json-unknown-escape-declined`, `generic-json-comment-declined`,
+`generic-positional-csv-quote-inside-unquoted-field-declined`,
+`generic-positional-csv-quoted-field-with-comma-and-quote`, and for the JSON format `json-unknown-escape`,
+`json-comment`, `json-two-high-surrogates`, `json-lone-low-surrogate`.
+
+Every other format (2026-11-15, after the re-audit). The same kind of stream was then pointed at the formats
+that are not Generic Structural: key=value, JSON, CEF, LEEF, CSV (comma, semicolon, TAB) and RFC 3164 / RFC 5424
+with each body, 17 configurations. The rule compared: the browser preview calls an event completely parsed
+(FULL) exactly when the generated Ruby returns a record, and then the two field trees are equal; PARTIAL and
+UNKNOWN in the browser are a record the generated Ruby declines. Found and closed:
+
+| Cause | Before | Decision |
+|---|---|---|
+| `CSV.parse_line` of Ruby 2.4.9 decides quoting by counting quotation marks: `""a""` is the field `"a"` | Ruby parsed, browser declined (CSV format and the Generic Structural CSV routes) | unsupported input: `parserstudio_csv_rfc4180?` checks the row as text first; the library only splits a conforming row |
+| form feed or vertical tab at the edge of an unquoted CSV field: the browser trimmed all ASCII white space, the generated parser strips SP and TAB | different value | supported input, the value is kept: the browser strips SP and TAB only |
+| a CSV row that is empty or only spaces: one empty field in the browser, "No CSV event parsed" in Ruby | browser parsed (one-column layout) | unsupported input: no row in both |
+| an empty JSON object: UNKNOWN in the browser (no field was extracted), an event without fields from Ruby | Ruby parsed | unsupported input: `parserstudio_extract` raises `No field was extracted` |
+| form feed or vertical tab after the last key=value pair: the grammar allows it (KV_TRAILING), the run-time field-loss check split tokens at SP and TAB only and read it into the last value | a complete event PARTIAL in the browser and rejected by Ruby | supported input: the check splits tokens at ASCII white space in both engines |
+
+Goldens: `csv-quotation-marks-around-content-not-doubled`, `csv-form-feed-at-field-edge-is-data`,
+`csv-row-of-spaces-only`, `json-empty-object`, `rfc3164-kv-trailing-form-feed`. The Python preview declined a
+JSON comment and an unknown escape already; it kept an unpaired surrogate (`json-two-high-surrogates`,
+`json-lone-low-surrogate`) and now declines it (`JSON_UNPAIRED_SURROGATE`).
+
 CI gate. `scripts/verification/semantic-oracle.ts differential` runs in the required job
-`native-isolated-synthetic` on Ruby 2.4.9: 50 seed lines (`contracts/generic-differential-seeds.v1.json`, two
-per result mode) and the Generic Structural goldens, about 90 derived variants each (PRI, VERSION, month,
-host, key and address mutations, Unicode separators, control characters, impossible dates), both routes
-(legacy and dedicated): 12,942 cases, the same decision and the same field tree required for every one. Eight
-injected faults (four in the browser extractor, four in the compiled Ruby) must each be reported:
-`ts-diff-unicode-trim`, `ts-diff-impossible-date-accepted`, `ts-diff-json-unsafe-integer`,
-`ts-diff-ip-token-clock-time`, `rb-diff-calendar-rollover`, `rb-diff-positional-150-columns`,
-`rb-diff-line-feed-accepted`, `rb-diff-ip-token-library`. The differential says the engines agree; the
-hand-authored goldens (`genericCases`) say what is right.
+`native-isolated-synthetic` on Ruby 2.4.9, in two stages. The same decision and the same field tree are required
+for every case.
+
+Generic Structural, both routes (legacy and dedicated):
+
+- enumerated variants of 58 seed lines (`contracts/generic-differential-seeds.v1.json`) and the Generic
+  Structural goldens: PRI, VERSION, month, host, key and address mutations, Unicode separators, control
+  characters, impossible dates, time zones and fractions of a second, JSON escapes, comments and nesting, CSV
+  quoting, and the 8192-byte bound: 20,782 cases;
+- the reviewer's pseudo-random stream, fixed seeds 101, 102 and 103, 3,000 lines each: 18,000 cases;
+- fifteen injected faults (six in the browser extractor, nine in the compiled Ruby), each of which must be
+  reported: `ts-diff-unicode-trim`, `ts-diff-impossible-date-accepted`, `ts-diff-json-unsafe-integer`,
+  `ts-diff-ip-token-clock-time`, `ts-diff-csv-quote-in-unquoted-field`, `ts-diff-json-source-contract-removed`,
+  `rb-diff-calendar-rollover`, `rb-diff-positional-150-columns`, `rb-diff-line-feed-accepted`,
+  `rb-diff-ip-token-library`, `rb-diff-zone-minute-unbounded`, `rb-diff-bsd-clock-without-fraction`,
+  `rb-diff-zone-colon-required`, `rb-diff-json-library-leniency`, `rb-diff-csv-library-quote-counting`.
+
+Every other format:
+
+- 17 configurations, their golden lines and 1,500 stream lines each (fixed seed 401): 25,818 cases, FULL in
+  the browser if and only if a record from the generated Ruby, equal trees;
+- the CSV row tokenizer against `parserstudio_csv_parse_line` for comma, semicolon and TAB: every string of up
+  to six symbols over a letter, the quotation mark, the separator and SP, and 3,000 stream rows per separator
+  over a wider alphabet (TAB, NBSP, U+2028, form feed, vertical tab, backslash, apostrophe, an astral
+  character): 25,380 rows;
+- seven injected faults: `ts-format-csv-form-feed-stripped`, `ts-format-csv-empty-row-parsed`,
+  `ts-format-json-source-contract-removed`, `ts-format-guard-form-feed-in-value`,
+  `rb-format-csv-library-quote-counting`, `rb-format-empty-record-emitted`, `rb-format-json-library-leniency`.
+
+The Ruby side runs in batches (6,000 cases a process; a fault runs batch by batch until it is reported), because
+the CI interpreter is a container with 512 MB and one CPU. Run against the product code of `3b9e3f5`, the
+Generic Structural stage fails with 208 enumerated and 80 stream differences. The differential says the engines
+agree; the hand-authored goldens say what is right. It is a sample, not a proof: a class of lines that neither
+the enumerated variants nor the streams produce is not compared, LF and CR inside an event are outside it (they
+are framing and are declined before extraction), and the Python preview is not part of it.
 
 The independently authored semantic identity oracle (`independent-semantic-identity-oracle.ts`) now runs before
 the template-hash gate, with its own fault injection
@@ -356,6 +427,15 @@ the template-hash gate, with its own fault injection
   so an SD-PARAM (stored under an encoded name) is not demanded as a body field. Goldens
   `rfc5424-sd-dotted-param-kv`, `rfc5424-sd-two-elements-pair-text-in-value-kv`; fault
   `rb-guard-structured-data-counted-as-pairs`.
+- Re-audit of 2026-11-15: the pairs of the MSG are looked up in the key=value body (or in the record itself
+  when the whole event is key=value), not in the whole record. Before, an SD-PARAM with the name and value of a
+  pair that the body parser had lost stood in for it and the loss went through. Golden
+  `rfc5424-sd-param-repeats-first-msg-pair-kv`: with the fault `rfc5424-body-skips-first-pair` the guarded
+  Fragment must not emit it (`wrong_events_with_guard=0`).
+- Tokens of the check are separated by ASCII white space (SP, TAB, LF, VT, FF, CR), as the key=value grammar
+  never puts one of these into an unquoted value and allows them after the last pair. Golden
+  `rfc3164-kv-trailing-form-feed`.
+- An event from which no field was extracted is rejected before the check (`No field was extracted`).
 
 ## RFC 5424 model (W8)
 

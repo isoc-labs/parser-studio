@@ -49,7 +49,10 @@ def parserstudio_extract(text)
   else
     raise ArgumentError, 'Unsupported extraction format'
   end
-  # Parsing Success Contract at run time: never a parsed event with a missing key=value field.
+  # Parsing Success Contract at run time. An event from which no field was extracted (an empty JSON object,
+  # for example) is not a parsed event; the browser reports it as UNKNOWN.
+  raise ArgumentError, 'No field was extracted' if result.is_a?(Hash) && result.empty?
+  # Never a parsed event with a missing key=value field.
   parserstudio_assert_no_field_loss(text, result)
 end
 
@@ -68,11 +71,17 @@ def parserstudio_assert_no_field_loss(text, result)
   if host.is_a?(String)
     raise ArgumentError, 'Header misread: a TAG or a key=value pair was taken as the host name' if host.include?('=') || host.end_with?(':')
   end
+  # The pairs of the original text are looked up where the key=value parser put them: in the key=value body
+  # of a Syslog record, or in the record itself when the whole event is key=value. Header fields and RFC 5424
+  # structured data are not searched, so an SD-PARAM with the name and value of a lost pair cannot stand in
+  # for it.
   body = result['body']
-  return result unless result.instance_variable_get(:@parserstudio_kv_body) ||
-    (body.is_a?(Hash) && body.instance_variable_get(:@parserstudio_kv_body))
+  scope = if body.is_a?(Hash) && body.instance_variable_get(:@parserstudio_kv_body) then body
+          elsif result.instance_variable_get(:@parserstudio_kv_body) then result
+          end
+  return result unless scope
   leaves = {}
-  parserstudio_collect_leaves(result, '', leaves)
+  parserstudio_collect_leaves(scope, '', leaves)
   parserstudio_independent_pairs(text).each do |key, value, written|
     # Which backslashes a grammar decodes is the grammar's business; presence of the value is what counts.
     stripped = written.delete('\\')
@@ -114,7 +123,10 @@ def parserstudio_independent_pairs(text)
     rest = structured.post_match if structured
   end
   pairs = []
-  rest.scan(/(__PS_GRAMMAR_TOKEN_KV_KEY__)=(?:"(__PS_GRAMMAR_TOKEN_KV_DQ__)"|'(__PS_GRAMMAR_TOKEN_KV_SQ__)'|((?:\\.|[^ \t\\])*\\?))|[^ \t]+|[ \t]+/m) do |key, double, single, bare|
+  # Tokens are separated by ASCII white space (SP, TAB, LF, VT, FF, CR): the key=value grammar never puts one
+  # of these into an unquoted value and allows them after the last pair (contract KV_BARE, KV_TRAILING), so a
+  # form feed at the end of the line is not part of the last value.
+  rest.scan(/(__PS_GRAMMAR_TOKEN_KV_KEY__)=(?:"(__PS_GRAMMAR_TOKEN_KV_DQ__)"|'(__PS_GRAMMAR_TOKEN_KV_SQ__)'|((?:\\[^\n\v\f\r]|[^ \t\n\v\f\r\\])*\\?))|[^ \t\n\v\f\r]+|[ \t\n\v\f\r]+/m) do |key, double, single, bare|
     next if key.nil?
     quoted = double || single
     pairs << (quoted ? [key, quoted.gsub(/\\(.)/m, '\1'), quoted] : [key, bare, bare])
@@ -260,7 +272,18 @@ def parserstudio_json_unsafe_number?(raw)
   false
 end
 
+# JSON.parse of the target Ruby's json library is more permissive than RFC 8259: it skips /* */ and //
+# comments, drops the backslash of an unknown escape ("\x41" is read as "x41") and joins two high surrogates
+# into one character. The browser's JSON.parse declines all of these, so the token rules are checked on the
+# text first: no solidus outside a string; inside a string no control character, only the escapes of RFC 8259
+# section 7, and a \uD800-\uDBFF escape only when a \uDC00-\uDFFF escape follows it (a lone surrogate is not
+# a character and cannot be sent on as UTF-8). The structure is still JSON.parse's to judge.
+def parserstudio_json_strict_text?(text)
+  text.match?(/\A(?>[^"\/]|"(?>[^"\\\x00-\x1f]|\\["\\\/bfnrt]|\\u(?:[0-9A-Ca-cE-Fe-f][0-9A-Fa-f]{3}|[Dd][0-7][0-9A-Fa-f]{2})|\\u[Dd][89ABab][0-9A-Fa-f]{2}\\u[Dd][C-Fc-f][0-9A-Fa-f]{2})*")*\z/)
+end
+
 def parserstudio_json_object(text)
+  raise ArgumentError, 'JSON text is outside RFC 8259' unless parserstudio_json_strict_text?(text)
   decoded = JSON.parse(text)
   raise ArgumentError, 'Duplicate JSON object key' if parserstudio_json_duplicate_keys?(text)
   raise ArgumentError, 'Unsafe JSON numeric precision' if parserstudio_json_unsafe_number?(text)
@@ -284,6 +307,23 @@ def parserstudio_validate_json_depth(value, depth, limit)
     # Reject them instead of passing invalid JSON strings to Stellar.
     raise ArgumentError, 'Invalid JSON source text encoding' unless value.valid_encoding?
   end
+end
+
+# One comma-, semicolon- or TAB-separated row under RFC 4180: a field is unquoted and holds no quotation mark,
+# or it is enclosed in quotation marks and writes a quotation mark inside as two. CSV.parse_line of the target
+# Ruby decides quoting by counting quotation marks, so it also takes ""a"" as the field "a" (a quotation mark
+# around the content, never doubled); the browser tokenizer declines that row. The row is therefore checked
+# against the rule first and the library only splits a row that conforms. padded: spaces and TABs around a
+# quoted field are allowed, as the CSV format strips them.
+def parserstudio_csv_rfc4180?(text, separator, padded)
+  @parserstudio_csv_rules ||= {}
+  rule = (@parserstudio_csv_rules[[separator, padded]] ||= begin
+    sep = Regexp.escape(separator)
+    pad = padded ? '[ \t]*' : ''
+    field = "(?>#{pad}\"(?>[^\"]|\"\")*\"#{pad}|[^\"#{sep}]*)"
+    /\A#{field}(?>#{sep}#{field})*\z/m
+  end)
+  text.match?(rule)
 end
 
 def parserstudio_unescape(text)

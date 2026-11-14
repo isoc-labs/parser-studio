@@ -108,6 +108,39 @@
       }
     },
     {
+      "id": "rfc3164-kv-trailing-form-feed",
+      "grammar": "syslog_rfc3164",
+      "body": "kv",
+      "raw": "<134>Nov 13 10:00:00 fw01 srcip=10.1.1.1 dstip=10.2.2.2 srcport=1234 dstport=443 action=accept\f",
+      "provenance": "Found on 2026-11-15 by the format-level browser/Ruby fuzz that followed the independent re-audit. Contract KV_TRAILING: ASCII white space, including form feed, may follow the last pair, and KV_BARE never holds it. The run-time field-loss check split tokens at SP and TAB only, read the last value as \"accept\" plus the form feed and rejected a complete event (the browser showed PARTIAL).",
+      "expect": {
+        "status": "FULL",
+        "source": {
+          "syslog_pri": 134,
+          "syslog_timestamp": "Nov 13 10:00:00",
+          "syslog_hostname": "fw01",
+          "body.srcip": "10.1.1.1",
+          "body.dstip": "10.2.2.2",
+          "body.srcport": "1234",
+          "body.dstport": "443",
+          "body.action": "accept"
+        },
+        "sourceAbsent": [
+          "syslog_appname",
+          "syslog_procid"
+        ],
+        "event": {
+          "srcip": "10.1.1.1",
+          "dstip": "10.2.2.2",
+          "srcport": 1234,
+          "dstport": 443,
+          "action": "accept",
+          "Synthetic.syslog_hostname": "fw01",
+          "stellar_log_index": "session"
+        }
+      }
+    },
+    {
       "id": "rfc3164-tagged-pid-deny",
       "grammar": "syslog_rfc3164",
       "body": "kv",
@@ -344,6 +377,37 @@
       "body": "kv",
       "raw": "<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [origin ip=\"192.0.2.1\"][meta note=\"k=v \\] z\" seq=\"1\"] srcip=10.1.1.1 dstip=10.2.2.2 dstport=443 action=accept",
       "provenance": "RFC 5424 6.3.3: two SD-ELEMENTs; a PARAM-VALUE with an escaped right bracket and text that looks like a pair. Pair accounting is for the MSG only.",
+      "expect": {
+        "status": "FULL",
+        "source": {
+          "syslog_pri": 165,
+          "syslog_version": 1,
+          "syslog_timestamp": "2003-10-11T22:14:15.003Z",
+          "syslog_hostname": "mymachine.example.com",
+          "syslog_appname": "evntslog",
+          "syslog_procid": "-",
+          "syslog_msgid": "ID47",
+          "body.srcip": "10.1.1.1",
+          "body.dstip": "10.2.2.2",
+          "body.dstport": "443",
+          "body.action": "accept"
+        },
+        "event": {
+          "srcip": "10.1.1.1",
+          "dstip": "10.2.2.2",
+          "dstport": 443,
+          "action": "accept",
+          "Synthetic.syslog_hostname": "mymachine.example.com",
+          "stellar_log_index": "session"
+        }
+      }
+    },
+    {
+      "id": "rfc5424-sd-param-repeats-first-msg-pair-kv",
+      "grammar": "syslog_rfc5424",
+      "body": "kv",
+      "raw": "<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [a srcip=\"10.1.1.1\"] srcip=10.1.1.1 dstip=10.2.2.2 dstport=443 action=accept",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 5424 6.3: an SD-PARAM that has the same name and value as the first key=value pair of the MSG. The two are different things: when a grammar fault loses the pair of the MSG, the SD-PARAM must not be taken as proof that the pair was parsed (the run-time field-loss check searched the whole record and let the loss through).",
       "expect": {
         "status": "FULL",
         "source": {
@@ -1012,6 +1076,154 @@
       "expect": {
         "reject": true
       }
+    },
+    {
+      "id": "generic-envelope-iso-space-basic-offset",
+      "raw": "<13>2026-10-16 03:11:07 +0200 edge {\"srcip\":\"10.5.5.6\"}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. ISO 8601 basic-format UTC offset (+hhmm) after a date and time separated by a space. Both engines recognise the offset as [+-]HH:?MM; the generated Ruby then validated it with Time.new, which on Ruby 2.4.9 takes only +HH:MM, and declined the event.",
+      "expect": {
+        "fields": {
+          "generic.mode": "syslog_envelope_json",
+          "syslog.variant": "iso_space",
+          "syslog.timestamp": "2026-10-16 03:11:07",
+          "syslog.timezone": "+0200",
+          "syslog.hostname": "edge",
+          "body.srcip": "10.5.5.6"
+        }
+      }
+    },
+    {
+      "id": "generic-envelope-iso-space-zulu",
+      "raw": "<13>2026-10-16 03:11:07 Z edge {\"srcip\":\"10.5.5.6\"}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. ISO 8601 UTC designator Z after a date and time separated by a space. Declined by the generated Ruby only, for the same reason as the basic offset.",
+      "expect": {
+        "fields": {
+          "generic.mode": "syslog_envelope_json",
+          "syslog.variant": "iso_space",
+          "syslog.timezone": "Z",
+          "syslog.hostname": "edge",
+          "body.srcip": "10.5.5.6"
+        }
+      }
+    },
+    {
+      "id": "generic-envelope-rfc3339-loose-basic-offset",
+      "raw": "<13>2026-10-16T03:11:07+0200 edge {\"srcip\":\"10.5.5.6\"}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. ISO 8601 date-time with a basic-format offset and no RFC 5424 VERSION. The timestamp text is kept as written.",
+      "expect": {
+        "fields": {
+          "generic.mode": "syslog_envelope_json",
+          "syslog.variant": "rfc3339_loose",
+          "syslog.timestamp": "2026-10-16T03:11:07+0200",
+          "syslog.hostname": "edge",
+          "body.srcip": "10.5.5.6"
+        }
+      }
+    },
+    {
+      "id": "generic-envelope-bsd-fraction-of-second",
+      "raw": "<13>Oct 16 03:11:07.915 edge {\"srcip\":\"10.5.5.6\"}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. BSD syslog timestamp with milliseconds, as written by devices that are configured for sub-second time stamps (for example Cisco 'service timestamps log datetime msec'). Both engines recognise an optional fraction; the generated Ruby then converted '07.915' with Integer() and declined the event.",
+      "expect": {
+        "fields": {
+          "generic.mode": "syslog_envelope_json",
+          "syslog.variant": "rfc3164",
+          "syslog.month": "Oct",
+          "syslog.day": "16",
+          "syslog.time": "03:11:07.915",
+          "syslog.hostname": "edge",
+          "body.srcip": "10.5.5.6"
+        }
+      }
+    },
+    {
+      "id": "generic-envelope-rfc5424-basic-offset-asa",
+      "raw": "<34>1 2026-11-14T09:30:00+0530 host app 123 ID47 - %ASA-6-302013: Built outbound TCP connection 1 for outside:10.1.1.1/80 (10.1.1.1/80) to inside:10.2.2.2/1234 (10.2.2.2/1234)",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 5424 header whose offset is written without the colon (ISO 8601 basic format; RFC 5424 6.2.3 writes it with a colon), carrying a Cisco ASA 302013 message. The envelope of both engines recognises [+-]HH:?MM and keeps the timestamp text unchanged; the generated Ruby declined it in a second, narrower check. Cisco ASA syslog 302013: Built {inbound|outbound} TCP connection id for interface:real-address/real-port (mapped-address/mapped-port) to interface:real-address/real-port (mapped-address/mapped-port).",
+      "expect": {
+        "fields": {
+          "syslog.variant": "rfc5424",
+          "syslog.timestamp": "2026-11-14T09:30:00+0530",
+          "syslog.hostname": "host",
+          "syslog.appname": "app",
+          "syslog.procid": "123",
+          "syslog.msgid": "ID47",
+          "asa.message_id": "302013",
+          "asa.src_ip": "10.1.1.1",
+          "asa.src_port": "80",
+          "asa.dst_ip": "10.2.2.2",
+          "asa.dst_port": "1234"
+        }
+      }
+    },
+    {
+      "id": "generic-iso-pri-offset-minute-60-declined",
+      "raw": "<0>2026-10-16 03:11:07.915 +0260 edge SYS APS INFO 19034 Num clients to walk : 0",
+      "provenance": "Found by the independent re-audit of 2026-11-15. ISO 8601: the minute of a UTC offset is 00 to 59. The generated Ruby validated the offset with Time.iso8601, which does not bound the minute, and parsed the event; the browser declined it.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-json-nesting-depth-9-declined",
+      "raw": "EXAMPLE: {\"a\":[[[[[[[[1]]]]]]]]}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. Product limit of the JSON source contract: at most 8 nested levels below the root object (jsonSourceValueValid / parserstudio_json_object). The browser's Generic Structural JSON reader did not apply the limit.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-json-lone-surrogate-escape-declined",
+      "raw": "EXAMPLE: {\"c\":\"\\ud83d\"}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 8259 8.2 and RFC 3629 3: an escape for a high surrogate that is not followed by a low surrogate does not name a character and cannot be encoded as UTF-8. The browser kept the lone surrogate; the generated Ruby declined.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-json-two-high-surrogates-declined",
+      "raw": "EXAMPLE: {\"a\":\"\\ud83d\\ud83d\"}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 8259 7: a character outside the Basic Multilingual Plane is written as a high surrogate followed by a low surrogate. Two high surrogates are not a pair; the json library of Ruby 2.4.9 joined them into U+1F43D.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-json-unknown-escape-declined",
+      "raw": "Oct 12 01:02:05 fw01 {\"srcip\":\"10.5.5.\\x416\"}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 8259 7: the escapes are \\\" \\\\ \\/ \\b \\f \\n \\r \\t and \\uXXXX. \\x41 is not JSON. The json library of Ruby 2.4.9 dropped the backslash and returned 10.5.5.x416 as the address; the browser declined.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-json-comment-declined",
+      "raw": "EXAMPLE: {\"a\":1 /* c */}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 8259 2: a JSON text has no comments. The json library of Ruby 2.4.9 skips /* */ and // comments; the browser declined.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-positional-csv-quote-inside-unquoted-field-declined",
+      "raw": "<14>Oct 16 15:44:21 PA01 1,2026/10/16 15:44:21,012345678901,TRA\"\"FFIC,end,2561,2026/10/16 15:44:20,10.0.0.1,198.51.100.1,203.0.113.1,198.51.100.1,allow",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 4180 2 (rules 5 to 7): a double quote appears only around a field, or doubled inside a quoted field. TRA\"\"FFIC is not a field. The browser removed the two quotation marks and reported column_3 = TRAFFIC as a complete parse; the generated Ruby declined.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-positional-csv-quoted-field-with-comma-and-quote",
+      "raw": "<14>Oct 16 15:44:21 PA01 1,2026/10/16 15:44:21,012345678901,TRAFFIC,end,2561,2026/10/16 15:44:20,10.0.0.1,198.51.100.1,203.0.113.1,198.51.100.1,\"rule \"\"A\"\", east\"",
+      "provenance": "RFC 4180 2 (rules 6 and 7): a field enclosed in double quotes may contain a comma, and a double quote inside it is written twice. The last column is: rule \"A\", east.",
+      "expect": {
+        "fields": {
+          "generic.mode": "rfc3164_positional_csv",
+          "generic.columns.column_3": "TRAFFIC",
+          "generic.columns.column_11": "rule \"A\", east",
+          "syslog.hostname": "PA01"
+        }
+      }
     }
   ],
   "ownerPolicies": {
@@ -1492,6 +1704,41 @@
           "ccc"
         ]
       }
+    },
+    {
+      "id": "csv-quotation-marks-around-content-not-doubled",
+      "delimiter": ",",
+      "columns": 3,
+      "raw": "\"\"aaa\"\",bbb,ccc",
+      "provenance": "Found on 2026-11-15 by the format-level browser/Ruby fuzz that followed the independent re-audit. RFC 4180 section 2: rules 5 to 7: a field is enclosed in one pair of double quotes, and a double quote inside it is written twice. In \"\"aaa\"\" the field closes after its second character and text follows the closing quote. CSV.parse_line of Ruby 2.4.9 counts quotation marks and returned the field \"aaa\" with quotation marks.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "csv-form-feed-at-field-edge-is-data",
+      "delimiter": ",",
+      "columns": 3,
+      "raw": "aaa\f,bbb,ccc",
+      "provenance": "Found on 2026-11-15 by the format-level browser/Ruby fuzz that followed the independent re-audit. Product rule for the CSV format: SP and TAB at the edge of an unquoted field are stripped, nothing else is (the generated parser on Ruby 2.4.9). A form feed is field data; the browser removed it.",
+      "expect": {
+        "status": "FULL",
+        "values": [
+          "aaa\f",
+          "bbb",
+          "ccc"
+        ]
+      }
+    },
+    {
+      "id": "csv-row-of-spaces-only",
+      "delimiter": ",",
+      "columns": 1,
+      "raw": "   ",
+      "provenance": "Found on 2026-11-15 by the format-level browser/Ruby fuzz that followed the independent re-audit. A row that holds nothing but spaces is not an event: the generated parser reports that no CSV event was parsed. The browser returned one empty field as a complete parse of a one-column layout.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
     }
   ],
   "jsonCases": [
@@ -1547,6 +1794,46 @@
       "id": "json-repeated-name",
       "raw": "{\"a\":1,\"a\":2}",
       "provenance": "Product policy on RFC 8259 section 4 (names SHOULD be unique; behaviour for repeated names is unpredictable): an object with a repeated name is declined by every engine rather than keeping one of the values",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-unknown-escape",
+      "raw": "{\"srcip\":\"10.5.5.\\x416\",\"b\":1}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 8259: section 7: the escapes are \\\" \\\\ \\/ \\b \\f \\n \\r \\t and \\uXXXX; \\x41 is not one of them. The json library of Ruby 2.4.9 dropped the backslash and returned 10.5.5.x416.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-comment",
+      "raw": "{\"a\":1 /* c */,\"b\":2}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 8259: section 2: the grammar has no comments. The json library of Ruby 2.4.9 skips /* */ and // comments.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-two-high-surrogates",
+      "raw": "{\"a\":\"\\ud83d\\ud83d\",\"b\":1}",
+      "provenance": "Found by the independent re-audit of 2026-11-15. RFC 8259: section 7 and 8.2: a character beyond the Basic Multilingual Plane is a high surrogate followed by a low surrogate; two high surrogates name no character. The json library of Ruby 2.4.9 joined them into U+1F43D.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-lone-low-surrogate",
+      "raw": "{\"a\":\"\\ude00\",\"b\":1}",
+      "provenance": "RFC 8259: section 8.2 and RFC 3629 section 3: an unpaired surrogate is not a character and has no UTF-8 encoding, so the event cannot be sent on unchanged.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-empty-object",
+      "raw": "{}",
+      "provenance": "Found on 2026-11-15 by the format-level browser/Ruby fuzz that followed the independent re-audit. Parsing Success Contract: an event from which no field was extracted is not a parsed event. The generated Ruby emitted an event without fields for an empty object; the browser reported UNKNOWN.",
       "expect": {
         "status": "UNKNOWN"
       }

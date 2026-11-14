@@ -62,6 +62,24 @@ describe('PR #311 review: RFC 5424 structured data is not key=value text', () =>
     expect(verdict.lostPairs.map(pair => pair.key)).toEqual(['srcip']);
   });
 
+  it('an SD-PARAM with the name and value of a lost MSG pair does not stand in for it (re-audit M-1)', () => {
+    const raw = '<165>1 2026-11-14T09:30:00Z host app - ID47 [a srcip="10.1.1.1"] srcip=10.1.1.1 action=deny';
+    const real = extractStructuredFamily(raw, 'syslog_rfc5424', 'kv');
+    expect(classifyStructuredParse(raw, real, 'kv').status).toBe('FULL');
+    delete ((real.fields as Record<string, Record<string, unknown>>).body as Record<string, unknown>).srcip;
+    const verdict = classifyStructuredParse(raw, real, 'kv');
+    expect(verdict.status).toBe('PARTIAL');
+    expect(verdict.lostPairs.map(pair => pair.key)).toEqual(['srcip']);
+  });
+
+  it('white space after the last pair is not part of its value (format-level fuzz, 2026-11-15)', () => {
+    for (const tail of ['\f', '\v', ' \f', '\t']) {
+      const event = preview('srcip=10.1.1.1 action=deny' + tail, draft({ format: 'kv' })).events[0]!;
+      expect(event.parseStatus, JSON.stringify(tail)).toBe('FULL');
+    }
+    expect(independentKeyValuePairs('a=1\fb=2').map(pair => pair.value)).toEqual(['1', '2']);
+  });
+
   it('text that is not structured data keeps full accounting (NILVALUE, and a malformed element)', () => {
     expect(independentKeyValuePairs('<165>1 2026-11-14T09:30:00Z host app - ID47 - a=1 b=2').map(pair => pair.key)).toEqual(['a', 'b']);
     expect(independentKeyValuePairs('<165>1 2026-11-14T09:30:00Z host app - ID47 [meta x="1" a=1 b=2').map(pair => pair.key)).toEqual(['x', 'a', 'b']);

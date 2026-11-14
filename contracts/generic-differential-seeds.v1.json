@@ -1,6 +1,6 @@
 {
   "schema": "parserstudio.generic-differential-seeds.v1",
-  "purpose": "Seed lines for the browser versus generated-Ruby differential of Generic Structural (scripts/verification/semantic-oracle.ts differential). Every seed is a line from the fixtures and tests of this repository and tests that the browser extractor parses; the two shortest per result mode. The oracle derives the variants (PRI, VERSION, month, host and key mutations, Unicode white space and separators, control characters, impossible dates) and requires the same decision and the same field tree from both engines for every variant. No expected value is stored here: the two engines are the reference for each other, and the hand-authored goldens (semantic-goldens.v1.json) say which of them is right.",
+  "purpose": "Seed lines for the browser versus generated-Ruby differential of Generic Structural (scripts/verification/semantic-oracle.ts differential). Every seed is a line from the fixtures and tests of this repository and tests that the browser extractor parses; the two shortest per result mode. The oracle derives the variants (PRI, VERSION, month, host and key mutations, Unicode white space and separators, control characters, impossible dates, time zones and fractions of a second, JSON escapes, comments and nesting, CSV quoting, and a fixed pseudo-random stream of token insertions, deletions and splices) and requires the same decision and the same field tree from both engines for every variant. No expected value is stored here: the two engines are the reference for each other, and the hand-authored goldens (semantic-goldens.v1.json) say which of them is right.",
   "seeds": [
     {
       "id": "asa-syslog-1",
@@ -251,6 +251,46 @@
       "id": "watchguard-header-watchguard-message-2",
       "mode": "watchguard_header+watchguard_message",
       "raw": "<142>May 10 15:19:05 [::1] (2024-05-10T09:49:05) firewall: msg_id=\"3000-0152\" IPv4 source route attack from 10.0.1.34 detected. (IPS)"
+    },
+    {
+      "id": "audit-iso-space-offset",
+      "mode": "syslog_envelope_json",
+      "raw": "<13>2026-10-16 03:11:07 +0200 edge {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "audit-slash-date-offset",
+      "mode": "syslog_envelope_json",
+      "raw": "<13>2026/10/16 03:11:07 -0000 edge {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "audit-rfc3339-loose-offset",
+      "mode": "syslog_envelope_json",
+      "raw": "<13>2026-10-16T03:11:07+0200 edge {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "audit-bsd-fraction",
+      "mode": "syslog_envelope_json",
+      "raw": "<13>Oct 16 03:11:07.915 edge {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "audit-rfc5424-offset-asa",
+      "mode": "asa+syslog",
+      "raw": "<34>1 2026-11-14T09:30:00+0530 host app 123 ID47 - %ASA-6-302013: Built outbound TCP connection 1 for outside:10.1.1.1/80 (10.1.1.1/80) to inside:10.2.2.2/1234 (10.2.2.2/1234)"
+    },
+    {
+      "id": "audit-json-nested-arrays",
+      "mode": "prefixed_json",
+      "raw": "EXAMPLE: {\"a\":[[[[[[[1]]]]]]],\"s\":\"\\ud83d\\ude00 \\u00e9 \\n\",\"n\":1.5}"
+    },
+    {
+      "id": "audit-bsd-tagged-json",
+      "mode": "syslog_envelope_json",
+      "raw": "Oct 12 01:02:05 fw01 app: {\"c\":\"\\ud83d\\ude00\",\"d\":{\"e\":[1,2]}}"
+    },
+    {
+      "id": "audit-positional-csv-quoted",
+      "mode": "rfc3164_positional_csv",
+      "raw": "<14>Oct 16 15:44:21 PA01 1,2026/10/16 15:44:21,012345678901,TRAFFIC,end,2561,2026/10/16 15:44:20,10.0.0.1,198.51.100.1,203.0.113.1,198.51.100.1,\"rule \"\"A\"\", east\""
     }
   ]
 }

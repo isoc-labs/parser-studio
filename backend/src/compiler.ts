@@ -70,6 +70,9 @@ def parserstudio_csv_strip_field_edges(text, separator)
 end
 
 def parserstudio_csv_parse_line(text, separator, strip_edges)
+  # RFC 4180 as text first: the library alone decides quoting by counting quotation marks (""a"" is taken as
+  # the field "a"), which the browser tokenizer declines.
+  raise ArgumentError, 'CSV row is outside RFC 4180' unless parserstudio_csv_rfc4180?(text, separator, strip_edges)
   if defined?(CSV::DEFAULT_OPTIONS) && CSV::DEFAULT_OPTIONS.key?(:strip)
     CSV.parse_line(text, col_sep: separator, liberal_parsing: false, strip: strip_edges)
   else

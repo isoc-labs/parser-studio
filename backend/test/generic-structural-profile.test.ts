@@ -11,7 +11,14 @@ const fixture=JSON.parse(readFileSync(new URL('../../tests/fixtures/roadmap-sysl
   positive:Array<{name:string;raw:string;prefix:string;kv:Record<string,string>}>;
   negative:Array<{name:string;raw:string}>;
 };
-const helper=injectHeaderGrammar(readFileSync(new URL('../templates/generic-structural-helper.rb.tpl',import.meta.url),'utf8'));
+// The helper is never shipped alone: it is compiled into the Fragment and calls the Fragment's shared text
+// rules (the RFC 4180 row rule in front of CSV.parse_line). The same source text is loaded here.
+const fragmentSource=injectHeaderGrammar(readFileSync(new URL('../templates/ruby-fragment.rb.tpl',import.meta.url),'utf8'));
+const csvRuleStart=fragmentSource.indexOf('def parserstudio_csv_rfc4180?(text, separator, padded)');
+const csvRuleEnd=fragmentSource.indexOf('\ndef parserstudio_unescape(text)',csvRuleStart);
+assert.ok(csvRuleStart>=0&&csvRuleEnd>csvRuleStart,'The RFC 4180 row rule must remain in the compiled Fragment');
+const helper=fragmentSource.slice(csvRuleStart,csvRuleEnd)+'\n'+
+  injectHeaderGrammar(readFileSync(new URL('../templates/generic-structural-helper.rb.tpl',import.meta.url),'utf8'));
 const ruby=process.env.PARSER_NATIVE_RUBY||'ruby';
 function runRuby(raw:string,profile?:string):{ok:boolean;fields?:Record<string,unknown>}{
   const source=["require 'json'","require 'csv'","require 'base64'","require 'ipaddr'","require 'time'",helper,

@@ -89,6 +89,28 @@ input['cases'].each do |item|
     end
     next
   end
+  if item['call'] == 'format_extract' || item['call'] == 'csv_tokens'
+    # The extraction result of any format (no mapping), or the fields of one CSV row, for the browser/Ruby
+    # differential. Declining is an ArgumentError or the parse error of the JSON or CSV library; any other
+    # exception is a defect and is reported as raised.
+    begin
+      parser.parse('') { |_time, _record| } unless parser.instance_variable_get(:@parser_rule_set)
+    rescue StandardError
+      nil
+    end
+    begin
+      value = if item['call'] == 'csv_tokens'
+        parser.send(:parserstudio_csv_parse_line, item['raw'].to_s, item['separator'].to_s, item['separator'].to_s != "\t")
+      else
+        parser.send(:parserstudio_extract, item['raw'].to_s)
+      end
+      results[id] = { 'value' => oracle_plain(value) }
+    rescue StandardError => e
+      declined = e.is_a?(ArgumentError) || ['JSON::ParserError', 'CSV::MalformedCSVError'].include?(e.class.name)
+      results[id] = declined ? { 'declined' => e.message.to_s[0, 120] } : { 'raised' => e.class.to_s }
+    end
+    next
+  end
   calls = []
   begin
     parser.parse(item['raw'].to_s) { |time, record| calls << [oracle_plain(time), oracle_plain(record)] }
