@@ -378,6 +378,29 @@ Goldens: `csv-quotation-marks-around-content-not-doubled`, `csv-form-feed-at-fie
 JSON comment and an unknown escape already; it kept an unpaired surrogate (`json-two-high-surrogates`,
 `json-lone-low-surrogate`) and now declines it (`JSON_UNPAIRED_SURROGATE`).
 
+Second independent re-audit (2026-11-15, commit `d249d79`). The same reviewer confirmed that the findings of
+the first pass are closed, found no valid input that the new strict rules decline (51 RFC 8259 documents, 46
+RFC 4180 rows, 50 key=value bodies under 8 headers, 2,665 timestamps) and measured the two new Ruby expressions
+as linear up to 1 MB. It then found what the gate did not look at:
+
+| Cause | Before | Decision |
+|---|---|---|
+| mixed format: the browser tried every body parser on the message of a Syslog envelope, the generated Ruby tests the exact prefix of the message | a message that starts with SP or TAB: FULL in the browser, declined by Ruby | the browser's router mirrors `parserstudio_mixed`: exact prefixes, nothing trimmed (the design the browser already states for lines without an envelope) |
+| mixed format: the browser asked for PRI in front of a BSD timestamp, Ruby (and the RFC 3164 format in both engines) does not | `Nov 14 09:30:00 fw01 a=1 b=2`: a record from Ruby, UNKNOWN in the browser | the browser opens an RFC 3164 envelope with or without PRI |
+| a blank message: no event in the browser (blank lines separate samples), a TAB-separated row of empty fields from Ruby | Ruby parsed | `parserstudio_extract` declines a blank message (`Blank event`; the white-space set of the browser's `String#trim`) |
+| the gate ran neither the mixed router, nor Regex, nor the forwarder-family template, and called itself "every format" | not compared | 8 configurations added; the step is named for what it runs |
+| a fault in the 100/400 leap-year rule was not reported (no 1900 / 2100 dates in the variants) | undetected | century dates added; three faults |
+
+A Regex pattern without a static cost proof is FULL in the preview and declines every event on Ruby 2.4.9. That
+is by design and cannot reach a user: such a project is refused at export (`TARGET_RUNTIME_REGEX_UNSUPPORTED`,
+`backend/src/target-runtime-export.ts`, `src/guided/backendCapabilities.ts`). The gate compares only patterns
+that carry the proof and fails when one of its patterns does not.
+
+Declined by both engines, by the grammar as it stands (not differences; listed because a reader may expect them
+to parse): a key=value pair with an empty value followed by another pair (`a= b=2`), JSON that starts with a
+byte-order mark, an RFC 3164 line with a TAG and no PRI, seven to nine fraction digits in a short RFC 5424
+timestamp.
+
 CI gate. `scripts/verification/semantic-oracle.ts differential` runs in the required job
 `native-isolated-synthetic` on Ruby 2.4.9, in two stages. The same decision and the same field tree are required
 for every case.
@@ -386,34 +409,33 @@ Generic Structural, both routes (legacy and dedicated):
 
 - enumerated variants of 58 seed lines (`contracts/generic-differential-seeds.v1.json`) and the Generic
   Structural goldens: PRI, VERSION, month, host, key and address mutations, Unicode separators, control
-  characters, impossible dates, time zones and fractions of a second, JSON escapes, comments and nesting, CSV
-  quoting, and the 8192-byte bound: 20,782 cases;
+  characters, impossible dates, century years, time zones and fractions of a second, JSON escapes, comments and
+  nesting, CSV quoting, and the 8192-byte bound: 21,052 cases;
 - the reviewer's pseudo-random stream, fixed seeds 101, 102 and 103, 3,000 lines each: 18,000 cases;
-- fifteen injected faults (six in the browser extractor, nine in the compiled Ruby), each of which must be
-  reported: `ts-diff-unicode-trim`, `ts-diff-impossible-date-accepted`, `ts-diff-json-unsafe-integer`,
-  `ts-diff-ip-token-clock-time`, `ts-diff-csv-quote-in-unquoted-field`, `ts-diff-json-source-contract-removed`,
-  `rb-diff-calendar-rollover`, `rb-diff-positional-150-columns`, `rb-diff-line-feed-accepted`,
-  `rb-diff-ip-token-library`, `rb-diff-zone-minute-unbounded`, `rb-diff-bsd-clock-without-fraction`,
-  `rb-diff-zone-colon-required`, `rb-diff-json-library-leniency`, `rb-diff-csv-library-quote-counting`.
+- eighteen injected faults (seven in the browser extractor, eleven in the compiled Ruby), each of which must be
+  reported (`ts-diff-*`, `rb-diff-*` in `semantic-oracle.ts`).
 
-Every other format:
+The other formats, 25 configurations: key=value, JSON, CEF, LEEF, CSV with comma, semicolon and TAB, RFC 3164
+and RFC 5424 with each of five bodies, four mixed allowlists, two Regex patterns with a cost proof, two
+declared-forwarder layouts (the forwarder-family template):
 
-- 17 configurations, their golden lines and 1,500 stream lines each (fixed seed 401): 25,818 cases, FULL in
-  the browser if and only if a record from the generated Ruby, equal trees;
+- their golden and seed lines and 1,500 stream lines each (fixed seed 401): 38,490 cases. FULL in the browser
+  if and only if a record from the generated Ruby, with equal field trees. Every configuration must have at
+  least one case on each side of that decision;
 - the CSV row tokenizer against `parserstudio_csv_parse_line` for comma, semicolon and TAB: every string of up
   to six symbols over a letter, the quotation mark, the separator and SP, and 3,000 stream rows per separator
-  over a wider alphabet (TAB, NBSP, U+2028, form feed, vertical tab, backslash, apostrophe, an astral
-  character): 25,380 rows;
-- seven injected faults: `ts-format-csv-form-feed-stripped`, `ts-format-csv-empty-row-parsed`,
-  `ts-format-json-source-contract-removed`, `ts-format-guard-form-feed-in-value`,
-  `rb-format-csv-library-quote-counting`, `rb-format-empty-record-emitted`, `rb-format-json-library-leniency`.
+  over a wider alphabet: 25,380 rows;
+- eleven injected faults (`ts-format-*`, `rb-format-*`).
 
 The Ruby side runs in batches (6,000 cases a process; a fault runs batch by batch until it is reported), because
 the CI interpreter is a container with 512 MB and one CPU. Run against the product code of `3b9e3f5`, the
 Generic Structural stage fails with 208 enumerated and 80 stream differences. The differential says the engines
-agree; the hand-authored goldens say what is right. It is a sample, not a proof: a class of lines that neither
-the enumerated variants nor the streams produce is not compared, LF and CR inside an event are outside it (they
-are framing and are declined before extraction), and the Python preview is not part of it.
+agree; the hand-authored goldens say what is right.
+
+What it is not. It is a sample, not a proof: a class of lines that neither the enumerated variants nor the
+streams produce is not compared. Two independent passes each found such a class. Not compared at all: the
+Python preview, `java_stacktrace`, the `genericStructuralProfile` variants, a Regex body inside Syslog, and LF
+or CR inside an event (framing; declined before extraction).
 
 The independently authored semantic identity oracle (`independent-semantic-identity-oracle.ts`) now runs before
 the template-hash gate, with its own fault injection

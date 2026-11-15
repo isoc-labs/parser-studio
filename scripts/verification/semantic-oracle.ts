@@ -38,6 +38,7 @@ import { SYSLOG_HEADER_RULES, type SyslogHeaderRuleName } from '../../src/gramma
 // @ts-expect-error plain ESM generator without type declarations
 import { CONTRACT_PATH, GENERATED_PYTHON_PATH, compileRule, generatePython, generateTypeScript, rubyGrammarPlaceholders } from '../grammar/generate-grammar.mjs';
 import { compilePair } from '../../backend/src/compiler.js';
+import { analyzeRuby24RegexCost } from '../../backend/src/ruby24-regex-cost.js';
 import { sampleProject } from '../../backend/test/fixture.js';
 
 type Engine = 'ts' | 'ruby';
@@ -1286,6 +1287,11 @@ function differentialVariants(raw: string): string[] {
   add(raw.replace(/\d{4}\/\d{2}\/\d{2}/, '2026/02/30'));
   add(raw.replace(/\d{4}-\d{2}-\d{2}/, '2026-02-30'));
   add(raw.replace(/\d{4}-\d{2}-\d{2}/, '2025-02-29'));
+  // Century years: 1900 and 2100 have no 29 February, 2000 has (second re-audit: a fault in the 100/400 rule went unreported).
+  for (const year of ['1900', '2000', '2100']) {
+    add(raw.replace(/\d{4}-\d{2}-\d{2}/, year + '-02-29'));
+    add(raw.replace(/\d{4}\/\d{2}\/\d{2}/, year + '/02/29'));
+  }
   add(raw.replace(/\b\d{2}:\d{2}:\d{2}\b/, '24:00:00'));
   add(raw.replace(/\b\d{2}:\d{2}:\d{2}\b/, '23:59:60'));
   add(raw.replace(/[A-Z][a-z]{2} +\d{1,2} /, 'Feb 30 '));
@@ -1398,6 +1404,8 @@ const DIFFERENTIAL_TS_FAULTS: Mutant[] = [
   { id: 'ts-diff-json-unsafe-integer', file: 'src/genericStructural.ts', find: 'return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)||', replace: 'return hasDuplicateJsonObjectKeys(text)||' },
   // The browser's IP token takes a clock time (12:34:56) as an address again.
   { id: 'ts-diff-ip-token-clock-time', file: 'src/genericStructural.ts', find: '  return sides.length===2?groups.length<=7:groups.length===8;', replace: '  return groups.length>=2;' },
+  // The browser's shared timestamp rule forgets that a century year is a leap year only when divisible by 400.
+  { id: 'ts-diff-century-leap-year', file: 'src/genericStructural.ts', find: "  const leap=year%4===0&&(year%100!==0||year%400===0);\n  if(day>[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][month-1]!)return false;\n  if(Number(match[4])>23", replace: "  const leap=year%4===0;\n  if(day>[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][month-1]!)return false;\n  if(Number(match[4])>23" },
   // Re-audit I-7: a quotation mark inside an unquoted CSV field is taken as data by the browser only.
   { id: 'ts-diff-csv-quote-in-unquoted-field', file: 'src/genericStructural.ts', find: "        if(text[index]==='\"')return null;\n", replace: '' },
   // Re-audit I-4 and I-5: the browser's Generic Structural JSON drops the JSON source contract (8 levels, paired surrogates).
@@ -1408,6 +1416,9 @@ const DIFFERENTIAL_RUBY_FAULTS: Mutant[] = [
   { id: 'rb-diff-positional-150-columns', file: 'fragment', find: 'values.length.between?(12, 100)', replace: 'values.length.between?(12, 150)' },
   { id: 'rb-diff-line-feed-accepted', file: 'fragment', find: "text.match?(/[\\x00\\x0a-\\x0d\\x1c-\\x1f]/)", replace: "text.match?(/[\\x0b\\x0c\\x0d\\x1c-\\x1f]/)" },
   { id: 'rb-diff-ip-token-library', file: 'fragment', find: "  sides.length == 2 ? groups.length <= 7 : groups.length == 8\n", replace: "  groups.length >= 2\n" },
+  // The 100/400 rule of the leap year is dropped, in the timestamp rule and in the envelope calendar.
+  { id: 'rb-diff-century-leap-year-timestamp', file: 'fragment', find: "  leap=(y%4).zero? && (!(y%100).zero? || (y%400).zero?)\n  valid = y.between?(1,9999)", replace: "  leap=(y%4).zero?\n  valid = y.between?(1,9999)" },
+  { id: 'rb-diff-century-leap-year-envelope', file: 'fragment', find: "  leap=(y%4).zero? && (!(y%100).zero? || (y%400).zero?)\n  return false unless d<=[31,leap ? 29 : 28", replace: "  leap=(y%4).zero?\n  return false unless d<=[31,leap ? 29 : 28" },
   // Re-audit I-8: the minute of a UTC offset is not bounded (what Time.iso8601 did).
   { id: 'rb-diff-zone-minute-unbounded', file: 'fragment', find: '  !match.nil? && Integer(match[1], 10) <= 23 && Integer(match[2], 10) <= 59\n', replace: '  !match.nil?\n' },
   // Re-audit I-2: a fraction of a second after a BSD clock time is refused (what Integer("07.915") did).
@@ -1510,7 +1521,7 @@ async function runDifferential(): Promise<number> {
   return ok && formats ? 0 : 1;
 }
 
-// ---------------------------------------------------------------- every other format: browser versus generated Ruby
+// ---------------------------------------------------------------- the other formats: browser versus generated Ruby
 // The Generic Structural stage above covers the format whose bodies are written twice by hand. The other formats
 // share one generated grammar for the Syslog header and the key=value body, but each still has code of its own on
 // both sides (the JSON reader, the CSV tokenizer, the CEF/LEEF reader, the run-time field-loss check) and leans on
@@ -1520,7 +1531,7 @@ async function runDifferential(): Promise<number> {
 // Ruby declines. Found on 2026-11-15 this way: ""a"" taken as a quoted CSV field by Ruby only, a form feed at a
 // CSV field edge removed by the browser only, a row of spaces parsed by the browser only, an empty JSON object
 // emitted by Ruby only, and a form feed after the last key=value pair rejected by the run-time check.
-interface FormatConfig { name: string; extraction: Record<string, unknown>; draft: Record<string, unknown>; seeds: string[] }
+interface FormatConfig { name: string; extraction: Record<string, unknown>; draft: Record<string, unknown>; seeds: string[]; /** Bookkeeping keys of the Ruby record that are not extracted fields. */ rubyOnlyKeys?: string[] }
 type PreviewFn = typeof preview;
 type TokenizeFn = typeof tokenizeCSV;
 const FORMAT_SPECIAL = ['"', "'", '\\', '=', ':', ',', ';', '[', ']', '{', '}', '|', '<', '>', '(', ')', '/', '-', '.', '0', '9', 'a', 'Z', ' ', '\t', '%', '^', '#', '@', '+', '*', '?', '!', '~', '`', '$', '&', '_',
@@ -1534,7 +1545,7 @@ function formatConfigs(): FormatConfig[] {
   const cefSeeds = goldens.familyCases.filter(item => item.family === 'cef').map(item => item.raw);
   const leefSeeds = goldens.familyCases.filter(item => item.family === 'leef').map(item => item.raw);
   const csvSeeds = [...new Set([...goldens.csvCases.filter(item => item.delimiter === ',').map(item => item.raw),
-    'aaa,bbb,ccc', '"aaa","bbb","ccc"', 'aaa,"b,bb",ccc', 'aaa,"b""bb",ccc', ' aaa , bbb ,ccc', 'aaa,,ccc', '"a a", "b" ,c', '1,2026/10/16 15:44:21,TRAFFIC'])];
+    'aaa,bbb,ccc', '"aaa","bbb","ccc"', 'aaa,"b,bb",ccc', 'aaa,"b""bb",ccc', ' aaa , bbb ,ccc', 'aaa,,ccc', '"a a", "b" ,c', '1,2026/10/16 15:44:21,TRAFFIC', ',,', ' , , '])];
   const bodies: Record<string, string[]> = { kv: kvSeeds, json: jsonSeeds, raw: ['plain text message here', 'a=b not kv: really'], cef: cefSeeds, leef: leefSeeds };
   const heads = {
     syslog_rfc3164: ['<134>Nov 14 09:30:00 fw01 ', '<134>Nov 14 09:30:00 fw01 app[12]: '],
@@ -1552,6 +1563,40 @@ function formatConfigs(): FormatConfig[] {
   for (const body of Object.keys(bodies)) for (const grammar of ['syslog_rfc3164', 'syslog_rfc5424'] as const)
     configs.push({ name: `${grammar}+${body}`, extraction: { format: grammar, syslogBodyFormat: body }, draft: { format: grammar, syslogBodyFormat: body },
       seeds: [...bodies[body]!.flatMap(raw => heads[grammar].map(head => head + raw)), ...(body === 'kv' ? goldens.cases.filter(item => item.grammar === grammar).map(item => item.raw) : [])] });
+  // Second independent re-audit (2026-11-15): the mixed router, the Regex format and the forwarder-family template
+  // were not compared. Mixed: every family alone and inside each Syslog envelope, with and without PRI and TAG,
+  // and with white space in front of the message (no family: the router tests exact prefixes).
+  const bsd = '<134>Nov 14 09:30:00 fw01 ', bsdTagged = '<134>Nov 14 09:30:00 fw01 app[12]: ', ietf = '<165>1 2026-11-14T09:30:00.123Z host app 123 ID47 - ';
+  const ietfSd = '<165>1 2026-11-14T09:30:00+09:00 host app - ID47 [meta@32473 a="b" c="d\\"e"] ';
+  const mixedSeeds = [...kvSeeds.slice(0, 12), ...jsonSeeds.slice(0, 6), ...cefSeeds.slice(0, 4), ...leefSeeds.slice(0, 3),
+    ...kvSeeds.slice(0, 8).flatMap(raw => [bsd + raw, bsdTagged + raw, ietf + raw, ietfSd + raw, 'Nov 14 09:30:00 fw01 ' + raw, 'Nov 14 09:30:00 fw01 app: ' + raw,
+      ietf + ' ' + raw, ietf + '\t' + raw, bsdTagged + ' ' + raw, bsdTagged + '\t' + raw]),
+    ...jsonSeeds.slice(0, 4).flatMap(raw => [ietf + raw, ietf + ' ' + raw, bsd + raw]),
+    ...cefSeeds.slice(0, 3).flatMap(raw => [bsd + raw, ietf + raw, ietf + ' ' + raw, bsdTagged + raw]),
+    ...leefSeeds.slice(0, 2).flatMap(raw => [bsd + raw, ietf + raw]), 'aaa,bbb,ccc', '"a,a",b,c', 'a=1,b=2,c=3'];
+  const mixed = (name: string, formats: string[], csv = false) => configs.push({ name,
+    extraction: { format: 'mixed', mixedFormats: formats, ...(csv ? { csvDelimiter: ',', csvColumns: ['c1', 'c2', 'c3'] } : {}) },
+    draft: { format: 'mixed', mixedFormats: formats, ...(csv ? { csvDelimiter: ',', csvColumns: 'c1,c2,c3' } : {}) }, seeds: mixedSeeds });
+  mixed('mixed-kv-json-rfc3164kv-rfc5424kv', ['kv', 'json', 'rfc3164_kv', 'rfc5424_kv']);
+  mixed('mixed-cef-leef-rfc5424json-rfc3164cef', ['cef', 'leef', 'rfc5424_json', 'rfc3164_cef']);
+  mixed('mixed-rfc5424cef-rfc5424leef-rfc3164leef-json', ['rfc5424_cef', 'rfc5424_leef', 'rfc3164_leef', 'json']);
+  mixed('mixed-kv-csv', ['kv', 'csv'], true);
+  // Regex: two patterns with a static cost proof (the only ones that can be exported for Ruby 2.4.9).
+  const regexSeeds = ['abc def ghi', '2026-11-14T09:30:00Z host1 message text here', 'a b', 'abc\u00a0def ghi jkl', 'x  y z', '12 x y', 'a=b c d', 'abc def ', 'fw01 443 allowed out', 'host.example 0 x', 'a:b 12 '];
+  for (const [name, pattern] of [['regex-non-space-tokens', '^(?<ts>\\S+) (?<host>\\S+) (?<msg>.*)$'], ['regex-classes-and-digits', '^(?<a>[A-Za-z0-9_.:@%+/-]+) (?<b>[0-9]+) (?<rest>.*)$']] as const) {
+    // A pattern without the proof is refused at export (TARGET_RUNTIME_REGEX_UNSUPPORTED) and, compiled anyway,
+    // declines every event on Ruby 2.4.9; comparing it would compare nothing.
+    if (!analyzeRuby24RegexCost(pattern).ok) throw new Error(`REGEX_CONFIG_WITHOUT_COST_PROOF ${name}`);
+    configs.push({ name, extraction: { format: 'regex', pattern }, draft: { format: 'regex', pattern }, seeds: regexSeeds });
+  }
+  // Declared forwarder (the forwarder-family template): direct events, one and two relay hops, an undeclared relay, too many hops.
+  const relay = '<13>Nov 14 09:30:00 relay1 fwd: ', relayIetf = '<13>1 2026-11-14T09:30:00Z relay1 fwd - - - ';
+  configs.push({ name: 'forwarder-kv', rubyOnlyKeys: ['__parserstudio_forwarder_hops'],
+    extraction: { format: 'kv', forwarder: { relayHosts: ['relay1', '10.9.9.9'], maxHops: 2 } }, draft: { format: 'kv', forwarder: { relayHosts: ['relay1', '10.9.9.9'], maxHops: 2 } },
+    seeds: kvSeeds.slice(0, 10).flatMap(raw => [raw, relay + raw, relayIetf + raw, relay + relayIetf + raw, '<13>Nov 14 09:30:00 other fwd: ' + raw, relay + relay + relay + raw]) });
+  configs.push({ name: 'forwarder-syslog_rfc5424+kv', rubyOnlyKeys: ['__parserstudio_forwarder_hops'],
+    extraction: { format: 'syslog_rfc5424', syslogBodyFormat: 'kv', forwarder: { relayHosts: ['relay1'], maxHops: 1 } }, draft: { format: 'syslog_rfc5424', syslogBodyFormat: 'kv', forwarder: { relayHosts: ['relay1'], maxHops: 1 } },
+    seeds: kvSeeds.slice(0, 10).flatMap(raw => [ietf + raw, relay + ietf + raw, relay + relay + ietf + raw, ietfSd + raw]) });
   return configs;
 }
 function formatLines(seeds: string[], seed: number, count: number): string[] {
@@ -1600,6 +1645,10 @@ const FORMAT_TS_FAULTS: Mutant[] = [
   // The JSON format drops its source contract (8 levels, paired surrogates) in the browser.
   { id: 'ts-format-json-source-contract-removed', file: 'src/parser.ts', find: "    if(!jsonSourceValueValid(parsed))\n      return {fields:{},errors:['JSON source exceeds", replace: "    if(false)\n      return {fields:{},errors:['JSON source exceeds" },
   // The browser's field-loss check splits tokens at SP and TAB only again: a form feed after the last pair makes a complete event PARTIAL.
+  // The browser's mixed router asks for PRI in front of a BSD timestamp again; the generated Ruby does not.
+  { id: 'ts-format-mixed-bsd-envelope-needs-pri', file: 'src/parser.ts', find: "const bsdEnvelope=/^(?:<\\d{1,3}>)?[A-Z][a-z]{2} +\\d{1,2} +\\d{2}:/.test(raw);", replace: "const bsdEnvelope=/^<\\d{1,3}>[A-Z][a-z]{2} +\\d{1,2} +\\d{2}:/.test(raw);" },
+  // The browser's mixed router takes a key=value message that starts with white space again (it tried every body parser).
+  { id: 'ts-format-mixed-message-prefix-not-exact', file: 'src/parser.ts', find: "/^[A-Za-z_][A-Za-z0-9_.-]*=/.test(message)?'kv' as const:null;", replace: "/^[ \\t]*[A-Za-z_][A-Za-z0-9_.-]*=/.test(message)?'kv' as const:null;" },
   { id: 'ts-format-guard-form-feed-in-value', file: 'src/grammar/parseStatus.ts', find: "ch === ' ' || ch === '\\t' || ch === '\\n' || ch === '\\v' || ch === '\\f' || ch === '\\r';", replace: "ch === ' ' || ch === '\\t';" },
 ];
 const FORMAT_RUBY_FAULTS: Mutant[] = [
@@ -1609,6 +1658,10 @@ const FORMAT_RUBY_FAULTS: Mutant[] = [
   { id: 'rb-format-empty-record-emitted', file: 'fragment', find: "  raise ArgumentError, 'No field was extracted' if result.is_a?(Hash) && result.empty?\n", replace: '' },
   // JSON.parse alone: comments, unknown escapes and two high surrogates are accepted.
   { id: 'rb-format-json-library-leniency', file: 'fragment', find: "  raise ArgumentError, 'JSON text is outside RFC 8259' unless parserstudio_json_strict_text?(text)\n", replace: '' },
+  // A blank line becomes an event again (a TAB-separated row of empty fields).
+  { id: 'rb-format-blank-event-parsed', file: 'fragment', find: "  raise ArgumentError, 'Blank event' if parserstudio_blank_event?(text)\n", replace: '' },
+  // The Ruby mixed router takes a message that starts with white space as key=value.
+  { id: 'rb-format-mixed-message-prefix-not-exact', file: 'fragment', find: "    elsif message && message.match?(/\\A[A-Za-z_][A-Za-z0-9_.-]*=/)\n      'rfc5424_kv'", replace: "    elsif message && message.match?(/\\A[ \\t]*[A-Za-z_][A-Za-z0-9_.-]*=/)\n      'rfc5424_kv'" },
 ];
 const FORMAT_STREAM = 401;
 const FORMAT_LINES_PER_CONFIG = 1500;
@@ -1626,11 +1679,14 @@ function formatProblems(run: PreviewFn, draft: typeof createDraft, configs: Map<
     const full = events.length === 1 && events[0]!.parseStatus === 'FULL';
     const rubyParsed = ruby.value !== undefined && ruby.value !== null;
     if (full !== rubyParsed) problems.push(`${item.id}: ${full ? 'FULL in the browser, declined by the generated Ruby' : `parsed by the generated Ruby, ${events.length === 1 ? String(events[0]!.parseStatus) : events.length + ' events'} in the browser`}: ${JSON.stringify(item.raw).slice(0, 140)}`);
-    else if (full && canonicalTree(events[0]!.fields) !== canonicalTree(ruby.value)) problems.push(`${item.id}: different field tree: ${JSON.stringify(item.raw).slice(0, 140)}`);
+    else if (full && canonicalTree(events[0]!.fields) !== canonicalTree(withoutKeys(ruby.value, configs.get(item.config)!.rubyOnlyKeys))) problems.push(`${item.id}: different field tree: ${JSON.stringify(item.raw).slice(0, 140)}`);
     else if (full) parsed += 1; else declined += 1;
   }
   return { problems, parsed, declined };
 }
+const withoutKeys = (value: unknown, keys: string[] | undefined): unknown =>
+  keys && value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([key]) => !keys.includes(key))) : value;
 interface CsvRowCase { id: string; separator: string; raw: string }
 function csvRowProblems(tokenize: TokenizeFn, cases: CsvRowCase[], results: Record<string, RubyExtract>, prefix: string): { problems: string[]; parsed: number; declined: number } {
   const problems: string[] = [];
@@ -1650,6 +1706,7 @@ async function runFormatDifferential(expectedRuby: string): Promise<boolean> {
   const configs = new Map(formatConfigs().map(config => [config.name, config]));
   const fragments: Record<string, string> = {};
   const cases: FormatCase[] = [];
+  const perConfig: FormatCase[][] = [];
   for (const config of configs.values()) {
     const project = sampleProject() as unknown as Record<string, any>;
     project.extraction = config.extraction;
@@ -1658,10 +1715,12 @@ async function runFormatDifferential(expectedRuby: string): Promise<boolean> {
     project.normalization.vendorFields = { differential_probe: { normalized_name: 'differential_probe', data_type: 'string' } };
     project.classification = { defaultIndex: 'syslog', rules: [] };
     fragments[`format:${config.name}`] = compilePair(project).files.find(file => !file.name.endsWith('.conf'))!.content;
-    formatLines(config.seeds, FORMAT_STREAM, FORMAT_LINES_PER_CONFIG).forEach((raw, index) => {
-      cases.push({ id: `${config.name}#${index}`, config: config.name, raw });
-    });
+    perConfig.push(formatLines(config.seeds, FORMAT_STREAM, FORMAT_LINES_PER_CONFIG).map((raw, index) => ({ id: `${config.name}#${index}`, config: config.name, raw })));
   }
+  // The cases are interleaved, one configuration after the other, so that every batch holds lines of every
+  // configuration and an injected fault is met in the first batches whatever format it lives in.
+  for (let index = 0; perConfig.some(list => index < list.length); index += 1)
+    for (const list of perConfig) if (index < list.length) cases.push(list[index]!);
   const csvCasesList: CsvRowCase[] = [];
   for (const [label, separator] of [['comma', ','], ['semicolon', ';'], ['tab', '\t']] as const)
     csvRows(separator, FORMAT_STREAM, CSV_ROWS_PER_SEPARATOR).forEach((raw, index) => csvCasesList.push({ id: `csvrow-${label}#${index}`, separator, raw }));
@@ -1675,6 +1734,15 @@ async function runFormatDifferential(expectedRuby: string): Promise<boolean> {
   if (!results) return false;
   const product = formatProblems(preview, createDraft, configs, cases, results, '');
   report('FORMAT_DIFFERENTIAL', product.problems.slice(0, 40));
+  // Every configuration must have been exercised on both sides of the decision: at least one event that both
+  // engines parse completely and one that both decline. A configuration that only declines compares nothing.
+  const vacuous: string[] = [];
+  for (const name of configs.keys()) {
+    const own = formatProblems(preview, createDraft, configs, cases.filter(item => item.config === name), results, '');
+    process.stdout.write(`FORMAT_DIFFERENTIAL_CONFIG ${name} full_and_identical=${own.parsed} declined_by_both=${own.declined} differences=${own.problems.length}\n`);
+    if (own.parsed === 0 || own.declined === 0) vacuous.push(name);
+  }
+  if (vacuous.length) report('FORMAT_DIFFERENTIAL_VACUOUS_CONFIG', vacuous);
   const rows = csvRowProblems(tokenizeCSV, csvCasesList, results, '');
   report('CSV_ROW_DIFFERENTIAL', rows.problems.slice(0, 40));
   const undetected: string[] = [];
@@ -1715,7 +1783,7 @@ async function runFormatDifferential(expectedRuby: string): Promise<boolean> {
   }
   if (undetected.length) report('FORMAT_DIFFERENTIAL_FAULT_UNDETECTED', undetected);
   const faults = FORMAT_RUBY_FAULTS.length + FORMAT_TS_FAULTS.length;
-  const ok = product.problems.length === 0 && rows.problems.length === 0 && undetected.length === 0 && product.parsed > 0 && product.declined > 0 && rows.parsed > 0 && rows.declined > 0;
+  const ok = product.problems.length === 0 && rows.problems.length === 0 && undetected.length === 0 && vacuous.length === 0 && rows.parsed > 0 && rows.declined > 0;
   process.stdout.write(`${ok ? 'FORMAT_DIFFERENTIAL_PASS' : 'FORMAT_DIFFERENTIAL_FAIL'} ruby=${expectedRuby} formats=${configs.size} cases=${cases.length} full_and_identical=${product.parsed} declined_by_both=${product.declined} differences=${product.problems.length} csv_rows=${csvCasesList.length} csv_rows_identical=${rows.parsed} csv_rows_declined_by_both=${rows.declined} csv_row_differences=${rows.problems.length} faults_detected=${faults - undetected.length}/${faults}\n`);
   return ok;
 }

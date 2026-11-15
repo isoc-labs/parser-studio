@@ -78,3 +78,34 @@ describe('format-level browser/Ruby fuzz 2026-11-15: CSV rows and empty events',
     expect(preview('{}', { ...createDraft(), format: 'json' }).events[0]!.parseStatus).toBe('UNKNOWN');
   });
 });
+
+// Second independent re-audit (d249d79): the mixed router of the browser tried every body parser, the generated
+// Ruby tests exact prefixes; and the browser asked for PRI where Ruby (and the RFC 3164 format itself) does not.
+describe('second re-audit 2026-11-15: the mixed router decides by exact prefix, like the generated Ruby', () => {
+  const mixedDraft = (formats: string[]) => ({ ...createDraft(), format: 'mixed' as const, mixedFormats: formats }) as ReturnType<typeof createDraft>;
+  const status = (raw: string, formats: string[]) => preview(raw, mixedDraft(formats)).events[0]!.parseStatus;
+  const KV = ['kv', 'json', 'rfc3164_kv', 'rfc5424_kv'];
+
+  it('a message that starts with white space is no family (RFC 5424 and RFC 3164 envelopes)', () => {
+    expect(status('<165>1 2026-11-14T09:30:00Z host app - ID47 - a=1 b=2', KV)).toBe('FULL');
+    expect(status('<165>1 2026-11-14T09:30:00Z host app - ID47 -  a=1 b=2', KV)).toBe('UNKNOWN');
+    expect(status('<165>1 2026-11-14T09:30:00Z host app - ID47 - \ta=1 b=2', KV)).toBe('UNKNOWN');
+    expect(status('<134>Nov 14 09:30:00 fw01 app: a=1 b=2', KV)).toBe('FULL');
+    expect(status('<134>Nov 14 09:30:00 fw01 app: \ta=1 b=2', KV)).toBe('UNKNOWN');
+    expect(status('<165>1 2026-11-14T09:30:00Z host app - ID47 -  {"y":"ly"}', ['cef', 'leef', 'rfc5424_json', 'rfc3164_cef'])).toBe('UNKNOWN');
+    expect(status('<165>1 2026-11-14T09:30:00Z host app - ID47 - {"y":"ly"}', ['cef', 'leef', 'rfc5424_json', 'rfc3164_cef'])).toBe('FULL');
+  });
+
+  it('a BSD timestamp opens an RFC 3164 envelope with or without PRI', () => {
+    const event = preview('Nov 14 09:30:00 fw01 a=1 b=2', mixedDraft(KV)).events[0]!;
+    expect(event.parseStatus).toBe('FULL');
+    expect(event.fields).toEqual({ syslog_timestamp: 'Nov 14 09:30:00', syslog_time_policy: 'YEAR_AND_ZONE_UNKNOWN', syslog_hostname: 'fw01', body: { a: '1', b: '2' } });
+    expect(status('<134>Nov 14 09:30:00 fw01 a=1 b=2', KV)).toBe('FULL');
+  });
+
+  it('a family that is not in the allowlist stays declined, and a broken header never falls back to key=value', () => {
+    expect(status('<134>Nov 14 09:30:00 fw01 CEF:0|a|b|1|2|n|5|src=1.1.1.1', KV)).toBe('UNKNOWN');
+    expect(status('<999>Nov 14 09:30:00 fw01 a=1 b=2', KV)).toBe('UNKNOWN');
+    expect(status('<165>2 2026-11-14T09:30:00Z host app - ID47 - a=1 b=2', KV)).toBe('UNKNOWN');
+  });
+});

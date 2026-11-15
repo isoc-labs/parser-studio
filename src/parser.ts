@@ -1,6 +1,7 @@
 import {meetsStellar7ValueConstraints,officialProtocolPairConflict} from './stellar7ValueConstraints';
 import type { ConcreteFormat, Detection, Diagnostic, EventParseStatus, EventResult, Format, ParserDraft, SuiteResult, TraceStep } from './model';
 import { classifyStructuredParse } from './grammar/parseStatus';
+import { matchRfc3164Header } from './grammar/syslogHeader';
 import { classifyGenericStructural } from './grammar/genericParseStatus';
 import { bodyKindOf, detectStructuredFamily, extractStructuredFamily,strictKeyValues } from './structuredFamilies';
 import { hasAmbiguousFieldPath,lookupFieldValue,mappingWhenApplies } from './fieldPaths';
@@ -268,34 +269,33 @@ export function extractFields(raw: string, format: ConcreteFormat, draft: Parser
          new Set(selected).size!==selected.length||
          selected.some(f=>!['json','kv','cef','leef','rfc5424_cef','rfc5424_leef','rfc3164_kv','rfc5424_json','rfc5424_kv','rfc3164_cef','rfc3164_leef','csv'].includes(f)))
         return {fields:{},errors:['Select an explicit bounded mixed-family allowlist']};
-      // Reuse the reviewed strict RFC5424 header + nested CEF/LEEF parser
-      // for exact wrapper routing. A broken header must never fall back to KV.
-      if(raw.startsWith('<')){
-        if(/^<\d{1,3}>[A-Z][a-z]{2} /.test(raw)){
-          // The strict TAG: parser verifies the yearless BSD header once,
-          // then exactly one explicitly selected KV/CEF/LEEF body branch.
-          const cef=extractStructuredFamily(raw,'syslog_rfc3164','cef');
-          const leef=extractStructuredFamily(raw,'syslog_rfc3164','leef');
-          const kv=extractStructuredFamily(raw,'syslog_rfc3164','kv');
-          const mode=!cef.errors.length?'rfc3164_cef':
-            !leef.errors.length?'rfc3164_leef':
-            !kv.errors.length?'rfc3164_kv':null;
-          if(!mode||!selected.includes(mode))
-            return {fields:{},errors:['RFC3164 TAG body is unsupported or not allowlisted']};
-          return mode==='rfc3164_cef'?cef:mode==='rfc3164_leef'?leef:kv;
+      // The same router as parserstudio_mixed in the generated Ruby. The family of a line is decided by its
+      // exact prefix, and the family of a Syslog envelope by the exact prefix of its message: nothing is trimmed
+      // and no body parser is tried on spec. A BSD timestamp opens an RFC 3164 envelope with or without PRI, as
+      // in the RFC 3164 format itself. A broken header never falls back to key=value.
+      // (Second independent re-audit, 2026-11-15: the browser tried every body parser instead, so a message that
+      // starts with white space was FULL here and declined by Ruby, and a line without PRI was the reverse.)
+      const bsdEnvelope=/^(?:<\d{1,3}>)?[A-Z][a-z]{2} +\d{1,2} +\d{2}:/.test(raw);
+      if(!raw.startsWith('{')&&!raw.startsWith('CEF:')&&!raw.startsWith('LEEF:')&&(bsdEnvelope||raw.startsWith('<'))){
+        const grammar=bsdEnvelope?'syslog_rfc3164':'syslog_rfc5424';
+        // The message of the envelope, from the header grammar alone (a tagless RFC 3164 line has one too).
+        let message:unknown;
+        if(bsdEnvelope){
+          const header=matchRfc3164Header(raw);
+          message=header.ok?header.message:undefined;
+        }else{
+          const header=extractStructuredFamily(raw,grammar,'raw');
+          message=header.errors.length?undefined:header.fields.message;
         }
-        const cef=extractStructuredFamily(raw,'syslog_rfc5424','cef');
-        const leef=extractStructuredFamily(raw,'syslog_rfc5424','leef');
-        const json=extractStructuredFamily(raw,'syslog_rfc5424','json');
-        const kv=extractStructuredFamily(raw,'syslog_rfc5424','kv');
-        const mode=!cef.errors.length?'rfc5424_cef':
-          !leef.errors.length?'rfc5424_leef':
-          !json.errors.length?'rfc5424_json':
-          !kv.errors.length?'rfc5424_kv':null;
-        if(!mode||!selected.includes(mode))
-          return {fields:{},errors:['Wrapped Syslog is malformed or not in mixed allowlist']};
-        return mode==='rfc5424_cef'?cef:mode==='rfc5424_leef'?leef:
-          mode==='rfc5424_json'?json:kv;
+        const body=typeof message!=='string'?null:
+          message.startsWith('CEF:')?'cef' as const:
+          message.startsWith('LEEF:')?'leef' as const:
+          !bsdEnvelope&&message.startsWith('{')?'json' as const:
+          /^[A-Za-z_][A-Za-z0-9_.-]*=/.test(message)?'kv' as const:null;
+        const mode=body?`${bsdEnvelope?'rfc3164':'rfc5424'}_${body}`:null;
+        if(!body||!mode||!(selected as string[]).includes(mode))
+          return {fields:{},errors:[bsdEnvelope?'RFC3164 TAG body is unsupported or not allowlisted':'Wrapped Syslog is malformed or not in mixed allowlist']};
+        return extractStructuredFamily(raw,grammar,body);
       }
       // The backend router tests exact prefixes; do not silently trim or
       // accept a partial KV match elsewhere in the record.

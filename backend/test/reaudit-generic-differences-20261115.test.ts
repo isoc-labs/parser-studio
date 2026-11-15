@@ -98,3 +98,29 @@ test('Generic Structural positional CSV: the same RFC 4180 rule',{skip:!rubyAvai
   assert.match(results[2]!,/^OK \{/);
   assert.equal((JSON.parse(results[2]!.slice(3)) as {generic:{columns:Record<string,string>}}).generic.columns.column_11,'"a"');
 });
+
+// Second independent re-audit (d249d79). The mixed router of the generated Ruby is the reference the browser now
+// follows: exact prefixes, a BSD timestamp with or without PRI. The lines and verdicts are the ones of
+// src/reauditGenericDifferences20261115.test.ts.
+test('mixed format: the router decides by exact prefix; a BSD timestamp needs no PRI',{skip:!rubyAvailable},()=>{
+  const source=fragment({format:'mixed',mixedFormats:['kv','json','rfc3164_kv','rfc5424_kv']});
+  const lines=['<165>1 2026-11-14T09:30:00Z host app - ID47 - a=1 b=2','<165>1 2026-11-14T09:30:00Z host app - ID47 -  a=1 b=2',
+    '<134>Nov 14 09:30:00 fw01 app: a=1 b=2','<134>Nov 14 09:30:00 fw01 app: \ta=1 b=2','Nov 14 09:30:00 fw01 a=1 b=2',
+    '<134>Nov 14 09:30:00 fw01 CEF:0|a|b|1|2|n|5|src=1.1.1.1','<999>Nov 14 09:30:00 fw01 a=1 b=2'];
+  const results=native(source,'parserstudio_extract',lines);
+  const verdicts=results.map(result=>result.startsWith('OK ')?'OK':'DECLINED');
+  assert.deepEqual(verdicts,['OK','DECLINED','OK','DECLINED','OK','DECLINED','DECLINED'],results.map(result=>result.slice(0,80)).join(' | '));
+  assert.equal(results[4],'OK '+JSON.stringify({syslog_timestamp:'Nov 14 09:30:00',syslog_time_policy:'YEAR_AND_ZONE_UNKNOWN',syslog_hostname:'fw01',body:{a:'1',b:'2'}}));
+});
+
+// A blank line is not an event (it separates samples in the browser). Before, a TAB-separated layout turned
+// "\t\t" into a row of empty fields.
+test('a blank message is declined in every format, also when the blanks are Unicode',{skip:!rubyAvailable},()=>{
+  for(const extraction of [{format:'csv',csvDelimiter:'\t',csvColumns:['c1','c2','c3']},{format:'csv',csvDelimiter:',',csvColumns:['c1']},{format:'kv'},{format:'json'}]){
+    const results=native(fragment(extraction),'parserstudio_extract',['\t\t',' \t \t ','\u00a0','\u3000\u2028','\ufeff ']);
+    for(const result of results)assert.equal(result,'DECLINED Blank event',JSON.stringify(extraction)+' -> '+result.slice(0,80));
+  }
+  const tab=native(fragment({format:'csv',csvDelimiter:'\t',csvColumns:['c1','c2','c3']}),'parserstudio_extract',['\t\ta','a\t\t']);
+  assert.equal(tab[0],'OK '+JSON.stringify({c1:null,c2:null,c3:'a'}));
+  assert.equal(tab[1],'OK '+JSON.stringify({c1:'a',c2:null,c3:null}));
+});

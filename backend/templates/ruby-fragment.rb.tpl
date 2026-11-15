@@ -17,6 +17,7 @@ end
 # STELLAR_PARSE_BEGIN
 def parserstudio_extract(text)
   raise ArgumentError, 'Record is longer than the configured message limit' if text.bytesize > @parser_rule_set['receiver']['messageLengthLimit']
+  raise ArgumentError, 'Blank event' if parserstudio_blank_event?(text)
   settings = @parser_rule_set['extraction']
   # Only bounded TCP LF LF framed Java and JSON source modes can contain LF.
   # Every other source is strictly one line, never implicit reconstruction.
@@ -54,6 +55,16 @@ def parserstudio_extract(text)
   raise ArgumentError, 'No field was extracted' if result.is_a?(Hash) && result.empty?
   # Never a parsed event with a missing key=value field.
   parserstudio_assert_no_field_loss(text, result)
+end
+
+# A blank line is not an event. The browser never offers one as a sample (blank lines separate samples there,
+# by String#trim), so a message that is nothing but white space is declined instead of becoming, for example,
+# a TAB-separated row of empty fields. The Unicode blanks are tested on a UTF-8 view of the text, so that a
+# binary-tagged message with high bytes cannot raise an encoding error.
+def parserstudio_blank_event?(text)
+  return true if text.match?(/\A[ \t\n\v\f\r]*\z/)
+  view = text.dup.force_encoding('UTF-8')
+  view.valid_encoding? && view.match?(/\A[ \t\n\v\f\r\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*\z/)
 end
 
 # A key=value body is complete only when every key=value pair visible in the original text is present, with
