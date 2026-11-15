@@ -73,12 +73,11 @@ def parserstudio_csv_parse_line(text, separator, strip_edges)
   # RFC 4180 as text first: the library alone decides quoting by counting quotation marks (""a"" is taken as
   # the field "a"), which the browser tokenizer declines.
   raise ArgumentError, 'CSV row is outside RFC 4180' unless parserstudio_csv_rfc4180?(text, separator, strip_edges)
-  if defined?(CSV::DEFAULT_OPTIONS) && CSV::DEFAULT_OPTIONS.key?(:strip)
-    CSV.parse_line(text, col_sep: separator, liberal_parsing: false, strip: strip_edges)
-  else
-    input=strip_edges ? parserstudio_csv_strip_field_edges(text,separator) : text
-    CSV.parse_line(input, col_sep: separator, liberal_parsing: false)
-  end
+  # The same on every Ruby: SP and TAB at the edge of an unquoted field are stripped here, never by the CSV
+  # library. Its strip option exists only in newer versions (not on the Ruby 2.4.9 target) and also removes
+  # form feed and vertical tab, so an artifact that used it gave a different value on a different interpreter.
+  input=strip_edges ? parserstudio_csv_strip_field_edges(text,separator) : text
+  CSV.parse_line(input, col_sep: separator, liberal_parsing: false)
 end
 `;
 const PARSE_END_MARKER = "# STELLAR_PARSE_END";

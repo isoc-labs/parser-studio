@@ -80,6 +80,16 @@ test('CSV format: a row outside RFC 4180 is declined before the library sees it'
   for(let index=3;index<lines.length;index+=1)assert.match(results[index]!,/^DECLINED /,JSON.stringify(lines[index])+' -> '+results[index]!.slice(0,120));
 });
 
+// CI run on 9c28109: the same test gave c2 = "bbb" on the newer host Ruby and "bbb\f" on Ruby 2.4.9, because
+// the artifact passed strip: true to the CSV library where that option exists. The compiled parser must not
+// depend on the interpreter: it strips field edges itself and never hands a strip option to the library.
+test('CSV format: the compiled parser strips field edges itself, on every Ruby',()=>{
+  const source=fragment({format:'csv',csvDelimiter:',',csvColumns:['c1','c2','c3']});
+  assert.match(source,/input=strip_edges \? parserstudio_csv_strip_field_edges\(text,separator\) : text/);
+  assert.doesNotMatch(source,/^[^#\n]*strip: *(?:true|strip_edges)/m);
+  assert.doesNotMatch(source,/CSV::DEFAULT_OPTIONS/);
+});
+
 test('Generic Structural positional CSV: the same RFC 4180 rule',{skip:!rubyAvailable},()=>{
   const head='<14>Oct 16 15:44:21 PA01 1,2026/10/16 15:44:21,012345678901,TRAFFIC,end,2561,2026/10/16 15:44:20,10.0.0.1,198.51.100.1,203.0.113.1,198.51.100.1,';
   const results=native(fragment({format:'generic_structural'}),'parserstudio_generic_structural',[head+'"a,b"',head+'""a""',head+'"""a"""']);
