@@ -49,4 +49,25 @@ describe('explainable local classification suggestions', () => {
     expect(result.status).toBe('fallback');
     expect(result.reason).toContain('default event');
   });
+
+  // Independent audit of 2026-11-15: the generated parser classifies on the manufacturer field when the
+  // source is mapped only there (backendAdapter: "a vendor-only source may classify using Vendor.field"); the
+  // browser hint fell back to the default category for the same project and event.
+  it('classifies on a field that is mapped only to the manufacturer namespace, as the generated parser does', () => {
+    const draft = createDraft();
+    draft.format = 'json';
+    draft.vendor = 'Acme';
+    draft.mappings = [{ id: 'm1', source: 'action', target: 'act', type: 'string' }];
+    const options = defaultGuidedOptions();
+    options.groups = { m1: 'vendor_fields' };
+    options.classification.rules = [{ id: 'r1', sourceField: 'action', equals: 'deny', index: 'Threat' }];
+    const [deny, allow] = preview('{"action":"deny"}\n{"action":"allow"}', draft).events;
+    expect((deny!.normalized.Acme as Record<string, unknown>).act).toBe('deny');
+    expect(suggestClassification(deny!, options, draft)).toMatchObject({ index: 'Threat', rule: 0, status: 'matched' });
+    expect(suggestClassification(allow!, options, draft)).toMatchObject({ status: 'fallback' });
+    // Two manufacturer destinations of one source decide nothing (the export reports the rule as ambiguous).
+    draft.mappings.push({ id: 'm2', source: 'action', target: 'act2', type: 'string' });
+    options.groups = { m1: 'vendor_fields', m2: 'vendor_fields' };
+    expect(suggestClassification(preview('{"action":"deny"}', draft).events[0]!, options, draft)).toMatchObject({ status: 'fallback' });
+  });
 });

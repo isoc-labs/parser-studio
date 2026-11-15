@@ -46,7 +46,7 @@ class ContractKeyValueScanner(unittest.TestCase):
             "path=C:\\Windows\\System32": "C:\\Windows\\System32",
             'path="a\\\\b"': "a\\b",
             "user=k\\=v": "k=v",
-            "path=a\\ b": "a\\ b",
+            "path=C:\\Temp\\": "C:\\Temp\\",
             'note="a=b c"': "a=b c",
         }
         for text, meant in written.items():
@@ -57,6 +57,12 @@ class ContractKeyValueScanner(unittest.TestCase):
                 self.assertEqual(meant, found.fields[key])
                 self.assertEqual("deny", found.fields["action"])
         self.assertEqual(sorted(["\\", '"', "'", "="]), sorted(SEMANTICS["kvUnescapedAfterBackslash"]))
+        # An unquoted value ends at white space, also after a backslash: the pair that follows is not swallowed.
+        found = decode_source_kv("srcip=10.1.1.1 path=C:\\Temp\\ user=bob action=deny")
+        self.assertEqual([], found.issues)
+        self.assertEqual("C:\\Temp\\", found.fields["path"])
+        self.assertEqual("bob", found.fields["user"])
+        self.assertEqual("deny", found.fields["action"])
         self.assertEqual("a\\tb", unescape_kv_value("a\\tb"))
 
     def test_value_spans_point_at_the_written_text(self):

@@ -52,8 +52,10 @@ describe('contract-driven key=value body', () => {
     }
   });
 
-  it('keeps the independent tokenizer aligned with both quote kinds and escaped bare values', () => {
-    expect(independentKeyValuePairs("a='x y' b=c\\ d e=\"f g\"").map(pair => [pair.key, pair.rawValue])).toEqual(
-      [['a', 'x y'], ['b', 'c\\ d'], ['e', 'f g']]);
+  it('keeps the independent tokenizer on both quote kinds, and ends an unquoted value at white space', () => {
+    // No backslash rule in the independent reader: a backslash before SP ends the value like any character
+    // (audit of 2026-11-15: sharing the grammar's escape rule hid a swallowed pair).
+    expect(independentKeyValuePairs("a='x y' b=c\\ d=1 e=\"f g\"").map(pair => [pair.key, pair.rawValue])).toEqual(
+      [['a', 'x y'], ['b', 'c\\'], ['d', '1'], ['e', 'f g']]);
   });
 });

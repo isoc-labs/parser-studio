@@ -191,6 +191,8 @@ const CONTRACT_MUTANTS: Mutant[] = [
   contractMutant('contract-kv-quoted-value-without-escapes', ['tokens', 'KV_DQ', 'pattern'], '[^"\\\\]*'),
   contractMutant('contract-kv-bare-value-ascii-only', ['tokens', 'KV_BARE', 'pattern'], '(?:\\\\[^\\r\\n]|[!-&(-\\[\\]-~])+'),
   contractMutant('contract-kv-information-separator-is-value', ['tokens', 'KV_BARE', 'pattern'], '(?:\\\\[^\\r\\n]|[^ \\t\\n\\r\\f\\v"\'\\\\])+'),
+  // Re-introduces the audit finding of 2026-11-15: a backslash takes the following SP with it, and the next pair with that.
+  contractMutant('contract-kv-backslash-carries-space', ['tokens', 'KV_BARE', 'pattern'], '(?:\\\\[^\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f"\'\\\\])+'),
   contractMutant('contract-kv-pair-limit-3', ['semantics', 'kvMaxPairs'], 3),
   contractMutant('contract-kv-nothing-unescaped', ['semantics', 'kvUnescapedAfterBackslash'], ['\\']),
 ];

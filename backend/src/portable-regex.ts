@@ -9,7 +9,7 @@
  */
 export type PortableRegexIssue =
   'REGEX_DIALECT_ESCAPE'|'REGEX_POSIX_CLASS'|'REGEX_OVERLAPPING_REPETITION'|
-  'REGEX_UNSUPPORTED_GROUP'|'REGEX_AST_SYNTAX'|'REGEX_BOUND_LIMIT';
+  'REGEX_UNSUPPORTED_GROUP'|'REGEX_AST_SYNTAX'|'REGEX_BOUND_LIMIT'|'REGEX_LAZY_EXACT_COUNT';
 
 /** Versioned, inspection-only AST for the reviewed JS/Ruby regex subset.
  * This is not a regex evaluator or a promise of native execution. Runtime
@@ -105,6 +105,10 @@ export function parsePortableRegexAst(pattern:string):PortableRegexAstResult{
         return fail('REGEX_BOUND_LIMIT');
     }
     const lazy=pattern[pos]==='?';
+    // X{n}? is "exactly n" in ECMAScript and "n or none" in Ruby 2.4 (Onigmo reads the ? as a second
+    // quantifier). Laziness means nothing for an exact count, so the spelling is refused instead of meaning
+    // two things; X{n} says the same in both.
+    if(lazy&&c==='{'&&max!==null&&max===min)return fail('REGEX_LAZY_EXACT_COUNT');
     if(lazy)pos++;
     return {kind:'repeat',min,max,lazy,atom:base};
   };

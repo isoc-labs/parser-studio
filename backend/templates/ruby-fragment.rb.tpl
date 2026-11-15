@@ -48,7 +48,12 @@ def parserstudio_extract(text)
   # that is PARTIAL is still handed over (owner policy D-2 keeps the legacy route working); the verdict travels
   # with the event, and parserstudio_normalize never drops the original text of a PARTIAL one.
   unless reading['status'] == 'FULL' || (reading['status'] == 'PARTIAL' && settings['format'] == 'generic_structural')
-    raise ArgumentError, (reading['reasons'][0] || 'The event is not completely parsed')
+    reason = reading['reasons'][0] || 'The event is not completely parsed'
+    # The record of a declined event names the class of its error (parser_err_msg), and operators filter on that
+    # name. Text that is not JSON at all keeps the name it has always had there; every other decline is an
+    # ArgumentError.
+    raise JSON::ParserError, reason if reason == 'Invalid JSON object'
+    raise ArgumentError, reason
   end
   result = psg_export(reading['fields'])
   psg_set_tag(result, 'readingStatus', reading['status'])

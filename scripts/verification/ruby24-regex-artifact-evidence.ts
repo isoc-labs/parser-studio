@@ -52,10 +52,9 @@ const records=fixtures.map(({id,pattern,extraction})=>{
   const bounded=/def parserstudio_regex_cost_proven\?\n  true\nend/.test(ruby?.content??'');
   const unbounded=/def parserstudio_regex_cost_proven\?\n  false\nend/.test(ruby?.content??'');
   const hasExpectedCompatibility=id==='csv'
-    ? Boolean(ruby?.content.includes('def parserstudio_csv_parse_line(text, separator, strip_edges)'))
+    ? Boolean(ruby?.content.includes('def psg_extract_csv_row(raw, columns, delimiter)'))
     : id==='generic-positional-csv'
-    ? Boolean(ruby?.content.includes('def parserstudio_generic_rfc3164_positional_csv(text)')&&
-      ruby?.content.includes('def parserstudio_generic_valid_ipv4?(value)'))
+    ? Boolean(ruby?.content.includes('def psg_rfc3164_positional_csv(raw)'))
     : id==='regex-unbounded'
     ? Boolean(ruby?.content.includes('Native Regex unsupported')&&unbounded&&
       pair.manifest.warnings.some(w=>w.includes('Ruby 2.4.9 it fails closed')))

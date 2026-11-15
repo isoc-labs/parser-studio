@@ -288,6 +288,28 @@
       }
     },
     {
+      "id": "rfc3164-kv-bare-value-ends-in-backslash",
+      "grammar": "syslog_rfc3164",
+      "body": "kv",
+      "raw": "<134>Nov 13 10:00:00 fw01 srcip=10.1.1.1 path=C:\\Windows\\Temp\\ user=bob action=deny",
+      "provenance": "An unquoted value ends at white space. A backslash is a character of the value (a Windows directory path ends in one) and does not carry the following space into the value: the next pair is a pair of its own. Found by the independent reverse audit of 2026-11-15: the key=value grammar read backslash plus SP as one unit, so user=bob became part of path and the event was reported as completely parsed without the user field; the run-time check used the same rule and did not see it.",
+      "expect": {
+        "status": "FULL",
+        "source": {
+          "syslog_hostname": "fw01",
+          "body.srcip": "10.1.1.1",
+          "body.path": "C:\\Windows\\Temp\\",
+          "body.user": "bob",
+          "body.action": "deny"
+        },
+        "event": {
+          "srcip": "10.1.1.1",
+          "action": "deny",
+          "stellar_log_index": "threat"
+        }
+      }
+    },
+    {
       "id": "rfc3164-day-30-february",
       "grammar": "syslog_rfc3164",
       "body": "kv",

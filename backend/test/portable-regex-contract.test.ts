@@ -15,6 +15,12 @@ const bad=[
  String.raw`^(?<field>[ab]*[ab]*[ab]*[ab]*[ab]*)c$`,
  String.raw`^(?<field>a{0,128}a{0,128}a{0,128}a{0,128})b$`,
  String.raw`^(?<field>.*a.*a.*a.*a.*a.*)z$`,
+ // A lazy modifier after an exact count: ECMAScript reads X{n}? as exactly n, Ruby 2.4 (Onigmo) as an optional
+ // group of n. The same pattern declined ' disk full' in the browser and parsed it on Ruby with the capture absent
+ // (independent audit, 2026-11-15).
+ String.raw`^(?<sev>[A-Z]{4}?) (?<msg>.{1,60})$`,
+ String.raw`^(?<code>\d{3}?)-(?<rest>.{0,40})$`,
+ String.raw`^(?<a>a{2,2}?)b$`,
 ];
 const good=[
  String.raw`^action=(?<action>\w+)$`,
@@ -22,6 +28,9 @@ const good=[
  String.raw`(?<field>[^\x22\x27\\]+)`,
  String.raw`^(?<month>\d{2})-(?<day>\d{2})\s+(?<name>\w+)$`,
  String.raw`^(?<field>\d+\s+)$`,
+ // A lazy range is the same in both engines.
+ String.raw`^(?<a>a{2,3}?)b$`,
+ String.raw`^(?<sev>[A-Z]{4}) (?<msg>.{1,60})$`,
 ];
 for(const expression of bad)test('backend fails closed on portable regex: '+expression,()=>{
  assert.notEqual(portableRegexIssue(expression),null);

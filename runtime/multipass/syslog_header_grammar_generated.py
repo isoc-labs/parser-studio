@@ -3,7 +3,7 @@
 #   node scripts/grammar/generate-grammar.mjs --write
 # CI runs the generator with --verify, so a hand edit of this file fails the gate.
 # Syslog header grammar for the Multi-Pass engine, generated from the shared grammar contract.
-GRAMMAR_CONTRACT_SHA256 = "8ba80890032304c52cd927066ea0d92cd476a39832e359df397298b4c26f8247"
+GRAMMAR_CONTRACT_SHA256 = "e3069396fba578c3e1499d34318eead6356813f8478f19d0619858eaf822cb99"
 TOKENS = {
   "PRI": "[0-9]{1,3}",
   "BSD_MONTH": "[A-Z][a-z]{2}",
@@ -24,7 +24,7 @@ TOKENS = {
   "KV_KEY": "[A-Za-z_][A-Za-z0-9_.-]{0,95}",
   "KV_DQ": "(?:\\\\[^\\r\\n]|[^\"\\\\])*",
   "KV_SQ": "(?:\\\\[^\\r\\n]|[^'\\\\])*",
-  "KV_BARE": "(?:\\\\[^\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\])+",
+  "KV_BARE": "(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+",
   "KV_TRAILING": "[ \\t\\n\\r\\f\\v]*",
   "RFC3339_DATE_PREFIX": "[0-9]{4}-[0-9]{2}-[0-9]{2}T",
   "FAMILY_NAME": "(?:CEF|LEEF)",
@@ -96,7 +96,7 @@ RULES = {
 }
 FRAGMENTS = {
   "kv_pair": {
-    "source": "(?:[ \\t]*)(?P<key>[A-Za-z_][A-Za-z0-9_.-]{0,95})=(?:\"(?P<dq>(?:\\\\[^\\r\\n]|[^\"\\\\])*)\"|'(?P<sq>(?:\\\\[^\\r\\n]|[^'\\\\])*)'|(?P<bare>(?:\\\\[^\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\])+))",
+    "source": "(?:[ \\t]*)(?P<key>[A-Za-z_][A-Za-z0-9_.-]{0,95})=(?:\"(?P<dq>(?:\\\\[^\\r\\n]|[^\"\\\\])*)\"|'(?P<sq>(?:\\\\[^\\r\\n]|[^'\\\\])*)'|(?P<bare>(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+))",
     "captures": [
       "key",
       "dq",

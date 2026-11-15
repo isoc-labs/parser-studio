@@ -19,14 +19,24 @@ export function suggestClassification(event: EventResult, options: GuidedOptions
   for (let i = 0; i < options.classification.rules.length; i++) {
     const rule = options.classification.rules[i];
     if (!rule.sourceField.trim() || !rule.equals.trim()) continue;
-    const mapping=draft?.mappings.find(candidate=>candidate.source===rule.sourceField&&
-      (options.groups[candidate.id]??'vendor_fields')!=='vendor_fields');
+    // The destination the generated parser classifies on (toBackendProject in backendAdapter.ts): the one
+    // common destination of the source when it has any, otherwise its manufacturer field; two candidates
+    // decide nothing.
+    const mapped=draft?.mappings.filter(candidate=>candidate.source===rule.sourceField)??[];
+    const inVendor=(id:string)=>(options.groups[id]??'vendor_fields')==='vendor_fields';
+    const common=mapped.filter(candidate=>!inVendor(candidate.id));
+    const eligible=common.length?common:mapped;
+    const mapping=eligible.length===1?eligible[0]:undefined;
     // In the real Native parser, classification runs AFTER typed mapping.
     // A missing or non-string mapped destination cannot satisfy a string
     // equality rule, even if String(originalNumber) would have matched.
+    const vendorRecord=draft?event.normalized[draft.vendor.trim()]:undefined;
+    const scope=mapping&&inVendor(mapping.id)
+      ?(vendorRecord!==null&&typeof vendorRecord==='object'&&!Array.isArray(vendorRecord)?vendorRecord as Record<string,unknown>:{})
+      :event.normalized;
     const match=draft
       ?(mapping?.type==='string'
-          ?lookupFieldValue(event.normalized,mapping.target)
+          ?lookupFieldValue(scope,mapping.target)
           :{found:false,value:undefined})
       :lookupFieldValue(event.fields,rule.sourceField.trim());
     if(match.found&&evaluateCanonicalClassificationPredicate('equals',match.value,rule.equals)){

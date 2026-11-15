@@ -14,7 +14,9 @@ module SyntheticFixtureGuard
   FILE_NAMES = PROFILES.flat_map { |s| ["customized_#{s}", "customized_#{s}.conf"] }.freeze
   FIXTURES = File.expand_path('../.tmp/native-fixtures', __dir__).freeze
   EVIDENCE = File.expand_path('../.tmp/synthetic-import-report.json', __dir__).freeze
-  MAX_SOURCE = 128 * 1024
+  # The product's own limit for one Ruby parser file; the grammar of an artifact is generated from the
+  # browser grammar, so one artifact is larger than the former hand-written fragment.
+  MAX_SOURCE = 512_000
 
   def refuse(reason)
     raise BoundaryError, "Synthetic fixture boundary: #{reason}"

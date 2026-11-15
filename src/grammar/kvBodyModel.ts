@@ -41,7 +41,8 @@ const WRITTEN: ReadonlyArray<readonly [string, string]> = [
   ['C:\\Windows\\System32', 'C:\\Windows\\System32'],
   ['a\\b', '"a\\\\b"'],
   ['k=v', 'k\\=v'],
-  ['a\\ b', 'a\\ b'],
+  // A bare value ends at white space; a backslash at its end is a character of the value (a directory path).
+  ['C:\\Temp\\', 'C:\\Temp\\'],
   ['a\u2028b', 'a\u2028b'],
   ['a\u00a0b', 'a\u00a0b'],
   ['\uD55C\uAD6D\uC5B4 \uB85C\uADF8', '"\uD55C\uAD6D\uC5B4 \uB85C\uADF8"'],

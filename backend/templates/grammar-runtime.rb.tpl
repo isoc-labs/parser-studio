@@ -258,7 +258,7 @@ def psg_num(value)
   return value ? 1 : 0 if value == true || value == false
   return 0 if value.equal?(:psg_null)
   return Float::NAN unless value.is_a?(String)
-  text = value.gsub(/\A[\t\n\v\f\r    -     　﻿]+|[\t\n\v\f\r    -     　﻿]+\z/, '')
+  text = value.gsub(/\A[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+\z/, '')
   return 0 if text.empty?
   if text.match?(/\A[+-]?[0-9]+\z/)
     number = text.to_i
@@ -278,7 +278,7 @@ def psg_num(value)
 end
 
 def psg_parse_int(text, radix)
-  match = /\A[\t\n\v\f\r    -     　﻿]*([+-]?)(.*)\z/m.match(psg_str(text))
+  match = /\A[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*([+-]?)(.*)\z/m.match(psg_str(text))
   digits = match[2]
   digits = digits[2..-1] if radix == 16 && digits.match?(/\A0[xX]/)
   allowed = '0123456789abcdefghijklmnopqrstuvwxyz'[0, radix]
@@ -392,8 +392,8 @@ end
 
 # side: 1 start, 2 end, 3 both. The white space of String.prototype.trim.
 def psg_trim(text, side)
-  text = text.sub(/\A[\t\n\v\f\r    -     　﻿]+/, '') if side & 1 == 1
-  text = text.sub(/[\t\n\v\f\r    -     　﻿]+\z/, '') if side & 2 == 2
+  text = text.sub(/\A[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/, '') if side & 1 == 1
+  text = text.sub(/[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+\z/, '') if side & 2 == 2
   text
 end
 

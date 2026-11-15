@@ -698,6 +698,38 @@ review sets. The existing constants are unchanged and still gate the disposable 
 node backend/node_modules/tsx/dist/cli.mjs scripts/verification/ruby-template-set.ts --write | --verify
 ```
 
+## Independent reverse audit (2026-11-15, work order item 5)
+
+A reviewer that had not seen the work audited a frozen copy backwards: from the emitted Stellar record
+(mapping, types, enrichment, classification) to extraction, by running projects end to end in the browser
+preview and on Ruby 2.4.9. Normalization, typing, the 245 official fields, enrichment and event profiles
+agreed on about 600 end-to-end lines. What it found, and what was done:
+
+| Finding | Decision |
+|---|---|
+| key=value: a backslash before a space carried the space into an unquoted value, so `path=C:\Temp\ user=bob` lost the `user` pair and was FULL; the run-time check shared the rule and did not see it (same on `main`) | fixed: an unquoted value ends at white space, also after a backslash (contract token `KV_BARE`, golden, model, fault `contract-kv-backslash-carries-space`); the independent reader has no backslash rule any more |
+| classification: a field mapped only to the manufacturer namespace classified in the generated parser and fell back to the default category in the browser | fixed: the browser hint uses the destination the export uses (`src/guided/classify.ts`) |
+| Regex: `X{n}?` is "exactly n" in ECMAScript and "n or none" in Ruby 2.4 | fixed: the spelling is refused in both (`REGEX_LAZY_EXACT_COUNT`); `X{n}` says the same |
+| key=value: `\\` is read as an escaped backslash and `\=` as `=`, in quoted and unquoted values (a UNC path `\\server\share` loses a backslash); identical in the browser, Ruby and Python, and identical on `main` | **not changed, owner decision**: this is the shipped escape convention; keeping unquoted values exactly as written would be lossless but changes the output of existing parsers |
+| text that is not valid UTF-8 declines the event on Ruby | by design: the grammar reads text; the alternative is to emit replacement characters, which alters data. Owner decision if another policy is wanted |
+| declined, not mis-parsed (both engines agree): an empty unquoted key=value value, a quoted value ending in a backslash, a JSON number a double does not hold or nesting beyond eight levels, a backslash other than `\"` `\\` `\]` in an RFC 5424 SD-PARAM, several RFC 3164 shapes (TAG with `/`, ISO timestamp, no host, Cisco ASA forms), Java frames such as `<init>`, Generic Structural thresholds (five pairs) | scope: honest refusals of input outside the supported grammar; listed for the owner, not changed |
+| `java_stacktrace` reports FULL with the exception class, frame count and cause only | by design of that format (a summary); the message and the frames are in no field. Listed for the owner |
+
+## Error records and target-side checks after the first CI run (2026-11-15)
+
+The first CI run of the generated grammar and a comparison with artifacts downloaded from `main` on abnormal
+lines (each sample cut short, garbage text, a stray quote or backslash, a NUL in the header, an event written
+twice) found what the differential cannot see, because it compares the browser with the generated Ruby and
+both had changed together:
+
+| Finding | Decision |
+|---|---|
+| the hand-written grammar runtime held the Unicode white space of `String#trim` as literal characters; Fluentd on the sensor loads a parser as US-ASCII source and did not load it at all | fixed: every Ruby template and every artifact is ASCII source (`artifact-ascii-source-native.test.ts`, which also loads an artifact as US-ASCII and parses text beyond ASCII) |
+| the record of text that is not JSON said `parser_err_msg: ArgumentError`; on `main` it says `JSON::ParserError`, and operators filter on that name | fixed: the name is decided where a reading that is not FULL is handed over (`declined-event-diagnostic-native.test.ts`); every other decline is an `ArgumentError`, as on `main` |
+| a LEEF event whose last value ends in a backslash was declined on `main` and is read now, the value kept as written | intended: the header split no longer decodes the extension (that decoded a value twice); LEEF has no value escapes. A CEF extension still declines a dangling backslash |
+| a line with a NUL inside the PRI, the timestamp or the `CEF:0` marker was read on `main` and is declined now | intended: the header grammar does not match; the record keeps the original text |
+| CI-only scripts and the local qualification smokes (`backend/test_native`, run by `backend/scripts/qualify.sh`, not by CI) called hand-written methods that no longer exist and bounded an artifact at the size of the hand-written fragment | fixed: they call the generated grammar as the artifact does; the size bounds follow the product limit of 512,000 bytes for one parser file. The smokes that need no Fluentd were run on Ruby 2.4.9; the Fluentd ones need the pinned Fluentd profile and were not run locally |
+
 ## Rules for adding or changing a grammar or a mapping
 
 1. Change the contract and regenerate. Do not write a header pattern in a

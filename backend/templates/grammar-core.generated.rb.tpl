@@ -885,7 +885,7 @@ def psg_independent_key_value_pairs(raw)
       end
       v_end = index
       while ((v_end < length) && !gap.call(psg_at(raw, v_end)))
-        v_end += ((((psg_at(raw, v_end) == '\\') && ((v_end + 1) < length)) && !/[\n\x0b\f\r]/.match?(psg_at(raw, (v_end + 1)))) ? 2 : 1)
+        v_end += 1
       end
       value_2 = psg_slice(raw, index, v_end)
       pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value_2, 'rawValue' => value_2})
@@ -1243,7 +1243,7 @@ def psg_parse_strict_key_values(input)
     if /\A(?:[ \t\n\r\f\x0b]*)\z/.match?(psg_slice(input, cursor))
       break
     end
-    match = psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>(?:\\[^\r\n]|[^"\\])*)"|'(?<sq>(?:\\[^\r\n]|[^'\\])*)'|(?<bare>(?:\\[^\n\r\f\x0b\x1c-\x1f]|[^ \t\n\r\f\x0b\x1c-\x1f"'\\])+)))/, input, cursor)
+    match = psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>(?:\\[^\r\n]|[^"\\])*)"|'(?<sq>(?:\\[^\r\n]|[^'\\])*)'|(?<bare>(?:\\[^ \t\n\r\f\x0b\x1c-\x1f]|[^ \t\n\r\f\x0b\x1c-\x1f"'\\]|\\)+)))/, input, cursor)
     if (!psg_t(match) || (psg_match_end(match) <= cursor))
       return {'ok' => false, 'reason' => 'MALFORMED_PAIR'}
     end

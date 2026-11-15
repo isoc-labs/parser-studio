@@ -78,8 +78,8 @@
       "pattern": "(?:\\\\[^\\r\\n]|[^'\\\\])*"
     },
     "KV_BARE": {
-      "pattern": "(?:\\\\[^\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\])+",
-      "semantic": "Unquoted value: ends at ASCII white space or a quote; the information separators U+001C..U+001F are never value data (issue #214)"
+      "pattern": "(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+",
+      "semantic": "Unquoted value: ends at ASCII white space or a quote, also after a backslash (a backslash takes the next character with it unless that character is white space, and a backslash at the end of the value is a character of the value: a directory path); the information separators U+001C..U+001F are never value data (issue #214)"
     },
     "KV_TRAILING": {
       "pattern": "[ \\t\\n\\r\\f\\v]*",

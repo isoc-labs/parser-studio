@@ -106,7 +106,10 @@ export function independentKeyValuePairs(raw: string): RawPair[] {
         }
       }
       let end = index;
-      while (end < length && !gap(raw[end])) end += raw[end] === '\\' && end + 1 < length && !/[\n\v\f\r]/u.test(raw[end + 1]!) ? 2 : 1;
+      // An unquoted value ends at white space. No backslash rule here: this reader must not share the
+      // grammar's idea of an escape (a backslash that carried the next SP made the grammar swallow the
+      // following pair, and a reader with the same rule could not see it).
+      while (end < length && !gap(raw[end])) end += 1;
       const value = raw.slice(index, end);
       pairs.push({ key: key[0].slice(0, -1), value, rawValue: value });
       index = end;

@@ -2,7 +2,7 @@
 // Source: contracts/syslog-header-grammar.v1.json (revision 6); regenerate with
 //   node scripts/grammar/generate-grammar.mjs --write
 // CI runs the generator with --verify, so a hand edit of this file fails the gate.
-export const GRAMMAR_CONTRACT_SHA256 = "8ba80890032304c52cd927066ea0d92cd476a39832e359df397298b4c26f8247";
+export const GRAMMAR_CONTRACT_SHA256 = "e3069396fba578c3e1499d34318eead6356813f8478f19d0619858eaf822cb99";
 export const GRAMMAR_CONTRACT_REVISION = 6;
 export interface CompiledHeaderRule { readonly source: string; readonly captures: readonly string[] }
 export const SYSLOG_HEADER_RULES = {
@@ -63,7 +63,7 @@ export const SYSLOG_HEADER_RULES = {
 /** Unanchored patterns matched at a position; compile them with the sticky flag. */
 export const GRAMMAR_FRAGMENTS = {
   "kv_pair": {
-    "source": "(?:[ \\t]*)(?<key>[A-Za-z_][A-Za-z0-9_.-]{0,95})=(?:\"(?<dq>(?:\\\\[^\\r\\n]|[^\"\\\\])*)\"|'(?<sq>(?:\\\\[^\\r\\n]|[^'\\\\])*)'|(?<bare>(?:\\\\[^\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\])+))",
+    "source": "(?:[ \\t]*)(?<key>[A-Za-z_][A-Za-z0-9_.-]{0,95})=(?:\"(?<dq>(?:\\\\[^\\r\\n]|[^\"\\\\])*)\"|'(?<sq>(?:\\\\[^\\r\\n]|[^'\\\\])*)'|(?<bare>(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+))",
     "captures": [
       "key",
       "dq",
@@ -125,7 +125,7 @@ export const SYSLOG_HEADER_TOKENS = {
   "KV_KEY": "[A-Za-z_][A-Za-z0-9_.-]{0,95}",
   "KV_DQ": "(?:\\\\[^\\r\\n]|[^\"\\\\])*",
   "KV_SQ": "(?:\\\\[^\\r\\n]|[^'\\\\])*",
-  "KV_BARE": "(?:\\\\[^\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\])+",
+  "KV_BARE": "(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+",
   "KV_TRAILING": "[ \\t\\n\\r\\f\\v]*",
   "RFC3339_DATE_PREFIX": "[0-9]{4}-[0-9]{2}-[0-9]{2}T",
   "FAMILY_NAME": "(?:CEF|LEEF)",
