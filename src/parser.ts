@@ -304,7 +304,8 @@ export function extractFields(raw: string, format: ConcreteFormat, draft: Parser
         raw.startsWith('CEF:')?'cef':
         raw.startsWith('LEEF:')?'leef':
         /^[A-Za-z_][A-Za-z0-9_.-]*=/.test(raw)?'kv':
-        selected.includes('csv')&&raw.includes(draft.csvDelimiter??',')?'csv':null;
+        // As in the generated Ruby: CSV is a family only with a reviewed schema of at least two columns.
+        selected.includes('csv')&&(draft.csvColumns??'').split(',').length>=2&&raw.includes(draft.csvDelimiter??',')?'csv':null;
       if(!family||!selected.includes(family))
         return {fields:{},errors:['Mixed event is unsupported or excluded by allowlist']};
       return family==='kv'?strictKeyValues(raw):

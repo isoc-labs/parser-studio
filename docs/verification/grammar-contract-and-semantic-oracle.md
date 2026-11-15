@@ -419,21 +419,28 @@ The other formats, 25 configurations: key=value, JSON, CEF, LEEF, CSV with comma
 and RFC 5424 with each of five bodies, four mixed allowlists, two Regex patterns with a cost proof, two
 declared-forwarder layouts (the forwarder-family template):
 
-- their golden and seed lines and 1,500 stream lines each (fixed seed 401): 38,490 cases. FULL in the browser
+- their golden and seed lines and 1,500 stream lines each (fixed seed 401): 38,499 cases. FULL in the browser
   if and only if a record from the generated Ruby, with equal field trees. Every configuration must have at
   least one case on each side of that decision;
 - the CSV row tokenizer against `parserstudio_csv_parse_line` for comma, semicolon and TAB: every string of up
   to six symbols over a letter, the quotation mark, the separator and SP, and 3,000 stream rows per separator
   over a wider alphabet: 25,380 rows;
-- eleven injected faults (`ts-format-*`, `rb-format-*`).
+- twelve injected faults (`ts-format-*`, `rb-format-*`).
 
 The Ruby side runs in batches (6,000 cases a process; a fault runs batch by batch until it is reported), because
 the CI interpreter is a container with 512 MB and one CPU. Run against the product code of `3b9e3f5`, the
 Generic Structural stage fails with 208 enumerated and 80 stream differences. The differential says the engines
 agree; the hand-authored goldens say what is right.
 
+Third independent pass (2026-11-15, commit `7cc4d8e`, limited to that change): no difference in the mixed router
+over 43 allowlists (79,500 lines); the blank rule agrees with the browser's `String#trim` on 25 characters, for
+UTF-8 and binary-tagged text; injected faults in the mixed router and in the forwarder hop limit fail the gate.
+One gap: the gate's blank rows were ASCII only, so removing NBSP from the Ruby blank rule passed. Rows of NBSP
+and other Unicode blanks and the fault `rb-format-blank-event-ascii-only` were added. The browser's mixed router
+also got Ruby's "at least two CSV columns" condition (unreachable: such a project is refused at compile time).
+
 What it is not. It is a sample, not a proof: a class of lines that neither the enumerated variants nor the
-streams produce is not compared. Two independent passes each found such a class. Not compared at all: the
+streams produce is not compared. The first two independent passes each found such a class. Not compared at all: the
 Python preview, `java_stacktrace`, the `genericStructuralProfile` variants, a Regex body inside Syslog, and LF
 or CR inside an event (framing; declined before extraction).
 

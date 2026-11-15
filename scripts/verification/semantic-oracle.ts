@@ -1545,7 +1545,9 @@ function formatConfigs(): FormatConfig[] {
   const cefSeeds = goldens.familyCases.filter(item => item.family === 'cef').map(item => item.raw);
   const leefSeeds = goldens.familyCases.filter(item => item.family === 'leef').map(item => item.raw);
   const csvSeeds = [...new Set([...goldens.csvCases.filter(item => item.delimiter === ',').map(item => item.raw),
-    'aaa,bbb,ccc', '"aaa","bbb","ccc"', 'aaa,"b,bb",ccc', 'aaa,"b""bb",ccc', ' aaa , bbb ,ccc', 'aaa,,ccc', '"a a", "b" ,c', '1,2026/10/16 15:44:21,TRAFFIC', ',,', ' , , '])];
+    'aaa,bbb,ccc', '"aaa","bbb","ccc"', 'aaa,"b,bb",ccc', 'aaa,"b""bb",ccc', ' aaa , bbb ,ccc', 'aaa,,ccc', '"a a", "b" ,c', '1,2026/10/16 15:44:21,TRAFFIC', ',,', ' , , ',
+    // Blank for the browser's String#trim when the separator is TAB (third pass: the Unicode part of the blank rule was not exercised).
+    '\u00a0,,', '\u3000,\u2028,\ufeff', '\u00a0,x,'])];
   const bodies: Record<string, string[]> = { kv: kvSeeds, json: jsonSeeds, raw: ['plain text message here', 'a=b not kv: really'], cef: cefSeeds, leef: leefSeeds };
   const heads = {
     syslog_rfc3164: ['<134>Nov 14 09:30:00 fw01 ', '<134>Nov 14 09:30:00 fw01 app[12]: '],
@@ -1660,6 +1662,8 @@ const FORMAT_RUBY_FAULTS: Mutant[] = [
   { id: 'rb-format-json-library-leniency', file: 'fragment', find: "  raise ArgumentError, 'JSON text is outside RFC 8259' unless parserstudio_json_strict_text?(text)\n", replace: '' },
   // A blank line becomes an event again (a TAB-separated row of empty fields).
   { id: 'rb-format-blank-event-parsed', file: 'fragment', find: "  raise ArgumentError, 'Blank event' if parserstudio_blank_event?(text)\n", replace: '' },
+  // The blank rule knows ASCII white space only: a TAB-separated row whose only other characters are NBSP is an event again.
+  { id: 'rb-format-blank-event-ascii-only', file: 'fragment', find: "  view.valid_encoding? && view.match?(", replace: "  false && view.match?(" },
   // The Ruby mixed router takes a message that starts with white space as key=value.
   { id: 'rb-format-mixed-message-prefix-not-exact', file: 'fragment', find: "    elsif message && message.match?(/\\A[A-Za-z_][A-Za-z0-9_.-]*=/)\n      'rfc5424_kv'", replace: "    elsif message && message.match?(/\\A[ \\t]*[A-Za-z_][A-Za-z0-9_.-]*=/)\n      'rfc5424_kv'" },
 ];
