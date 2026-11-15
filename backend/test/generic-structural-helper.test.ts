@@ -1,19 +1,18 @@
 import test from "node:test";
+import {rubyE} from "./ruby-argv.js";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {spawnSync} from "node:child_process";
 import {sampleProject} from "./fixture.js";
-import {compilePair,injectHeaderGrammar} from "../src/compiler.js";
+import {compilePair} from "../src/compiler.js";
+import {grammarSource,PROBE_ENTRIES} from "./template-fixture.js";
 
-const jsonFragment=injectHeaderGrammar(readFileSync(new URL("../templates/ruby-fragment.rb.tpl",import.meta.url),"utf8"));
-const jsonStart=jsonFragment.indexOf('def parserstudio_json_duplicate_keys?(raw)');
-const jsonEnd=jsonFragment.indexOf('\ndef parserstudio_unescape(text)',jsonStart);
-assert.ok(jsonStart>=0&&jsonEnd>jsonStart,'The compiled JSON duplicate guard must remain available');
-const sharedJsonDecoder=jsonFragment.slice(jsonStart,jsonEnd);
-// Standalone native helper acceptance uses the exact shared parser code
-// from the compiled Ruby fragment, not a permissive JSON.parse substitute.
-const helper=sharedJsonDecoder+'\n'+
-  injectHeaderGrammar(readFileSync(new URL("../templates/generic-structural-helper.rb.tpl",import.meta.url),"utf8"));
+// The Generic Structural routes are generated from src/genericStructural.ts (scripts/grammar/ts2rb). These probes
+// run the generated Ruby itself; the route names the probes were written with are test-only aliases of the
+// generated methods (PROBE_ENTRIES). Tests that pinned the text of the former hand-written helper (the order of
+// its dispatcher, its shared IPv4 and calendar guards) are gone with it: order and guards are now those of the
+// TypeScript by construction, and scripts/verification compares the behaviour.
+const helper=grammarSource()+PROBE_ENTRIES;
 const rubyAvailable=spawnSync("ruby",["-v"],{encoding:"utf8"}).status===0;
 
 function runRuby(method:string,raw:string):unknown{
@@ -26,57 +25,12 @@ function runRuby(method:string,raw:string):unknown{
     `result = ${method}(${JSON.stringify(raw)})`,
     "STDOUT.write(JSON.generate(result))",
   ].join("\n");
-  const out=spawnSync("ruby",["-e",source],{encoding:"utf8",timeout:5000,maxBuffer:1024*1024});
+  const out=spawnSync("ruby",rubyE(source),{encoding:"utf8",timeout:5000,maxBuffer:1024*1024});
   assert.equal(out.status,0,out.stderr || String(out.error));
   return JSON.parse(out.stdout);
 }
 
 
-test("Generic Structural positional CSV has one Ruby2.4-compatible shared IPv4 validator",()=>{
-  // Enforce a shared semantic path even when Ruby is unavailable on a local
-  // workstation. The pinned target Ruby 2.4 CI and live DP acceptance execute
-  // the generated code rather than trusting this source-level guard alone.
-  assert.match(helper,/def parserstudio_generic_valid_ipv4\?\(value\)/);
-  assert.match(helper,/candidate\.split\('\.'\)\.all\? \{ \|part\| Integer\(part, 10\)\.between\?\(0, 255\) \}/);
-  assert.match(helper,/rescue ArgumentError\s+false\s+end/);
-  assert.match(helper,/values\[index\]\)/);
-  assert.match(helper,/ips = values\.count \{ \|value\| parserstudio_generic_valid_ipv4\?\(value\) \}/);
-  const positional=helper.slice(helper.indexOf('def parserstudio_generic_rfc3164_positional_csv(text)'),
-    helper.indexOf('def parserstudio_generic_envelope_pri(pri_text)'));
-  assert.doesNotMatch(positional,/rescue ArgumentError/);
-  // The positional route takes at most 100 columns, exactly as the browser extractor does (it used to take
-  // 150 here and returned a field tree the browser never shows). The 125-column PAN-OS original from public
-  // docs is not refused: the envelope route reads it, in both engines, with the same tree (Semantic Oracle
-  // golden generic-panos-traffic-more-than-100-columns, Ruby 2.4.9).
-  assert.match(positional,/values\.length\.between\?\(12, 100\)/);
-  assert.match(positional,/return nil if panos_like && !parserstudio_generic_envelope_panos\(values\)/);
-  assert.match(helper,/def parserstudio_generic_envelope_panos\(values\)\n  return nil unless values && values\.length\.between\?\(7,150\)/);
-});
-
-test("Generic Structural shared native IPv4 validator refuses invalid octets",{skip:!rubyAvailable},()=>{
-  assert.equal(runRuby("parserstudio_generic_valid_ipv4?","10.10.20.15"),true);
-  assert.equal(runRuby("parserstudio_generic_valid_ipv4?","0.0.0.0"),true);
-  assert.equal(runRuby("parserstudio_generic_valid_ipv4?","255.255.255.255"),true);
-  assert.equal(runRuby("parserstudio_generic_valid_ipv4?","256.10.20.15"),false);
-  assert.equal(runRuby("parserstudio_generic_valid_ipv4?","1.2.3"),false);
-  assert.equal(runRuby("parserstudio_generic_valid_ipv4?","10.10.10.1/24"),false);
-});
-
-test("Generic Structural helper keeps Syslog envelope parsing ahead of weak generic fallbacks",()=>{
-  assert.match(helper,/def parserstudio_generic_syslog_envelope\(text\)/);
-  assert.match(helper,/def parserstudio_generic_syslog_envelope_structured\(text\)/);
-  assert.match(helper,/rfc3164_year_before_time/);
-  assert.match(helper,/rfc3164_year_after_time/);
-  assert.match(helper,/syslog_envelope_positional_csv/);
-  assert.match(helper,/panos_traffic_csv/);
-  const envelope=helper.indexOf("result = parserstudio_generic_syslog_envelope_structured(text)");
-  const comma=helper.indexOf("result = parserstudio_generic_comma_kv(text)");
-  const delimited=helper.indexOf("result = parserstudio_generic_delimited_comma_kv(text)");
-  assert.ok(envelope>=0&&comma>envelope&&delimited>envelope);
-});
-
-// Individual grammar probes return nil for unsupported records. The top-level
-// dispatcher instead raises ArgumentError and must never silently complete.
 test("Generic Structural V9 Ruby helper matches bounded WatchGuard, Juniper and secure-email grammars",{skip:!rubyAvailable},()=>{
   const watchguard='<139>Jan 16 15:19:05 WatchGuard-Firebox FVE6035FD3AE3 (2024-01-19T08:48:15) firewall: msg_id="1BFF-000F" Allow 1-Trusted 0-External tcp 10.0.1.2 175.16.199.1 39398 25 msg="SMTP request" proxy_act="SMTP-Outgoing.1" rcvd_bytes="272" sent_bytes="282" sender="tester@testnet.com" recipients="wg@localhost" (SMTP-proxy-00)';
   const wg=runRuby("parserstudio_generic_structural",watchguard) as any;
@@ -116,7 +70,7 @@ test("Generic Structural V9 Ruby helper matches bounded WatchGuard, Juniper and 
   const cp=runRuby("parserstudio_generic_structural",checkpoint) as any;
   assert.equal(cp.body.flags,"1");
   assert.equal(cp.body["sys_message:"],"risk");
-  assert.throws(()=>runRuby("parserstudio_generic_structural",checkpoint+"unexpected"),/Unsupported generic structural event/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",checkpoint+"unexpected"),/Generic Structural compiler grammar|Unsupported/);
 });
 
 
@@ -204,18 +158,6 @@ test("Generic Structural IP tokens do not reinterpret decimal ports as addresses
   assert.equal(runRuby("parserstudio_generic_ip_token","2001:db8::1"),true);
 });
 
-test("ISO Syslog variants share a non-normalizing calendar/clock guard",()=>{
-  assert.match(helper,/def parserstudio_generic_iso_calendar_valid\(date, clock, zone\)/);
-  // Re-audit of 2026-11-15: the calendar, the clock and the UTC offset are checked as text and by arithmetic.
-  // No library call that normalizes or half-accepts a value (Time.iso8601, Time.new, Time.parse) validates a
-  // timestamp in the helper any more; a date is never round-tripped through a Time object.
-  assert.match(helper,/parserstudio_generic_envelope_calendar\(parts\[1\], parts\[2\], parts\[3\], clock, zone\)/);
-  assert.match(helper,/def parserstudio_generic_zone_valid\(zone\)/);
-  const helperTemplate=readFileSync(new URL('../templates/generic-structural-helper.rb.tpl',import.meta.url),'utf8');
-  assert.doesNotMatch(helperTemplate,/^[^#\n]*\bTime\.(?:iso8601|new|parse|strptime)\b/m);
-  assert.equal((helper.match(/parserstudio_generic_iso_calendar_valid\(match\[2\],match\[3\],normalized_zone\)/g)||[]).length,2);
-});
-
 test("Generic Structural V11 Ruby helper parses bounded ISO PRI mixed positional logs",{skip:!rubyAvailable},()=>{
   const raw='<129>2026-10-15 14:54:44.502 +0100 edge WAF ALERT CODE 192.0.2.1 61507 198.51.100.2 443 app policy LOG NONE token1 token2 token3 token4 "-" "multi word positional value" token7 token8';
   const parsed=runRuby("parserstudio_generic_structural",raw) as any;
@@ -223,13 +165,13 @@ test("Generic Structural V11 Ruby helper parses bounded ISO PRI mixed positional
   assert.deepEqual(parsed.generic.tokens.slice(0,8),["edge","WAF","ALERT","CODE","192.0.2.1","61507","198.51.100.2","443"]);
   assert.ok(parsed.generic.tokens.includes("-"));
   assert.ok(parsed.generic.tokens.includes("multi word positional value"));
-  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("<129>","<192>")),/Unsupported generic structural event/);
-  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("+0100","+2500")),/Unsupported generic structural event/);
-  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("2026-10-15","2026-02-30")),/Unsupported generic structural event/);
-  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("2026-10-15","2026-02-29")),/Unsupported generic structural event/);
-  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("14:54:44","25:54:44")),/Unsupported generic structural event/);
-  assert.throws(()=>runRuby("parserstudio_generic_structural",'<129>2026-10-15 14:54:44.502 +0100 edge short 192.0.2.1 198.51.100.2'),/Unsupported generic structural event/);
-  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("198.51.100.2","not-an-ip")),/Unsupported generic structural event/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("<129>","<192>")),/Generic Structural compiler grammar|Unsupported/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("+0100","+2500")),/Generic Structural compiler grammar|Unsupported/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("2026-10-15","2026-02-30")),/Generic Structural compiler grammar|Unsupported/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("2026-10-15","2026-02-29")),/Generic Structural compiler grammar|Unsupported/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("14:54:44","25:54:44")),/Generic Structural compiler grammar|Unsupported/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",'<129>2026-10-15 14:54:44.502 +0100 edge short 192.0.2.1 198.51.100.2'),/Generic Structural compiler grammar|Unsupported/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("198.51.100.2","not-an-ip")),/Generic Structural compiler grammar|Unsupported/);
 });
 
 test("Generic Structural V10 Ruby helper parses bounded PRI-prefixed space KV",{skip:!rubyAvailable},()=>{
@@ -242,9 +184,9 @@ test("Generic Structural V10 Ruby helper parses bounded PRI-prefixed space KV",{
   assert.equal(parsed.generic.kv.desc,"User login successful");
   assert.equal(parsed.generic.kv.msg,"inner status=embedded value");
   assert.equal(parsed.generic.kv.status,"success");
-  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("<134>","<192>")),/Unsupported generic structural event/);
-  assert.throws(()=>runRuby("parserstudio_generic_structural",'<134>date=2023-02-23 time=22:49:29 type=event subtype=system'),/Unsupported generic structural event/);
-  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace('desc="User login successful"','desc="User login successful')),/Unsupported generic structural event/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace("<134>","<192>")),/Generic Structural compiler grammar|Unsupported/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",'<134>date=2023-02-23 time=22:49:29 type=event subtype=system'),/Generic Structural compiler grammar|Unsupported/);
+  assert.throws(()=>runRuby("parserstudio_generic_structural",raw.replace('desc="User login successful"','desc="User login successful')),/Generic Structural compiler grammar|Unsupported/);
 });
 
 test("Generic Structural V10 Ruby helper rejects prototype-bearing keys",{skip:!rubyAvailable},()=>{
@@ -257,25 +199,6 @@ test("Generic Structural V10 Ruby helper rejects prototype-bearing keys",{skip:!
 // Browser and native engines implement the same bounded grammar chain. A
 // profile that only the browser knows reaches the user as "passes the current
 // sample" while the generated Ruby emits a parser_err_msg record for it.
-test("Generic Structural Ruby dispatcher covers every browser profile in the same order",()=>{
-  const ts=readFileSync(new URL("../../src/genericStructural.ts",import.meta.url),"utf8");
-  const start=ts.indexOf("const fields=shortRfc5424Structured(raw)");
-  const end=ts.indexOf("return fields?{fields,errors:[]}",start);
-  assert.ok(start>=0&&end>start,"browser profile chain must remain discoverable");
-  const aliases:Record<string,string>={syslogEnvelopeStructuredFallback:"syslog_envelope_structured",
-    syslogPrefixedKeyValues:"syslog_prefix_kv"};
-  const snake=(name:string)=>aliases[name]??name.replace(/Profile$/,"")
-    .replace(/([a-z0-9])([A-Z])/g,"$1_$2").toLowerCase();
-  const browser=[...ts.slice(start,end).matchAll(/\b([A-Za-z0-9]+)\(raw\)/g)]
-    .map(match=>snake(match[1]!)).filter(name=>name!=="extract_generic_structural");
-  const dispatcher=helper.slice(helper.indexOf("def parserstudio_generic_structural(text)"),
-    helper.indexOf("# This additional grammar is selected by its own project profile"));
-  const native=[...dispatcher.matchAll(/result = parserstudio_generic_([a-z0-9_]+)\(text\)/g)]
-    .map(match=>match[1]!).filter(name=>name!=="leef2_implicit_tab");
-  assert.ok(browser.length>=20,"browser chain was not parsed: "+browser.join(","));
-  assert.deepEqual(native,browser);
-});
-
 test("Generic Structural Ruby helper parses BSD tagged and classic PID messages like the browser",{skip:!rubyAvailable},()=>{
   const tagged="<34>Oct 11 22:14:15 mymachine su: 'su root' failed for lonvick on /dev/pts/8";
   const t=runRuby("parserstudio_generic_structural",tagged) as any;
@@ -301,7 +224,7 @@ test("Generic Structural Ruby helper parses BSD tagged and classic PID messages 
     tagged.replace("22:14:15","25:14:15"),
     "Oct 11 22:14:15 mymachine RT_FLOW: RT_FLOW_SESSION_CREATE: session created",
     "just some words without any syslog header"])
-    assert.throws(()=>runRuby("parserstudio_generic_structural",bad),/Unsupported generic structural event/,bad);
+    assert.throws(()=>runRuby("parserstudio_generic_structural",bad),/Generic Structural compiler grammar|Unsupported/,bad);
 });
 
 // Ruby < 2.7 raises TypeError ("wrong argument type String (expected Symbol)")
@@ -345,12 +268,12 @@ test("compiled Generic Structural artifact decodes RFC5424-wrapped CEF and LEEF 
     "inner.class_eval(input['ruby'], 'artifact', 1)",
     "parser = inner.new",
     "begin; parser.parse('x') { |*_| }; rescue StandardError; end",
-    "out = input['cases'].map { |raw| begin; parser.send(:parserstudio_generic_structural, raw); rescue Exception => e; {'error' => e.message}; end }",
+    "out = input['cases'].map { |raw| begin; parser.send(:parserstudio_extract, raw); rescue Exception => e; {'error' => e.message}; end }",
     "STDOUT.write(JSON.generate(out))",
   ].join("\n");
   const cef="<165>1 2026-10-12T01:02:03Z edge fw 122 ID - CEF:0|Synthetic|FW|1|42|Blocked|8|src=192.0.2.11 dpt=443 act=deny";
   const leef="<165>1 2026-10-12T01:02:03Z edge fw 122 ID - LEEF:2.0|Synthetic|FW|1|501|^|src=203.0.113.8^dstPort=80^act=allow";
-  const out=spawnSync("ruby",["-e",probe],{input:JSON.stringify({ruby:compiledGenericRuby(),cases:[cef,leef]}),
+  const out=spawnSync("ruby",rubyE(probe),{input:JSON.stringify({ruby:compiledGenericRuby(),cases:[cef,leef]}),
     encoding:"utf8",timeout:20000,maxBuffer:1024*1024});
   assert.equal(out.status,0,out.stderr||String(out.error));
   const [c,l]=JSON.parse(out.stdout) as any[];
@@ -373,10 +296,10 @@ function compiledEnvelope(raws:string[]):any[]{
     "inner.class_eval(input['ruby'], 'artifact', 1)",
     "parser = inner.new",
     "begin; parser.parse('x') { |*_| }; rescue StandardError; end",
-    "out = input['cases'].map { |raw| begin; parser.send(:parserstudio_generic_syslog_envelope, raw); rescue Exception => e; {'error' => e.message}; end }",
+    "out = input['cases'].map { |raw| begin; parser.send(:psg_export, parser.send(:psg_parse_syslog_envelope, raw)); rescue Exception => e; {'error' => e.message}; end }",
     "STDOUT.write(JSON.generate(out))",
   ].join("\n");
-  const out=spawnSync("ruby",["-e",probe],{input:JSON.stringify({ruby:compiledGenericRuby(),cases:raws}),
+  const out=spawnSync("ruby",rubyE(probe),{input:JSON.stringify({ruby:compiledGenericRuby(),cases:raws}),
     encoding:"utf8",timeout:20000,maxBuffer:1024*1024});
   assert.equal(out.status,0,out.stderr||String(out.error));
   return JSON.parse(out.stdout);
@@ -393,10 +316,10 @@ test("Generic Structural Ruby envelope follows the contract RFC5424 VERSION poli
   const bad=["<165>2 2026-10-12T01:02:03Z edge fw 122 ID - x","<165>12 2026-10-12T01:02:03Z edge fw 122 ID - x",
     "<165>0 2026-10-12T01:02:03Z edge fw 122 ID - x","<165>01 2026-10-12T01:02:03Z edge fw 122 ID - x"];
   const [g,...b]=compiledEnvelope([good,...bad]);
-  assert.ok(Array.isArray(g),"Ruby envelope must parse a supported VERSION");
-  assert.equal(g[0].variant,"rfc5424");
-  assert.equal(g[0].version,"1");
-  assert.equal(g[1],"hello");
+  assert.ok(g&&typeof g==="object","Ruby envelope must parse a supported VERSION");
+  assert.equal(g.variant,"rfc5424");
+  assert.equal(g.version,"1");
+  assert.equal(g.message,"hello");
   // Exactly what the browser returns for these lines (parseSyslogEnvelope: null). A helper that parsed the
   // RFC 5424 layout under another label, or fell back to a PRI-only envelope, fails here.
   b.forEach((rb,i)=>assert.equal(rb,null,bad[i]+" => "+JSON.stringify(rb)));

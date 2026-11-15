@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {compilePair} from '../src/compiler.js';
@@ -33,7 +34,7 @@ function native(source:string,target:string,type:'ip'|'integer'|'string',value:u
   'parser.parse(STDIN.read){|_time,record| puts JSON.generate(record)}',
  ].join('\n');
  const input={...(value as Record<string,unknown>),...(family?{event_type:'security'}:{})};
- const result=spawnSync('ruby',['-e',program],{encoding:'utf8',input:JSON.stringify(input),timeout:15000,maxBuffer:1024*1024});
+ const result=spawnSync('ruby',rubyE(program),{encoding:'utf8',input:JSON.stringify(input),timeout:15000,maxBuffer:1024*1024});
  assert.equal(result.status,0,result.stderr||String(result.error));
  return JSON.parse(result.stdout) as Record<string,unknown>;
 }

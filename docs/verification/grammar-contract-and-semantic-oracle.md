@@ -115,6 +115,10 @@ engines and the gate fails when it starts to pass.
 
 ## Migration status
 
+The Ruby rows of this table describe the state before W4 was completed. Since 2026-11-15 the Ruby grammar is
+generated from the TypeScript grammar (see "One grammar: executed in the browser, translated for Ruby"); the
+templates named below with a hand-written grammar no longer exist.
+
 | Consumer | State |
 |---|---|
 | `src/structuredFamilies.ts` (RFC 3164 extraction and detection), `src/rfc5424Subset.ts`, `src/guided/autoParserEnvelope.ts` (tagless front door) | contract (`src/grammar/syslogHeader.ts`) |
@@ -545,6 +549,67 @@ Ruby as space-separated key=value with the header kept as opaque prefix tokens,
 and in Python a three-digit VERSION slipped past a two-digit header expression
 and came back as SOURCE_PARSED (found by the VERSION probe).
 
+## One grammar: executed in the browser, translated for Ruby (W4, 2026-11-15)
+
+Until this change the grammar existed twice: TypeScript for the browser preview and hand-written Ruby in the
+templates. The differential gate compared the two on generated lines, which finds a difference only where a
+line happens to hit it. The second implementation is now gone.
+
+```
+src/grammar/readEvent.ts        readEvent(raw, settings): extraction + forwarder unwrap + Parsing Success Contract
+src/grammar/extractEvent.ts     extractEvent(raw, settings): every format, the mixed router, the CSV tokenizer
+        |   the browser executes these modules as written
+        |   scripts/grammar/ts2rb/generate.mjs  (--write | --verify in CI)
+        +--> backend/templates/grammar-core.generated.rb.tpl      every artifact
+        +--> backend/templates/grammar-generic.generated.rb.tpl   Generic Structural artifacts only
+backend/templates/grammar-runtime.rb.tpl     hand-written: the value model of the translation (psg_* primitives)
+backend/templates/ruby-fragment.rb.tpl       hand-written: 74 lines of Fluentd glue around psg_read_event
+```
+
+What is still hand-written Ruby: the runtime primitives, the glue, the canonical operators (normalization and
+mapping, `canonical-operators.rb.tpl`) and the Regex helper, because a Regex extraction runs the user's pattern
+on the regular expression engine of each runtime. `generic-structural-helper.rb.tpl`,
+`ruby-forwarder-family.rb.tpl` and their generator are deleted.
+
+### The translator
+
+`scripts/grammar/ts2rb` is type-directed and fail-closed: it reads the TypeScript program with the compiler API,
+translates the functions reachable from the entry points and refuses any construct it has no rule for (the
+build fails; nothing is emitted "approximately"). The rules that carry the semantics:
+
+| TypeScript | Ruby 2.4 |
+|---|---|
+| string, addressed in UTF-16 code units | UTF-8 String addressed through `psg_len`, `psg_at`, `psg_slice` (code-unit offsets; an offset inside a surrogate pair raises and the event is declined) |
+| number | Integer below 2^53, otherwise the nearest Float, as the double it is in ECMAScript |
+| `undefined` / `null` | `nil` / `:psg_null` (never the same value; a JSON `null` is `:psg_null` until the result is exported) |
+| truthiness | `psg_t` wherever the type admits `''`, `0`, `null` or `undefined` |
+| regular expression (every one carries the `u` flag) | `^ $` become `\A \z`, `.` and `\d \w \s \b` are spelled out, sticky becomes `\G`; flags `i`, `m`, `v` and a mixed named/unnamed group are refused |
+| module constants | executed and serialized, so a table is the value the browser has |
+
+### How the translation is verified
+
+1. `generate.mjs --verify`: the committed Ruby is exactly what the current TypeScript translates to.
+2. Translation conformance (`scripts/verification/translation-conformance.ts`, Ruby 2.4.9 job): probe functions
+   that exercise every translation rule are translated by the same generator and run in both runtimes on the
+   same inputs; a difference fails the gate.
+3. Translation faults (`scripts/verification/translation-faults.ts`): each fault is a wrong translation rule or a
+   wrong runtime primitive (Ruby truthiness, `nil` for `null`, length in characters, Ruby `split`, `to_i`,
+   unanchored sticky, line anchors, Ruby `.` and `\s`, and seven runtime faults). Every fault must be reported
+   by the conformance gate; the faults that change what an artifact returns must also be reported by the native
+   oracle and by the differential gate.
+4. The semantic oracle, the native oracle and the browser/Ruby differential are unchanged in purpose: they now
+   check the translation end to end instead of comparing two implementations.
+
+A sample-based differential is therefore no longer the argument for "browser and Ruby agree". The argument is:
+one source, a translator whose every rule is probed, and faults that show the probes can fail.
+
+### Rules
+
+- Grammar is changed in TypeScript only, then `node scripts/grammar/ts2rb/generate.mjs --write`.
+- A construct the translator refuses is rewritten in the supported subset or gets a translation rule together
+  with a conformance probe and a fault. It is never worked around in the template.
+- The grammar reads text by code unit and by sticky match; it does not cut windows out of the text.
+
 ## Rules for adding or changing a grammar or a mapping
 
 1. Change the contract and regenerate. Do not write a header pattern in a
@@ -563,11 +628,15 @@ and came back as SOURCE_PARSED (found by the VERSION probe).
 
 ```
 node scripts/grammar/generate-grammar.mjs --write | --verify
+node scripts/grammar/ts2rb/generate.mjs --write | --verify
+node backend/node_modules/tsx/dist/cli.mjs scripts/verification/translation-conformance.ts
 node --test scripts/grammar/generate-grammar.test.mjs
 node scripts/verification/grammar-duplication-ratchet.mjs [--write]
 node backend/node_modules/tsx/dist/cli.mjs scripts/verification/semantic-oracle.ts ts
 PARSER_STUDIO_EXPECT_RUBY=2.4.9 node backend/node_modules/tsx/dist/cli.mjs scripts/verification/semantic-oracle.ts native
 node backend/node_modules/tsx/dist/cli.mjs scripts/verification/semantic-oracle.ts python
+PARSER_STUDIO_EXPECT_RUBY=2.4.9 node backend/node_modules/tsx/dist/cli.mjs scripts/verification/semantic-oracle.ts differential
+node backend/node_modules/tsx/dist/cli.mjs scripts/verification/semantic-oracle.ts mutants
 ```
 
 ## Scope

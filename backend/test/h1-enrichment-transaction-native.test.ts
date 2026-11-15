@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {createHash} from 'node:crypto';
@@ -69,7 +70,7 @@ function native(projectIR:ParserProject,raw:string):Record<string,unknown>{
    "parser.parse(line){|_time,record|rows << record}",
    "STDOUT.write(JSON.generate(rows))",
  ].join('\n');
- const result=spawnSync('ruby',['-e',script],{
+ const result=spawnSync('ruby',rubyE(script),{
    encoding:'utf8',timeout:15000,maxBuffer:1024*1024,
    input:Buffer.from(generated.content).toString('base64')+'\n'+raw,
  });

@@ -15,13 +15,14 @@
  */
 export type ParseStatus = 'FULL' | 'PARTIAL' | 'UNKNOWN' | 'ERROR';
 
+import { getTag, matchAt } from './primitives';
+
 export interface StructuredOutcome { fields: Record<string, unknown>; errors: string[] }
 export interface RawPair { key: string; value: string; rawValue: string }
 export interface ParseVerdict { status: ParseStatus; lostPairs: RawPair[]; reasons: string[] }
 
-const KEY_AT_TOKEN_START = /^[A-Za-z_][A-Za-z0-9_.-]{0,95}=/;
-/** The mark src/structuredFamilies.ts puts on a result of the RFC 3164 header grammar (a registered symbol). */
-const RFC3164_HEADER_RESULT = Symbol.for('parserstudio.rfc3164HeaderResult');
+// Sticky: tried exactly where a token starts, without cutting a window out of the text.
+const KEY_AT_TOKEN_START = /[A-Za-z_][A-Za-z0-9_.-]{0,95}=/uy;
 
 /**
  * RFC 5424 section 6: after "<PRI>VERSION" come five header fields, each separated by exactly one SP and
@@ -30,7 +31,7 @@ const RFC3164_HEADER_RESULT = Symbol.for('parserstudio.rfc3164HeaderResult');
  * optional, which is exactly how a first key=value pair was once lost into it (F-1).
  */
 function positionalHeaderEnd(raw: string): number {
-  if (!/^<[0-9]{1,3}>[0-9]{1,3} /.test(raw)) return 0;
+  if (!/^<[0-9]{1,3}>[0-9]{1,3} /u.test(raw)) return 0;
   let index = 0;
   for (let token = 0; token < 6; token += 1) {
     const space = raw.indexOf(' ', index);
@@ -85,7 +86,7 @@ export function independentKeyValuePairs(raw: string): RawPair[] {
   while (index < length) {
     while (index < length && gap(raw[index])) index += 1;
     const start = index;
-    const key = KEY_AT_TOKEN_START.exec(raw.slice(index, index + 98));
+    const key = matchAt(KEY_AT_TOKEN_START, raw, index);
     if (key) {
       index += key[0].length;
       const quote = raw[index];
@@ -105,7 +106,7 @@ export function independentKeyValuePairs(raw: string): RawPair[] {
         }
       }
       let end = index;
-      while (end < length && !gap(raw[end])) end += raw[end] === '\\' && end + 1 < length && !/[\n\v\f\r]/.test(raw[end + 1]!) ? 2 : 1;
+      while (end < length && !gap(raw[end])) end += raw[end] === '\\' && end + 1 < length && !/[\n\v\f\r]/u.test(raw[end + 1]!) ? 2 : 1;
       const value = raw.slice(index, end);
       pairs.push({ key: key[0].slice(0, -1), value, rawValue: value });
       index = end;
@@ -147,7 +148,7 @@ export function classifyStructuredParse(
   // A TAG ("kernel:") or a pair ("srcip=10.1.1.1") read as the RFC 3164 host name is a misread header, whatever
   // the grammar matched. Only a result of the RFC 3164 header grammar is judged (it carries the mark below): a
   // JSON or key=value field called syslog_hostname is data, and an RFC 5424 HOSTNAME is positional.
-  const host = (outcome as unknown as Record<symbol, unknown>)[RFC3164_HEADER_RESULT] === true ? outcome.fields.syslog_hostname : undefined;
+  const host = getTag(outcome, 'rfc3164Header') === true ? outcome.fields.syslog_hostname : undefined;
   const headerReasons = typeof host === 'string' && (host.includes('=') || host.endsWith(':'))
     ? ['a TAG or a key=value pair was taken as the host name'] : [];
   if (bodyFormat !== 'kv') return { status: headerReasons.length ? 'PARTIAL' : 'FULL', lostPairs: [], reasons: headerReasons };

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
@@ -53,7 +54,7 @@ function runNative(p:ParserProject,raw:string[]):Array<Record<string,any>>{
     "input.fetch('lines').each{|line|parser.parse(line){|_time,record|rows << record}}",
     'STDOUT.write(JSON.generate(rows))',
   ].join('\n');
-  const out=spawnSync('ruby',['-e',source],{
+  const out=spawnSync('ruby',rubyE(source),{
     encoding:'utf8',timeout:15000,maxBuffer:1024*1024,
     input:JSON.stringify({ruby:Buffer.from(ruby).toString('base64'),lines:raw}),
   });

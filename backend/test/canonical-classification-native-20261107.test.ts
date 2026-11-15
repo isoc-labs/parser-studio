@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {compilePair} from '../src/compiler.js';
@@ -33,7 +34,7 @@ function native(projectInput:ReturnType<typeof project>,input:Record<string,unkn
     "parser=parser_class.new",
     "parser.parse(STDIN.read){|_time,record|STDOUT.write(JSON.generate(record))}",
   ].join('\n');
-  const run=spawnSync('ruby',['-e',script],{
+  const run=spawnSync('ruby',rubyE(script),{
     encoding:'utf8',input:JSON.stringify(input),timeout:9000,maxBuffer:1024*1024,
   });
   assert.equal(run.status,0,run.stderr||String(run.error));

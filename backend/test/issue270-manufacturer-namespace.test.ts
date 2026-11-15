@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {sampleProject} from './fixture.js';
@@ -47,10 +48,10 @@ test('exact generated native Ruby preserves canonical manufacturer namespace',
     const runner=[
       "require 'json'", "require 'base64'", "require 'csv'", "require 'time'", "require 'ipaddr'",
       'klass=Class.new',
-      'klass.class_eval(Base64.strict_decode64(ARGV.fetch(0)))',
+      "klass.class_eval(Base64.strict_decode64('"+Buffer.from(ruby).toString('base64')+"'))",
       'klass.new.parse(STDIN.read){|_time,record| puts JSON.generate(record)}',
     ].join('\n');
-    const result=spawnSync(rubyBin,['-e',runner,Buffer.from(ruby).toString('base64')],{
+    const result=spawnSync(rubyBin,rubyE(runner),{
       input:JSON.stringify({action:'allow',note:'exact source'}),encoding:'utf8',timeout:12000});
     assert.equal(result.status,0,result.stderr||String(result.error));
     const record=JSON.parse(result.stdout);

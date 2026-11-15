@@ -123,7 +123,7 @@ jobs:
         run: bash scripts/verification/ruby24-regex-container-gate.sh
       - name: Mandatory Ruby 2.4.9 and 3.2.11 structure gate for every compiler variant
         run: bash scripts/verification/ruby-variant-matrix-container-gate.sh
-      - name: Pairwise compiler variants and Generic Structural helper executed on the Ruby 2.4.9 target (behaviour, not only structure)
+      - name: Pairwise compiler variants and the generated Generic Structural grammar executed on the Ruby 2.4.9 target (behaviour, not only structure)
         run: |
           set -euo pipefail
           image=$(node -e 'const c=require("./contracts/target-runtime-profiles.v1.json");const p=c.profiles.find(x=>x.id==="stellar70-observed-ruby24");if(!p?.ciContainerImage?.startsWith("ruby:2.4.9@sha256:"))process.exit(1);process.stdout.write(p.ciContainerImage)')
@@ -135,6 +135,15 @@ jobs:
           PARSER_STUDIO_NATIVE_CONFORMANCE_REQUIRED=1 PARSER_STUDIO_EXPECT_RUBY=2.4.9 \
             node node_modules/tsx/dist/cli.mjs --test test/compiler-pairwise-native.test.ts \
             test/generic-structural-helper.test.ts test/mixed-rfc3164-tagless-native.test.ts
+      - name: Translation conformance - probes of the TypeScript to Ruby translation and fault injection on the Ruby 2.4.9 target
+        run: |
+          set -euo pipefail
+          image=$(node -e 'const c=require("./contracts/target-runtime-profiles.v1.json");const p=c.profiles.find(x=>x.id==="stellar70-observed-ruby24");if(!p?.ciContainerImage?.startsWith("ruby:2.4.9@sha256:"))process.exit(1);process.stdout.write(p.ciContainerImage)')
+          docker pull --platform linux/amd64 "$image" >/dev/null
+          export PARSER_RUBY24_IMAGE="$image"
+          export PATH="$PWD/scripts/verification/ruby24-docker-shim:$PATH"
+          ruby -v | grep -F 'ruby 2.4.9'
+          node backend/node_modules/tsx/dist/cli.mjs scripts/verification/translation-conformance.ts
       - name: Semantic Golden oracle, grammar dialect equivalence and fault injection on the Ruby 2.4.9 target
         run: |
           set -euo pipefail
@@ -225,9 +234,9 @@ jobs:
         run: |
           node scripts/grammar/generate-grammar.mjs --verify
           node --test scripts/grammar/generate-grammar.test.mjs
-          # The forwarder-family Ruby template is derived from the Fragment template; it is never edited by hand.
-          node scripts/grammar/generate-forwarder-template.mjs --verify
-          node --test scripts/grammar/generate-forwarder-template.test.mjs
+          # The Ruby grammar of the generated parser is generated from the grammar the browser executes
+          # (scripts/grammar/ts2rb); it is never edited by hand.
+          node scripts/grammar/ts2rb/generate.mjs --verify
           node scripts/verification/grammar-duplication-ratchet.mjs
       # The semantic oracles run before the template-approval gate of the
       # backend step below: a pending template approval must not hide a wrong

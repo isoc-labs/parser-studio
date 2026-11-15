@@ -1,21 +1,15 @@
 import {meetsStellar7ValueConstraints,officialProtocolPairConflict} from './stellar7ValueConstraints';
 import type { ConcreteFormat, Detection, Diagnostic, EventParseStatus, EventResult, Format, ParserDraft, SuiteResult, TraceStep } from './model';
-import { classifyStructuredParse } from './grammar/parseStatus';
-import { matchRfc3164Header } from './grammar/syslogHeader';
-import { classifyGenericStructural } from './grammar/genericParseStatus';
-import { bodyKindOf, detectStructuredFamily, extractStructuredFamily,strictKeyValues } from './structuredFamilies';
+import { detectStructuredFamily } from './structuredFamilies';
 import { hasAmbiguousFieldPath,lookupFieldValue,mappingWhenApplies } from './fieldPaths';
 import {parseJavaStacktrace} from './javaStacktrace';
 import {coerceCanonicalValue as convertValue} from '../backend/src/canonical-value-contract';
-import {jsonSourceValueValid} from './jsonSourceSafety';
 import {findStellarMetadataField} from './guided/stellarMetadataCatalog';
-import {extractGenericStructural} from './genericStructural';
+import {extractEvent,tokenizeCsvRow,type ExtractionSettings} from './grammar/extractEvent';
+import {gradeExtraction} from './grammar/readEvent';
 import type { EventBoundary } from './guided/contract';
 import {inspectDeclaredForwarders} from './guided/declaredForwarder';
 import {inspectEventProfile} from './guided/multiEventRouting';
-import {hasDuplicateJsonObjectKeys} from './jsonDuplicateKeys';
-import {hasUnsafeJsonNumbers} from './jsonNumberSafety';
-import {extractPortableRegexFields as extractRegex} from './portableRegexExtraction';
 import {canonicalCaseTransform,canonicalIgnoreSourceValue} from '../backend/src/canonical-operator-contract';
 
 export const MAX_DATASET_BYTES = 64 * 1024;
@@ -98,80 +92,9 @@ export interface Extraction {
   errors: string[];
 }
 
-function extractJSON(raw: string): Extraction {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-      return { fields: {}, errors: ['JSON event must be an object'] };
-    }
-    if(hasDuplicateJsonObjectKeys(raw))
-      return {fields:{},errors:['Duplicate JSON object key: review the source before generating a parser']};
-    if(hasUnsafeJsonNumbers(raw))
-      return {fields:{},errors:['Unsafe JSON numeric precision: quote large integer identifiers as strings before mapping']};
-    if(!jsonSourceValueValid(parsed))
-      return {fields:{},errors:['JSON source exceeds the native nesting limit or has an invalid Unicode surrogate']};
-    return { fields: parsed as Record<string, unknown>, errors: [] };
-  } catch {
-    return { fields: {}, errors: ['Invalid JSON object'] };
-  }
-}
-
-function extractKV(raw: string): Extraction {
-  // Use the same complete, bounded grammar as Syslog KV and generated Ruby.
-  // A partial regex match must never conceal an unmatched source fragment.
-  return strictKeyValues(raw);
-}
-
+/** One CSV row as the shared grammar reads it (src/grammar/extractEvent.ts). */
 export function tokenizeCSV(raw: string, delimiter: string): (string | null)[] | null {
-  // The backend compiles Ruby CSV.parse_line with liberal_parsing: false.
-  // This browser subset is intentionally conservative; malformed quoted
-  // cells never become successful evidence for native generation.
-  if (![',', ';', '\t'].includes(delimiter)) return null;
-  const out: (string | null)[] = [];
-  // The generated Ruby uses strip:false for TAB CSV because Ruby CSV 3.2
-  // cannot combine strip:true with a TAB column separator. Retain TAB-space
-  // cells exactly, including whitespace-only values (not missing/null).
-  const stripUnquoted = delimiter !== '\t';
-  // The generated parser strips SP and TAB at the edges of an unquoted field (parserstudio_csv_strip_field_edges
-  // on the target Ruby 2.4.9, whose CSV has no strip option). Form feed, vertical tab, NBSP and EM SPACE are
-  // field data there, so they are kept here too (re-audit 2026-11-15: the browser also removed FF and VT).
-  const trimCsvAscii=(text:string)=>text.replace(/^[ \t]+|[ \t]+$/g,'');
-  let token = '';
-  let state: 'start' | 'plain' | 'quoted' | 'afterQuote' = 'start';
-  for (let i = 0; i < raw.length; i++) {
-    const c = raw[i];
-    if (state === 'quoted') {
-      if (c === '"') {
-        if (raw[i + 1] === '"') { token += '"'; i++; }
-        else state = 'afterQuote';
-      } else token += c;
-    } else if (state === 'afterQuote') {
-      if (c === delimiter) { out.push(token); token = ''; state = 'start'; }
-      else if (stripUnquoted && (c === ' ' || c === '\t')) continue;
-      else return null;
-    } else if (c === delimiter) {
-      out.push(state === 'start' ? null : stripUnquoted ? trimCsvAscii(token) : token);
-      token = ''; state = 'start';
-    } else if (c === '"') {
-      if (state !== 'start') return null;
-      state = 'quoted';
-    } else if (state === 'start' && stripUnquoted && (c === ' ' || c === '\t')) {
-      // Match the generated strict CSV parser's bounded field-edge stripping:
-      // whitespace adjacent to a field is ignored, but quotes inside an
-      // already-started unquoted value remain invalid.
-      continue;
-    } else {
-      token += c;
-      state = 'plain';
-    }
-  }
-  if (state === 'quoted') return null;
-  out.push(state === 'start' ? null : state === 'afterQuote' ? token :
-    stripUnquoted ? trimCsvAscii(token) : token);
-  // A row that is empty (or, where field edges are stripped, only spaces and TABs) is no row: Ruby's
-  // CSV.parse_line returns nil for it and the generated parser reports "No CSV event parsed".
-  if (out.length === 1 && out[0] === null) return null;
-  return out;
+  return tokenizeCsvRow(raw, delimiter);
 }
 
 export interface CsvColumnShape {
@@ -223,23 +146,6 @@ export function inferConsistentCsvColumnCount(
     shapes[0]!.columnCount:null;
 }
 
-function extractCSV(raw: string, columns: string, delimiter: string): Extraction {
-  if (![',', ';', '\t'].includes(delimiter)) {
-    return { fields: {}, errors: ['Unsupported CSV data delimiter'] };
-  }
-  const names = columns.split(',').map((x) => x.trim());
-  if (!names.length || names.length > 100 || names.some((x) => !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(x)) ||
-      new Set(names).size !== names.length) {
-    return { fields: {}, errors: ['Provide unique valid CSV column names'] };
-  }
-  const values = tokenizeCSV(raw, delimiter);
-  if (!values) return { fields: {}, errors: ['Malformed CSV quotation or unsupported delimiter'] };
-  if (values.length !== names.length) {
-    return { fields: {}, errors: ['CSV column count mismatch: expected ' + names.length + ', received ' + values.length] };
-  }
-  return { fields: Object.fromEntries(names.map((name, i) => [name, values[i]])), errors: [] };
-}
-
 function extractSyslog(raw: string): Extraction {
   // Narrow, explicitly approximate RFC 5424 header; no claim of full Fluentd equivalence.
   const match = raw.match(/^<(\d{1,3})>(\d)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(?:-|\[[^\]]*\])\s+(.*)$/);
@@ -256,70 +162,27 @@ function extractSyslog(raw: string): Extraction {
 }
 
 
+/** The extraction settings a draft stands for, in the shape the compiled parser project carries them. */
+export function extractionSettingsOf(draft: ParserDraft, format: ConcreteFormat): ExtractionSettings {
+  return {
+    format,
+    pattern: draft.pattern,
+    mixedFormats: draft.mixedFormats,
+    csvColumns: (draft.csvColumns ?? '').split(',').map(name => name.trim()),
+    csvDelimiter: draft.csvDelimiter ?? ',',
+    syslogBodyFormat: draft.format === 'auto' ? 'auto' : (draft.syslogBodyFormat ?? 'raw'),
+    genericStructuralProfile: draft.genericStructuralProfile,
+    genericStructuralFamilyGrammar: draft.genericStructuralFamilyGrammar,
+  };
+}
+
+/**
+ * Fields of one event. Every format of a generated parser is read by extractEvent, the function the generated
+ * Ruby is translated from; only the browser-only approximate `syslog` preview format is read here.
+ */
 export function extractFields(raw: string, format: ConcreteFormat, draft: ParserDraft): Extraction {
-  switch (format) {
-    case 'json': return extractJSON(raw);
-    case 'kv': return extractKV(raw);
-    case 'csv': return extractCSV(raw, draft.csvColumns, draft.csvDelimiter ?? ',');
-    case 'java_stacktrace': return parseJavaStacktrace(raw);
-    case 'generic_structural': return extractGenericStructural(raw,draft.genericStructuralProfile,draft.genericStructuralFamilyGrammar);
-    case 'mixed': {
-      const selected=draft.mixedFormats??[];
-      if(selected.length<2||selected.length>4||
-         new Set(selected).size!==selected.length||
-         selected.some(f=>!['json','kv','cef','leef','rfc5424_cef','rfc5424_leef','rfc3164_kv','rfc5424_json','rfc5424_kv','rfc3164_cef','rfc3164_leef','csv'].includes(f)))
-        return {fields:{},errors:['Select an explicit bounded mixed-family allowlist']};
-      // The same router as parserstudio_mixed in the generated Ruby. The family of a line is decided by its
-      // exact prefix, and the family of a Syslog envelope by the exact prefix of its message: nothing is trimmed
-      // and no body parser is tried on spec. A BSD timestamp opens an RFC 3164 envelope with or without PRI, as
-      // in the RFC 3164 format itself. A broken header never falls back to key=value.
-      // (Second independent re-audit, 2026-11-15: the browser tried every body parser instead, so a message that
-      // starts with white space was FULL here and declined by Ruby, and a line without PRI was the reverse.)
-      const bsdEnvelope=/^(?:<\d{1,3}>)?[A-Z][a-z]{2} +\d{1,2} +\d{2}:/.test(raw);
-      if(!raw.startsWith('{')&&!raw.startsWith('CEF:')&&!raw.startsWith('LEEF:')&&(bsdEnvelope||raw.startsWith('<'))){
-        const grammar=bsdEnvelope?'syslog_rfc3164':'syslog_rfc5424';
-        // The message of the envelope, from the header grammar alone (a tagless RFC 3164 line has one too).
-        let message:unknown;
-        if(bsdEnvelope){
-          const header=matchRfc3164Header(raw);
-          message=header.ok?header.message:undefined;
-        }else{
-          const header=extractStructuredFamily(raw,grammar,'raw');
-          message=header.errors.length?undefined:header.fields.message;
-        }
-        const body=typeof message!=='string'?null:
-          message.startsWith('CEF:')?'cef' as const:
-          message.startsWith('LEEF:')?'leef' as const:
-          !bsdEnvelope&&message.startsWith('{')?'json' as const:
-          /^[A-Za-z_][A-Za-z0-9_.-]*=/.test(message)?'kv' as const:null;
-        const mode=body?`${bsdEnvelope?'rfc3164':'rfc5424'}_${body}`:null;
-        if(!body||!mode||!(selected as string[]).includes(mode))
-          return {fields:{},errors:[bsdEnvelope?'RFC3164 TAG body is unsupported or not allowlisted':'Wrapped Syslog is malformed or not in mixed allowlist']};
-        return extractStructuredFamily(raw,grammar,body);
-      }
-      // The backend router tests exact prefixes; do not silently trim or
-      // accept a partial KV match elsewhere in the record.
-      const family:typeof selected[number]|null=
-        raw.startsWith('{')?'json':
-        raw.startsWith('CEF:')?'cef':
-        raw.startsWith('LEEF:')?'leef':
-        /^[A-Za-z_][A-Za-z0-9_.-]*=/.test(raw)?'kv':
-        // As in the generated Ruby: CSV is a family only with a reviewed schema of at least two columns.
-        selected.includes('csv')&&(draft.csvColumns??'').split(',').length>=2&&raw.includes(draft.csvDelimiter??',')?'csv':null;
-      if(!family||!selected.includes(family))
-        return {fields:{},errors:['Mixed event is unsupported or excluded by allowlist']};
-      return family==='kv'?strictKeyValues(raw):
-        family==='csv'?extractCSV(raw,draft.csvColumns,draft.csvDelimiter??','):
-        extractFields(raw,family,draft);
-    }
-    case 'syslog': return extractSyslog(raw);
-    case 'syslog_rfc3164':
-    case 'syslog_rfc5424': return extractStructuredFamily(raw,format,
-      draft.format==='auto'?'auto':(draft.syslogBodyFormat ?? 'raw'),draft.pattern);
-    case 'cef':
-    case 'leef': return extractStructuredFamily(raw, format);
-    case 'regex': return extractRegex(raw, draft.pattern);
-  }
+  if (format === 'syslog') return extractSyslog(raw);
+  return extractEvent(raw, extractionSettingsOf(draft, format));
 }
 
 export {convertValue};
@@ -386,11 +249,7 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
     // A key=value body is known either from the draft (format kv, or Syslog with body kv) or from what the
     // extractor says it parsed (bodyKindOf: an `auto` body that resolved to key=value, the key=value
     // branches of a mixed allowlist). Either one is enough, so the check cannot be skipped by losing the tag.
-    const keyValueBody = effectiveFormat === 'kv' || bodyKindOf(extraction) === 'kv' ||
-      ((effectiveFormat === 'syslog_rfc3164' || effectiveFormat === 'syslog_rfc5424') && draft.format !== 'auto' && draft.syslogBodyFormat === 'kv');
-    const verdict = effectiveFormat === 'generic_structural'
-      ? classifyGenericStructural(eventSource, extraction)
-      : classifyStructuredParse(eventSource, extraction, keyValueBody ? 'kv' : 'other');
+    const verdict = gradeExtraction(eventSource, extractionSettingsOf(draft, effectiveFormat), extraction);
     parseStatus = verdict.status;
     // Generic Structural (W7, owner policy D-2): a result that is not provably complete is never FULL. It is
     // reported as a warning, not as a failure, so that the legacy route of an existing project keeps working.

@@ -4,6 +4,7 @@
 // expected fields are the Semantic Oracle's (contracts/semantic-goldens.v1.json, ownerPolicies.D-2), so the
 // browser test src/ownerPolicyD2GenericFamilies20261114.test.ts and this test hold the same expectations.
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import test from 'node:test';
@@ -38,7 +39,7 @@ function native(p:unknown,raws:string[]):Record<string,unknown>[]{
     "input.fetch('lines').each{|line|parser.parse(line){|_time,event|results << event}}",
     'STDOUT.write(JSON.generate(results))',
   ].join('\n');
-  const response=spawnSync('ruby',['-e',code],{
+  const response=spawnSync('ruby',rubyE(code),{
     input:JSON.stringify({fragment:Buffer.from(fragment(p).content).toString('base64'),lines:raws}),
     encoding:'utf8',timeout:20000,maxBuffer:4*1024*1024});
   assert.equal(response.status,0,response.stderr||String(response.error));

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { classifyStructuredParse } from './parseStatus';
-import { RFC3164_HEADER_RESULT } from '../structuredFamilies';
+import { setTag } from './primitives';
 
 /** Marks a hand-made result the way the RFC 3164 extractor marks its own. */
-const rfc3164 = <T extends object>(outcome: T): T => Object.defineProperty(outcome, RFC3164_HEADER_RESULT, { value: true });
+const rfc3164 = <T extends object>(outcome: T): T => setTag(outcome, 'rfc3164Header', true);
 
 const ok = (fields: Record<string, unknown>) => ({ fields, errors: [] });
 

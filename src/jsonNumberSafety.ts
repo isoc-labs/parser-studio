@@ -19,7 +19,7 @@ export function hasUnsafeJsonNumbers(source: string): boolean {
       continue;
     }
     if (current === '-' || (current >= '0' && current <= '9')) {
-      const match = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(source.slice(index));
+      const match = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/u.exec(source.slice(index));
       if (!match) return true;
       const token = match[0];
       const value = Number(token);
@@ -27,12 +27,12 @@ export function hasUnsafeJsonNumbers(source: string): boolean {
       if (Number.isInteger(value) && !Number.isSafeInteger(value)) return true;
       // Decimal/scientific representations with too many meaningful digits
       // can differ across JavaScript and the generated Ruby runtime.
-      if (/[.eE]/.test(token)) {
-        const mantissa = token.split(/[eE]/, 1)[0]!;
-        const significant = mantissa.replace(/^[+-]?0*/, '').replace('.', '').replace(/0+$/, '');
+      if (/[.eE]/u.test(token)) {
+        const mantissa = token.split(/[eE]/u, 1)[0]!;
+        const significant = mantissa.replace(/^[+-]?0*/u, '').replace('.', '').replace(/0+$/u, '');
         if (significant.length > 15) return true;
         // Don't silently treat a nonzero decimal as zero after underflow.
-        if (value === 0 && /[1-9]/.test(mantissa)) return true;
+        if (value === 0 && /[1-9]/u.test(mantissa)) return true;
       }
       index += token.length;
       continue;

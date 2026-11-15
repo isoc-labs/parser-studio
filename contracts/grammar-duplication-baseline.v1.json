@@ -1,7 +1,7 @@
 {
   "schema": "parserstudio.grammar-duplication-baseline.v1",
   "purpose": "Hand-written copies of Syslog header grammar tokens that still exist outside contracts/syslog-header-grammar.v1.json. The numbers may only decrease; scripts/verification/grammar-duplication-ratchet.mjs enforces it.",
-  "total": 49,
+  "total": 45,
   "signatures": {
     "hostname-printable-ascii-255": {
       "literal": "[!-~]{1,255}",
@@ -13,9 +13,8 @@
         "src/guided/autoParserDraft.ts": 1,
         "src/guided/localPatternMining.ts": 1,
         "src/guided/parserRecipeV2.ts": 1,
-        "src/parser.ts": 3,
+        "src/parser.ts": 2,
         "src/structuredFamilies.ts": 1,
-        "backend/templates/ruby-fragment.rb.tpl": 1,
         "runtime/multipass/generic_partial_envelope.py": 3,
         "runtime/multipass/security_asa.py": 1,
         "runtime/multipass/security_watchguard.py": 1,
@@ -35,8 +34,7 @@
       "files": {
         "src/javaStacktrace.ts": 1,
         "backend/src/canonical-value-contract.ts": 1,
-        "backend/src/testlab-synthetic.ts": 1,
-        "backend/templates/ruby-fragment.rb.tpl": 1
+        "backend/src/testlab-synthetic.ts": 1
       }
     },
     "rfc5424-version-literal-one": {
@@ -72,7 +70,6 @@
         "src/guided/fieldMappingSuggestions.ts": 1,
         "src/guided/vendorFieldNames.ts": 1,
         "backend/src/testlab-synthetic.ts": 1,
-        "backend/templates/generic-structural-helper.rb.tpl": 1,
         "runtime/multipass/generic_text_envelope.py": 1,
         "runtime/multipass/security_envelope.py": 1,
         "runtime/multipass/security_profile_tokens.py": 1,

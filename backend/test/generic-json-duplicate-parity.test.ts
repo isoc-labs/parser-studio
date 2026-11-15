@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {compilePair} from '../src/compiler.js';
@@ -20,9 +21,9 @@ function compile(){
 }
 test('compiled Generic Structural prefixed JSON uses the same strict native JSON source contract',()=>{
   const ruby=compile();
-  assert.match(ruby,/def parserstudio_json_duplicate_keys\?\(raw\)/);
-  assert.match(ruby,/def parserstudio_generic_prefixed_json\(text\)/);
-  assert.match(ruby,/body = parserstudio_json_object\(match\[2\]\)/);
+  assert.match(ruby,/def psg_has_duplicate_json_object_keys\(/);
+  assert.match(ruby,/def psg_prefixed_json\(raw\)/);
+  assert.match(ruby,/psg_parse_json_body\(/);
 });
 test('native compiled Generic Structural refuses duplicate prefixed JSON without mutating the original',
  {skip:!rubyAvailable},()=>{
@@ -42,13 +43,13 @@ test('native compiled Generic Structural refuses duplicate prefixed JSON without
     'parser=klass.new',
     'results=[]',
     'input.fetch("cases").each do |entry|',
-    "  method=entry['method']=='prefixed' ? :parserstudio_generic_prefixed_json : :parserstudio_generic_short_rfc5424_json",
+    "  method=entry['method']=='prefixed' ? :psg_prefixed_json : :psg_short_rfc5424_json",
     "  parsed=parser.send(method,entry['source'])",
-    '  results << (!parsed.nil?)',
+    '  results << !(parsed.nil? || parsed.equal?(:psg_null))',
     'end',
     'STDOUT.write(JSON.generate(results))',
   ].join('\n');
-  const result=spawnSync('ruby',['-e',statements],{
+  const result=spawnSync('ruby',rubyE(statements),{
     input:JSON.stringify({ruby,cases}),encoding:'utf8',timeout:10000,
   });
   assert.equal(result.status,0,result.stderr||String(result.error));

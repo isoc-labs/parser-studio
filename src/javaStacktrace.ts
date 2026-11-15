@@ -7,10 +7,10 @@ export interface JavaTraceExtraction {
   errors:string[];
 }
 const CLASS=String.raw`(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*(?:Exception|Error)`;
-const HEADER=new RegExp('^('+CLASS+')(?:\\: [^\\n]{1,256})?$');
-const FRAME=/^[ \t]+at [A-Za-z_$][A-Za-z0-9_.$/]*\((?:[A-Za-z0-9_.$/-]+\.java:\d{1,5}|Unknown Source|Native Method)\)$/;
-const CAUSE=new RegExp('^Caused by: ('+CLASS+')(?:\\: [^\\n]{1,256})?$');
-const MORE=/^[ \t]*\.\.\. [1-9]\d{0,2} more$/;
+const HEADER=new RegExp('^('+CLASS+')(?:: [^\\n]{1,256})?$','u');
+const FRAME=/^[ \t]+at [A-Za-z_$][A-Za-z0-9_.$/]*\((?:[A-Za-z0-9_.$/-]+\.java:\d{1,5}|Unknown Source|Native Method)\)$/u;
+const CAUSE=new RegExp('^Caused by: ('+CLASS+')(?:: [^\\n]{1,256})?$','u');
+const MORE=/^[ \t]*\.\.\. [1-9]\d{0,2} more$/u;
 const error=():JavaTraceExtraction=>({
   fields:{},errors:['Java exception does not match the bounded TCP blank-line-framed grammar']
 });

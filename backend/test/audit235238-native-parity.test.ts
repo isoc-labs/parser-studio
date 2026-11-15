@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import test from 'node:test';
 import {spawnSync} from 'node:child_process';
 import {compilePair} from '../src/compiler.js';
@@ -41,7 +42,7 @@ function native(p:ParserProject,lines:string[]):Record<string,any>[]{
     "input.fetch('lines').each{|line|parser.parse(line){|_time,record|result << record}}",
     'STDOUT.write(JSON.generate(result))',
   ].join('\n');
-  const out=spawnSync('ruby',['-e',code],{
+  const out=spawnSync('ruby',rubyE(code),{
     input:JSON.stringify({ruby:Buffer.from(ruby).toString('base64'),lines}),
     timeout:15000,maxBuffer:1024*1024,encoding:'utf8',
   });
@@ -74,7 +75,7 @@ test('Audit #236: backend rejects protected runtime diagnostics and vendor names
 test('Audit #237: generated Ruby contains lexical JSON precision guards in both templates',()=>{
   for(const family of [false,true]){
     const ruby=compilePair(project('json',family)).files.find(file=>!file.name.endsWith('.conf'))!.content;
-    assert.match(ruby,/def parserstudio_json_unsafe_number\?\(raw\)/);
+    assert.match(ruby,/def psg_has_unsafe_json_numbers\(/);
     assert.match(ruby,/Unsafe JSON numeric precision/);
   }
 });

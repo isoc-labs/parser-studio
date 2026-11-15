@@ -1,14 +1,15 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {injectHeaderGrammar} from '../src/compiler.js';
+import {grammarSource,PROBE_ENTRIES} from './template-fixture.js';
 import {spawnSync} from 'node:child_process';
 
 const fixture=JSON.parse(readFileSync(new URL('../../tests/fixtures/roadmap-leef2-implicit-tab-20261020.json',import.meta.url),'utf8')) as {
   positive:Array<{name:string;raw:string;header:Record<string,string>;extension:Record<string,string>}>;
   negative:Array<{name:string;raw:string}>;
 };
-const helper=injectHeaderGrammar(readFileSync(new URL('../templates/generic-structural-helper.rb.tpl',import.meta.url),'utf8'));
+const helper=grammarSource()+PROBE_ENTRIES;
 const ruby=process.env.PARSER_NATIVE_RUBY||'ruby';
 function runRuby(raw:string,mode:'helper'|'dispatcher'='helper',profile?:string):unknown{
   const source=[
@@ -26,7 +27,7 @@ function runRuby(raw:string,mode:'helper'|'dispatcher'='helper',profile?:string)
     "end",
     "STDOUT.write(JSON.generate(result))",
   ].join('\n');
-  const result=spawnSync(ruby,['-e',source],{
+  const result=spawnSync(ruby,rubyE(source),{
     input:JSON.stringify({raw,mode,profile}),encoding:'utf8',timeout:5000,maxBuffer:1024*1024,
   });
   assert.equal(result.status,0,result.stderr||String(result.error));

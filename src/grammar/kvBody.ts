@@ -15,8 +15,10 @@ export type KvBody =
   | { ok: true; pairs: Array<[key: string, value: string]> }
   | { ok: false; reason: KvFailure; key?: string };
 
-const PAIR = new RegExp(GRAMMAR_FRAGMENTS.kv_pair.source, 'y');
-const TRAILING = new RegExp('^(?:' + SYSLOG_HEADER_TOKENS.KV_TRAILING + ')$');
+import { matchAt, matchEnd } from './primitives';
+
+const PAIR = new RegExp(GRAMMAR_FRAGMENTS.kv_pair.source, 'yu');
+const TRAILING = new RegExp('^(?:' + SYSLOG_HEADER_TOKENS.KV_TRAILING + ')$','u');
 const UNESCAPED: readonly string[] = SYSLOG_HEADER_SEMANTICS.kvUnescapedAfterBackslash;
 const FORBIDDEN: readonly string[] = SYSLOG_HEADER_SEMANTICS.kvForbiddenKeys;
 
@@ -39,9 +41,8 @@ export function parseStrictKeyValues(input: string): KvBody {
   let cursor = 0;
   while (cursor < input.length) {
     if (TRAILING.test(input.slice(cursor))) break;
-    PAIR.lastIndex = cursor;
-    const match = PAIR.exec(input);
-    if (!match || match.index !== cursor || PAIR.lastIndex <= cursor) return { ok: false, reason: 'MALFORMED_PAIR' };
+    const match = matchAt(PAIR, input, cursor);
+    if (!match || matchEnd(match) <= cursor) return { ok: false, reason: 'MALFORMED_PAIR' };
     const key = match.groups!.key!;
     if (FORBIDDEN.includes(key)) return { ok: false, reason: 'FORBIDDEN_KEY', key };
     // Owner policy D-1: a repeated key is never resolved by keeping one of its values.
@@ -49,7 +50,7 @@ export function parseStrictKeyValues(input: string): KvBody {
     if (pairs.length >= SYSLOG_HEADER_SEMANTICS.kvMaxPairs) return { ok: false, reason: 'TOO_MANY_PAIRS' };
     seen.add(key);
     pairs.push([key, unescapeKvValue(match.groups!.dq ?? match.groups!.sq ?? match.groups!.bare ?? '')]);
-    cursor = PAIR.lastIndex;
+    cursor = matchEnd(match);
   }
   return pairs.length > 0 ? { ok: true, pairs } : { ok: false, reason: 'NO_PAIRS' };
 }

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -54,7 +55,7 @@ type ReplayResult={name:string;sha256:string;events:Array<{
   sourceSha256:string;callbacks:Array<{time:number|null;record:Record<string,unknown>|null}>;
 }>};
 function replay(cases:ReplayCase[]):ReplayResult[]{
-  const result=spawnSync(ruby,['-e',program],{
+  const result=spawnSync(ruby,rubyE(program),{
     input:JSON.stringify({cases:cases.map(item=>({name:item.artifact.name,
       source:item.artifact.content,sha256:item.artifact.sha256,events:item.events}))}),
     encoding:'utf8',timeout:10000,maxBuffer:1024*1024,

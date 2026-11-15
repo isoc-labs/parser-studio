@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {sampleProject} from './fixture.js';
@@ -39,7 +40,7 @@ function runCompiled(formats:string[],raws:string[]):Array<Record<string,unknown
     "out = input['raws'].map { |raw| rec = nil; parser.parse(raw) { |_t, r| rec = r }; rec }",
     "STDOUT.write(JSON.generate(out))",
   ].join('\n');
-  const out=spawnSync('ruby',['-e',probe],{input:JSON.stringify({ruby,raws}),encoding:'utf8',timeout:20000,maxBuffer:1<<22});
+  const out=spawnSync('ruby',rubyE(probe),{input:JSON.stringify({ruby,raws}),encoding:'utf8',timeout:20000,maxBuffer:1<<22});
   assert.equal(out.status,0,out.stderr||String(out.error));
   return JSON.parse(out.stdout);
 }

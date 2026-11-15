@@ -40,6 +40,7 @@ import { CONTRACT_PATH, GENERATED_PYTHON_PATH, compileRule, generatePython, gene
 import { compilePair } from '../../backend/src/compiler.js';
 import { analyzeRuby24RegexCost } from '../../backend/src/ruby24-regex-cost.js';
 import { sampleProject } from '../../backend/test/fixture.js';
+import { prepareFaultInjector } from './translation-faults';
 
 type Engine = 'ts' | 'ruby';
 type Extract = (raw: string, grammar: string, body: string) => { fields: Record<string, unknown>; errors: string[] };
@@ -220,7 +221,14 @@ const TS_MUTANTS: Mutant[] = [
   { id: 'ts-rfc5424-appname-procid-swapped', file: 'src/rfc5424Subset.ts', find: 'syslog_appname:header.appname,syslog_procid:header.procid,', replace: 'syslog_appname:header.procid,syslog_procid:header.appname,' },
 ];
 
+// The Ruby grammar of an artifact is generated from the TypeScript the browser executes, so the realistic
+// defect on the Ruby side is a wrong translation (scripts/verification/translation-faults.ts): a mutant with
+// file 'translation' injects one such fault, named by its `find`, into the generated grammar of the artifact.
+const injectTranslationFault = ['native', 'differential'].includes(process.argv[2] ?? '') ? await prepareFaultInjector() : null;
+const translationFault = (fault: string, scope = ''): Mutant => ({ id: `rb-${scope ? scope + '-' : ''}${fault}`, file: 'translation', find: fault, replace: '' });
+
 function applyMutant(text: string, mutant: Mutant): string {
+  if (mutant.file === 'translation') return injectTranslationFault!(text, mutant.find);
   if (text.split(mutant.find).length !== 2) throw new Error(`MUTANT_NOT_APPLICABLE ${mutant.id}: target text must occur exactly once in ${mutant.file}`);
   if (mutant.replace === mutant.find) throw new Error(`MUTANT_IS_IDENTITY ${mutant.id}`);
   return text.replace(mutant.find, () => mutant.replace);
@@ -284,14 +292,14 @@ const TS_GENERIC_MUTANTS: Mutant[] = [
   // A JSON body inside Generic Structural with an integer beyond 2^53 is parsed (and silently rounded) again.
   { id: 'ts-generic-json-unsafe-integer-accepted', file: 'src/genericStructural.ts', find: 'return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)||', replace: 'return hasDuplicateJsonObjectKeys(text)||' },
   // '.' instead of [^\\n] after PRI: the browser stops at U+2028 and reads the line through another route.
-  { id: 'ts-generic-pri-space-kv-stops-at-u2028', file: 'src/genericStructural.ts', find: '>([^\\n]+)$`);', replace: '>(.+)$`);' },
+  { id: 'ts-generic-pri-space-kv-stops-at-u2028', file: 'src/genericStructural.ts', find: ">([^\\n]+)$`,'u');", replace: ">(.+)$`,'u');" },
   // Owner policy D-2: a new parser reads a CEF/LEEF claim through the generic key=value routes again.
   { id: 'ts-generic-dedicated-gate-removed', file: 'src/genericStructural.ts', find: "const claim=familyGrammar==='dedicated'?structuredFamilyClaim(raw):null;", replace: 'const claim=null as string|null;' },
   // Owner policy D-2: the legacy route's result for a CEF/LEEF claim is shown as a complete parse.
   { id: 'ts-generic-claim-verdict-full', file: 'src/grammar/genericParseStatus.ts', find: 'if (claim && !GENERIC_FAMILY_MODES.includes(mode))', replace: 'if (false)' },
   { id: 'ts-generic-host-and-tag-swapped', file: 'src/genericStructural.ts', find: "time:match[4],hostname:match[5],app_tag:match[6]},\n    generic:{mode:'bsd_tagged_message'", replace: "time:match[4],hostname:match[6],app_tag:match[5]},\n    generic:{mode:'bsd_tagged_message'" },
   // Re-introduces the browser-only rejection of U+2028 in a BSD tagged message.
-  { id: 'ts-generic-message-stops-at-u2028', file: 'src/genericStructural.ts', find: "+([^ \\t\\n\\r\\f\\v]{1,255}) +([A-Za-z0-9_.-]{1,128}): +([^\\n]+)$`);", replace: "+([^ \\t\\n\\r\\f\\v]{1,255}) +([A-Za-z0-9_.-]{1,128}): +(.+)$`);" },
+  { id: 'ts-generic-message-stops-at-u2028', file: 'src/genericStructural.ts', find: "+([^ \\t\\n\\r\\f\\v]{1,255}) +([A-Za-z0-9_.-]{1,128}): +([^\\n]+)$`,'u');", replace: "+([^ \\t\\n\\r\\f\\v]{1,255}) +([A-Za-z0-9_.-]{1,128}): +(.+)$`,'u');" },
   { id: 'ts-generic-any-rfc5424-version', file: 'src/syslogEnvelope.ts', find: 'if(!isSupportedRfc5424Version(version))return null;', replace: '' },
   { id: 'ts-generic-version-gate-removed', file: 'src/genericStructural.ts', find: 'if(unsupportedVersion!==null)', replace: 'if(false)' },
 ];
@@ -352,50 +360,32 @@ async function runTs(): Promise<number> {
 }
 
 // ---------------------------------------------------------------------- Ruby
-const RUNTIME_GUARDED_FAULTS = ['contract-hostname-any-printable', 'contract-hostname-trailing-colon'];
+// Faults of the translation the Syslog goldens and properties must notice (the run-time contract is in
+// place; `unguarded` shows the oracle notices the fault by itself when the contract would turn it into error records).
 const RUBY_MUTANTS: Array<Mutant & { grammar: OracleCase['grammar']; target?: string; unguarded?: boolean }> = [
-  // PR #311 review: the run-time check reads STRUCTURED-DATA as key=value text again and rejects a complete event.
-  { id: 'rb-guard-structured-data-counted-as-pairs', grammar: 'syslog_rfc5424', file: 'fragment', find: "    rest = structured.post_match if structured\n", replace: '' },
-  // Forwarder-family template: the relay probe must not reject a direct event that has no TAG.
-  { id: 'rb-forwarder-probe-rejects-tagless', grammar: 'syslog_rfc3164', target: 'forwarder:syslog_rfc3164', file: 'fragment', find: "{'syslogBodyFormat'=>'raw','taglessStructuredRouter'=>true}", replace: "{'syslogBodyFormat'=>'raw'}" },
-  // Faults whose wrong events the run-time guard turns into error records are judged with that guard removed
-  // (see RUNTIME_FIELD_LOSS_GUARD below for the guard's own proof).
-  ...CONTRACT_MUTANTS.filter(mutant => mutant.id !== 'contract-kv-pair-limit-3').map(mutant => ({ ...mutant, grammar: 'syslog_rfc3164' as const,
-    ...(RUNTIME_GUARDED_FAULTS.includes(mutant.id) ? { unguarded: true } : {}) })),
-  { id: 'rb-kv-pair-limit-3', grammar: 'syslog_rfc3164', file: 'fragment', find: "raise ArgumentError, 'Too many key value fields' if record.length >= 100", replace: "raise ArgumentError, 'Too many key value fields' if record.length >= 3" },
-  { id: 'rb-pri-range-widened', grammar: 'syslog_rfc3164', file: 'fragment', find: "'RFC3164 PRI out of range' if priority && !priority.between?(0, 191)", replace: "'RFC3164 PRI out of range' if priority && !priority.between?(0, 999)" },
-  { id: 'rb-calendar-widened', grammar: 'syslog_rfc3164', file: 'fragment', find: 'day.between?(1, days) && hour.between?(0, 23)', replace: 'day.between?(1, 31) && hour.between?(0, 23)' },
-  { id: 'rb-tagged-first-field-lost', grammar: 'syslog_rfc3164', file: 'fragment', find: "  message = header['message']\n", replace: "  message = tagged ? header['message'].sub(/\\A\\S+ /, '') : header['message']\n" },
-  { id: 'rb-hostname-wrong-capture', grammar: 'syslog_rfc3164', file: 'fragment', find: "record['syslog_hostname'] = header['hostname'] if header['hostname']", replace: "record['syslog_hostname'] = header['month'] if header['hostname']" },
-  { id: 'rb-kv-every-backslash-decoded', grammar: 'syslog_rfc3164', file: 'fragment', find: '.include?(next_char) ? next_char : escaped', replace: '.include?(next_char) ? next_char : next_char' },
-  { id: 'rb-kv-duplicate-key-overwrites', grammar: 'syslog_rfc3164', unguarded: true, file: 'fragment', find: "    raise ArgumentError, 'Duplicate key value field' if record.key?(key)\n", replace: '' },
-  { id: 'rb-rfc5424-any-version', grammar: 'syslog_rfc5424', file: 'fragment', find: "raise ArgumentError, 'Unsupported RFC5424 version' unless ['1'].include?(header['version'])", replace: "raise ArgumentError, 'Unsupported RFC5424 version' unless header['version']" },
+  { ...translationFault('translation-regex-sticky-unanchored', 'syslog_rfc3164'), grammar: 'syslog_rfc3164', unguarded: true },
+  { ...translationFault('translation-truthiness-ruby', 'syslog_rfc3164'), grammar: 'syslog_rfc3164' },
+  { ...translationFault('runtime-zero-is-true', 'syslog_rfc3164'), grammar: 'syslog_rfc3164' },
+  // A defect of one generated method: every RFC 5424 VERSION is taken for supported.
+  { id: 'rb-rfc5424-any-version', grammar: 'syslog_rfc5424', file: 'fragment',
+    find: 'def psg_is_supported_rfc5424_version(version)\n', replace: 'def psg_is_supported_rfc5424_version(version)\n  return true\n' },
 ];
-
 const RUBY_GENERIC_MUTANTS: Mutant[] = [
-  { id: 'rb-generic-host-and-tag-swapped', file: 'fragment', find: "          'hostname'=>match[5],'app_tag'=>match[6]}\n  syslog['pri']=match[1] if match[1]\n  {'syslog'=>syslog,\n   'generic'=>{'mode'=>'bsd_tagged_message'", replace: "          'hostname'=>match[6],'app_tag'=>match[5]}\n  syslog['pri']=match[1] if match[1]\n  {'syslog'=>syslog,\n   'generic'=>{'mode'=>'bsd_tagged_message'" },
-  // The envelope-level VERSION check is covered by backend/test/generic-structural-helper.test.ts; at the
-  // extractor level the gate below decides, so that is what is removed here.
-  { id: 'rb-generic-version-gate-removed', file: 'fragment', find: "  raise ArgumentError, 'Unsupported RFC5424 version' if version_head &&\n    !['1'].include?(version_head[:version])\n", replace: '' },
-  // Time.new rolls 30 February over to 2 March: without the arithmetic check the impossible date is accepted.
-  { id: 'rb-generic-calendar-rollover', file: 'fragment', find: "  return false unless d<=[31,leap ? 29 : 28,31,30,31,30,31,31,30,31,30,31][mo-1]\n", replace: '' },
-  // The positional route accepts more columns than the browser does and returns a tree the browser never shows.
-  { id: 'rb-generic-positional-150-columns', file: 'fragment', find: 'values.length.between?(12, 100)', replace: 'values.length.between?(12, 150)' },
-  // Owner policy D-2: the generated Ruby of a new parser reads a CEF/LEEF claim through the generic routes again.
-  { id: 'rb-generic-dedicated-gate-removed', file: 'fragment', find: "  if @parser_rule_set && @parser_rule_set.dig('extraction','genericStructuralFamilyGrammar') == 'dedicated'\n", replace: '  if false\n' },
-];
+  'translation-truthiness-ruby', 'translation-null-is-nil', 'runtime-empty-string-is-true', 'runtime-zero-is-true', 'runtime-large-number-not-an-integer',
+].map(fault => translationFault(fault, 'generic'));
 
 /** Applies a mutant to a compiled Fragment; a contract mutant swaps the injected grammar for the mutated contract's grammar. */
 // Grammar faults that lose a key=value pair without any error, and the one-line removal of the run-time guard.
-const RUNTIME_GUARD_REMOVED: Mutant = { id: 'runtime-guard-removed', file: 'fragment', find: '  parserstudio_assert_no_field_loss(text, result)\n', replace: '  result\n' };
+const RUNTIME_GUARD_REMOVED: Mutant = { id: 'runtime-guard-removed', file: 'fragment',
+  find: "  unless reading['status'] == 'FULL' || (reading['status'] == 'PARTIAL' && settings['format'] == 'generic_structural')\n",
+  replace: "  unless reading['errors'].empty?\n" };
+// A defect that loses the first key=value pair of a body without any error: the generated key=value reader
+// is handed the body from its second token on.
+const KV_READER_SKIPS_FIRST_PAIR = (grammar: string): Mutant => ({ id: `rb-${grammar}-body-skips-first-pair`, file: 'fragment',
+  find: 'def psg_strict_key_values(input)\n', replace: "def psg_strict_key_values(input)\n  input = input.sub(/\\A[^ ]+ +/, '')\n" });
 const RUNTIME_LOSS_FAULTS: Array<{ id: string; grammar: OracleCase['grammar']; mutant: Mutant }> = [
-  // F-1: the first pair is read as the host name.
-  { id: 'first-pair-read-as-hostname', grammar: 'syslog_rfc3164', mutant: contractMutant('contract-hostname-any-printable', ['tokens', 'BSD_HOSTNAME', 'pattern'], '[!-~]{1,255}') },
-  // A body offset one token too far: the first pair of the body is skipped.
-  { id: 'rfc3164-body-skips-first-pair', grammar: 'syslog_rfc3164', mutant: { id: 'rb-rfc3164-body-skips-first-pair', file: 'fragment',
-    find: "\n  when 'kv'\n    record['body'] = parserstudio_key_values(message)\n", replace: "\n  when 'kv'\n    record['body'] = parserstudio_key_values(message.sub(/\\A[^ ]+ +/, ''))\n" } },
-  { id: 'rfc5424-body-skips-first-pair', grammar: 'syslog_rfc5424', mutant: { id: 'rb-rfc5424-body-skips-first-pair', file: 'fragment',
-    find: "\n    when 'kv'\n      record['body'] = parserstudio_key_values(message)\n", replace: "\n    when 'kv'\n      record['body'] = parserstudio_key_values(message.sub(/\\A[^ ]+ +/, ''))\n" } },
+  { id: 'rfc3164-body-skips-first-pair', grammar: 'syslog_rfc3164', mutant: KV_READER_SKIPS_FIRST_PAIR('syslog_rfc3164') },
+  { id: 'rfc5424-body-skips-first-pair', grammar: 'syslog_rfc5424', mutant: KV_READER_SKIPS_FIRST_PAIR('syslog_rfc5424') },
 ];
 /** True when the artifact emitted a parsed event whose fields differ from the expectation (declining is not wrong). */
 function emitsWrongEvent(item: OracleCase, result: RubyResult | undefined): boolean {
@@ -666,13 +656,13 @@ const TS_FAMILY_MUTANTS: Mutant[] = [
   CEF_ESCAPE_CONTRACT_MUTANT, CEF_VERSION_CONTRACT_MUTANT, LEEF_VERSION_CONTRACT_MUTANT, ...FAMILY_CONTRACT_MUTANTS,
   contractMutant('contract-leef-broken-bar-delimiter-dropped', ['semantics', 'leefDelimiterExtraCodePoints'], []),
   { id: 'ts-cef-escapes-not-decoded', file: 'src/structuredFamilies.ts', find: 'Object.prototype.hasOwnProperty.call(CEF_ESCAPES,pair[1]!)?CEF_ESCAPES[pair[1]!]!:pair);', replace: 'pair);' },
-  { id: 'ts-leef-value-cut-at-second-equals', file: 'src/structuredFamilies.ts', find: 'record[key] = part.slice(LEEF_ATTRIBUTE.lastIndex);', replace: "record[key] = part.slice(LEEF_ATTRIBUTE.lastIndex).split('=')[0]!;" },
+  { id: 'ts-leef-value-cut-at-second-equals', file: 'src/structuredFamilies.ts', find: "record[key] = part.slice(matchEnd(attribute));", replace: "record[key] = part.slice(matchEnd(attribute)).split('=')[0]!;" },
   { id: 'ts-leef-empty-attribute-skipped', file: 'src/structuredFamilies.ts', find: "for (const part of parts[parts.length - 1].split(delimiter)) {", replace: "for (const part of parts[parts.length - 1].split(delimiter).filter(Boolean)) {" },
   // Owner policy D-1: a repeated extension field is declined, never overwritten.
   { id: 'ts-cef-duplicate-field-overwrites', file: 'src/structuredFamilies.ts', find: 'if(Object.prototype.hasOwnProperty.call(values,key))return failure(duplicateFieldMessage(key));', replace: '' },
   { id: 'ts-leef-duplicate-field-overwrites', file: 'src/structuredFamilies.ts', find: 'if (Object.prototype.hasOwnProperty.call(record, key)) return failure(duplicateFieldMessage(key));', replace: '' },
   { id: 'ts-cef-header-fields-shifted', file: 'src/structuredFamilies.ts', find: 'cef_device_product: parts[1], cef_device_version: parts[2],', replace: 'cef_device_product: parts[2], cef_device_version: parts[1],' },
-  { id: 'ts-cef-dot-excludes-line-separator', file: 'src/structuredFamilies.ts', find: '/^CEF:(\\d+)\\|(.*)$/s.exec(input)', replace: '/^CEF:(\\d+)\\|(.*)$/.exec(input)' },
+  { id: 'ts-cef-dot-excludes-line-separator', file: 'src/structuredFamilies.ts', find: "/^CEF:(\\d+)\\|(.*)$/su.exec(input)", replace: "/^CEF:(\\d+)\\|(.*)$/u.exec(input)" },
   // Re-introduces F-11: header escapes decoded in the extension as well, so a value is decoded twice.
   { id: 'ts-family-extension-decoded-twice', file: 'src/structuredFamilies.ts', find: "if (output.length > splits) { output[output.length - 1] += char; continue; }", replace: '' },
 ];
@@ -693,23 +683,10 @@ async function runFamilyTs(): Promise<{ ok: boolean; summary: string }> {
   return { ok: failures.length === 0 && survivors.length === 0, summary: `family_cases=${cases.length} family_mutants_killed=${TS_FAMILY_MUTANTS.length - survivors.length}/${TS_FAMILY_MUTANTS.length}` };
 }
 
-const RUBY_FAMILY_MUTANTS: Array<Mutant & { family: FamilyCase['family']; target: string }> = [
-  { ...CEF_ESCAPE_CONTRACT_MUTANT, family: 'cef', target: 'family:cef' },
-  ...FAMILY_CONTRACT_MUTANTS.map(mutant => ({ ...mutant, family: (mutant.id.startsWith('contract-cef') ? 'cef' : 'leef') as FamilyCase['family'], target: mutant.id.startsWith('contract-cef') ? 'family:cef' : 'family:leef' })),
-  // The list of extra delimiter code points is a short literal in the compiled Fragment, so this contract fault is injected as text.
-  { id: 'rb-leef-broken-bar-delimiter-dropped', family: 'leef', target: 'family:leef', file: 'fragment', find: 'if [166].include?(code)', replace: 'if [].include?(code)' },
-  { id: 'rb-cef-escapes-not-decoded', family: 'cef', target: 'family:cef', file: 'fragment', find: '.fetch(found[1]) { found } }', replace: '.fetch(found[0]) { found } }' },
-  { id: 'rb-leef-value-cut-at-second-equals', family: 'leef', target: 'family:leef', file: 'fragment', find: 'record[key] = found.post_match', replace: "record[key] = found.post_match.split('=')[0].to_s" },
-  { id: 'rb-leef-empty-attribute-skipped', family: 'leef', target: 'family:leef', file: 'fragment', find: 'extension.split(delimiter, -1).each do |piece|', replace: 'extension.split(delimiter, -1).reject(&:empty?).each do |piece|' },
-  // The version lists are short literals in the compiled Fragment, so these two contract faults are injected as text.
-  { id: 'rb-cef-version-1-supported', family: 'cef', target: 'family:cef', file: 'fragment', find: "raise ArgumentError, 'Unsupported CEF version' unless ['0'].include?(match[1])", replace: "raise ArgumentError, 'Unsupported CEF version' unless ['0','1'].include?(match[1])" },
-  { id: 'rb-leef-version-3-supported', family: 'leef', target: 'family:leef', file: 'fragment', find: "unless match && ['1.0','2.0'].include?(match[1])", replace: "unless match && ['1.0','2.0','3.0'].include?(match[1])" },
-  // Owner policy D-1: a repeated extension field is declined, never overwritten.
-  { id: 'rb-cef-duplicate-field-overwrites', family: 'cef', target: 'family:cef', file: 'fragment', find: "    raise ArgumentError, 'Duplicate CEF extension field' if record.key?(key)\n", replace: '' },
-  { id: 'rb-leef-duplicate-field-overwrites', family: 'leef', target: 'family:leef', file: 'fragment', find: "      raise ArgumentError, 'Duplicate LEEF field' if record.key?(key)\n", replace: '' },
-  { id: 'rb-cef-header-fields-shifted', family: 'cef', target: 'family:cef', file: 'fragment', find: "'cef_device_product' => fields[1],", replace: "'cef_device_product' => fields[2]," },
-  { id: 'rb-cef-extension-decoded-twice', family: 'cef', target: 'family:cef', file: 'fragment', find: "    if parts.length == maximum_splits\n      buffer << character\n    elsif escaped\n", replace: "    if escaped\n" },
-];
+const RUBY_FAMILY_MUTANTS: Array<Mutant & { family: FamilyCase['family']; target: string }> = ([
+  ['cef', 'translation-truthiness-ruby'], ['cef', 'runtime-zero-is-true'],
+  ['leef', 'translation-truthiness-ruby'], ['leef', 'translation-null-is-nil'], ['leef', 'translation-split-ruby'], ['leef', 'runtime-zero-is-true'],
+] as const).map(([family, fault]) => ({ ...translationFault(fault, family), family, target: `family:${family}` }));
 
 function familyFragment(family: FamilyCase['family'], cases: FamilyCase[], forwarder = false): string {
   const paths = [...new Set(cases.filter(item => item.family === family).flatMap(item => Object.keys({ ...item.expect.header, ...item.expect.extension })))];
@@ -830,9 +807,9 @@ function csvTsFailures(extract: CsvExtract, cases: CsvCase[]): string[] {
   return failures;
 }
 const TS_CSV_MUTANTS: Mutant[] = [
-  { id: 'ts-csv-doubled-quote-kept', file: 'src/parser.ts', find: "if (raw[i + 1] === '\"') { token += '\"'; i++; }", replace: "if (raw[i + 1] === '\"') { token += '\"\"'; i++; }" },
-  { id: 'ts-csv-quote-inside-bare-field-accepted', file: 'src/parser.ts', find: "if (state !== 'start') return null;", replace: "if (state !== 'start') { token += c; continue; }" },
-  { id: 'ts-csv-column-count-unchecked', file: 'src/parser.ts', find: 'if (values.length !== names.length) {', replace: 'if (false) {' },
+  { id: 'ts-csv-doubled-quote-kept', file: 'src/grammar/extractEvent.ts', find: "if (raw[i + 1] === '\"') { token += '\"'; i++; }", replace: "if (raw[i + 1] === '\"') { token += '\"\"'; i++; }" },
+  { id: 'ts-csv-quote-inside-bare-field-accepted', file: 'src/grammar/extractEvent.ts', find: "if (state !== 'start') return null;", replace: "if (state !== 'start') { token += c; continue; }" },
+  { id: 'ts-csv-column-count-unchecked', file: 'src/grammar/extractEvent.ts', find: "  if (values.length !== columns.length)\n", replace: "  if (false)\n" },
 ];
 
 /** Loads the whole preview pipeline (src/parser.ts and what it imports) from a private copy with one injected fault. */
@@ -871,11 +848,8 @@ async function runCsvTs(): Promise<{ ok: boolean; summary: string }> {
 }
 
 const RUBY_CSV_MUTANTS: Mutant[] = [
-  // CSV.parse_line alone (even with liberal_parsing: false) takes ""a"" as the quoted field "a"; the RFC 4180 text
-  // rule in front of it is what declines the row. With that rule in place liberal_parsing no longer decides anything.
-  { id: 'rb-csv-rfc4180-rule-removed', file: 'fragment', find: "  raise ArgumentError, 'CSV row is outside RFC 4180' unless parserstudio_csv_rfc4180?(text, separator, strip_edges)\n", replace: '' },
-  { id: 'rb-csv-column-count-unchecked', file: 'fragment', find: "  raise ArgumentError, 'CSV column count mismatch' unless row.length == fields.length\n", replace: '' },
-];
+  'translation-truthiness-ruby', 'runtime-zero-is-true',
+].map(fault => translationFault(fault, 'csv'));
 
 // The product does not combine a declared forwarder with CSV (validation code forwarder_format), so there is
 // no forwarder-family variant to run here.
@@ -905,10 +879,7 @@ function prepareCsvNative(fragments: Record<string, string>, payloadCases: Array
     for (const item of mutantCases) {
       const key = `${mutant.id}:${keyOf(item)}`;
       if (!fragments[key]) {
-        // The compiled Fragment may carry the statement more than once (direct and routed CSV); every copy is mutated.
-        const original = fragments[keyOf(item)]!;
-        if (!original.includes(mutant.find)) throw new Error(`MUTANT_NOT_APPLICABLE ${mutant.id}`);
-        fragments[key] = original.split(mutant.find).join(mutant.replace);
+        fragments[key] = applyMutant(fragments[keyOf(item)]!, mutant);
       }
       payloadCases.push({ id: `${mutant.id}::${item.id}`, fragment: key, raw: item.raw });
     }
@@ -1004,9 +975,9 @@ function jsonTsFailures(extract: JsonExtract, cases: JsonCase[]): string[] {
   return failures;
 }
 const TS_JSON_MUTANTS: Mutant[] = [
-  { id: 'ts-json-repeated-name-accepted', file: 'src/parser.ts', find: 'if(hasDuplicateJsonObjectKeys(raw))', replace: 'if(false)' },
+  { id: 'ts-json-repeated-name-accepted', file: 'src/grammar/extractEvent.ts', find: "if (hasDuplicateJsonObjectKeys(raw)) return failure(", replace: "if (false) return failure(" },
   // Without the guard JSON.parse rounds 12345678901234567890 to 12345678901234567000.
-  { id: 'ts-json-large-integer-rounded', file: 'src/parser.ts', find: 'if(hasUnsafeJsonNumbers(raw))', replace: 'if(false)' },
+  { id: 'ts-json-large-integer-rounded', file: 'src/grammar/extractEvent.ts', find: "if (hasUnsafeJsonNumbers(raw)) return failure(", replace: "if (false) return failure(" },
 ];
 
 async function runJsonTs(): Promise<{ ok: boolean; summary: string }> {
@@ -1026,10 +997,8 @@ async function runJsonTs(): Promise<{ ok: boolean; summary: string }> {
 }
 
 const RUBY_JSON_MUTANTS: Mutant[] = [
-  { id: 'rb-json-repeated-name-accepted', file: 'fragment', find: "  raise ArgumentError, 'Duplicate JSON object key' if parserstudio_json_duplicate_keys?(text)\n", replace: '' },
-  // Re-audit of 2026-11-15: without the RFC 8259 token check the json library's comments, unknown escapes and unpaired high surrogates are back.
-  { id: 'rb-json-library-leniency', file: 'fragment', find: "  raise ArgumentError, 'JSON text is outside RFC 8259' unless parserstudio_json_strict_text?(text)\n", replace: '' },
-];
+  'translation-truthiness-ruby', 'translation-number-to-i', 'runtime-zero-is-true', 'runtime-large-number-not-an-integer',
+].map(fault => translationFault(fault, 'json'));
 
 function jsonFragment(paths: string[]): string {
   const project = sampleProject() as unknown as Record<string, any>;
@@ -1397,7 +1366,7 @@ function differentialProblems(extract: GenericExtract, cases: DifferentialCase[]
 }
 const DIFFERENTIAL_TS_FAULTS: Mutant[] = [
   // JavaScript's trim() also removes NBSP, U+2028 and U+FEFF, which the generated Ruby keeps as data.
-  { id: 'ts-diff-unicode-trim', file: 'src/genericStructural.ts', find: 'const ASCII_EDGE_SPACE=/^[ \\t\\n\\v\\f\\r]+|[ \\t\\n\\v\\f\\r]+$/g;', replace: 'const ASCII_EDGE_SPACE=/^\\s+|\\s+$/g;' },
+  { id: 'ts-diff-unicode-trim', file: 'src/genericStructural.ts', find: "const ASCII_EDGE_SPACE=/^[ \\t\\n\\v\\f\\r]+|[ \\t\\n\\v\\f\\r]+$/gu;", replace: "const ASCII_EDGE_SPACE=/^\\s+|\\s+$/gu;" },
   // The calendar check of the shared timestamp rule is removed: 30 February is accepted by the browser only.
   { id: 'ts-diff-impossible-date-accepted', file: 'src/genericStructural.ts', find: '  if(day>[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][month-1]!)return false;\n  if(Number(match[4])>23', replace: '  if(Number(match[4])>23' },
   // The browser's JSON bodies accept an integer beyond 2^53 again.
@@ -1411,25 +1380,15 @@ const DIFFERENTIAL_TS_FAULTS: Mutant[] = [
   // Re-audit I-4 and I-5: the browser's Generic Structural JSON drops the JSON source contract (8 levels, paired surrogates).
   { id: 'ts-diff-json-source-contract-removed', file: 'src/genericStructural.ts', find: '||!jsonSourceValueValid(value)?undefined:value;', replace: '?undefined:value;' },
 ];
+// The translation and runtime faults that change what a Generic Structural artifact returns for a generated
+// line. The other faults of scripts/verification/translation-faults.ts (number-to-i, regex-line-anchors,
+// runtime-json-null-is-absent, runtime-split-drops-trailing-fields) leave every result of this stage unchanged
+// and are detected by the translation conformance probes, which is where a gate on them belongs.
 const DIFFERENTIAL_RUBY_FAULTS: Mutant[] = [
-  { id: 'rb-diff-calendar-rollover', file: 'fragment', find: "  return false unless d<=[31,leap ? 29 : 28,31,30,31,30,31,31,30,31,30,31][mo-1]\n", replace: '' },
-  { id: 'rb-diff-positional-150-columns', file: 'fragment', find: 'values.length.between?(12, 100)', replace: 'values.length.between?(12, 150)' },
-  { id: 'rb-diff-line-feed-accepted', file: 'fragment', find: "text.match?(/[\\x00\\x0a-\\x0d\\x1c-\\x1f]/)", replace: "text.match?(/[\\x0b\\x0c\\x0d\\x1c-\\x1f]/)" },
-  { id: 'rb-diff-ip-token-library', file: 'fragment', find: "  sides.length == 2 ? groups.length <= 7 : groups.length == 8\n", replace: "  groups.length >= 2\n" },
-  // The 100/400 rule of the leap year is dropped, in the timestamp rule and in the envelope calendar.
-  { id: 'rb-diff-century-leap-year-timestamp', file: 'fragment', find: "  leap=(y%4).zero? && (!(y%100).zero? || (y%400).zero?)\n  valid = y.between?(1,9999)", replace: "  leap=(y%4).zero?\n  valid = y.between?(1,9999)" },
-  { id: 'rb-diff-century-leap-year-envelope', file: 'fragment', find: "  leap=(y%4).zero? && (!(y%100).zero? || (y%400).zero?)\n  return false unless d<=[31,leap ? 29 : 28", replace: "  leap=(y%4).zero?\n  return false unless d<=[31,leap ? 29 : 28" },
-  // Re-audit I-8: the minute of a UTC offset is not bounded (what Time.iso8601 did).
-  { id: 'rb-diff-zone-minute-unbounded', file: 'fragment', find: '  !match.nil? && Integer(match[1], 10) <= 23 && Integer(match[2], 10) <= 59\n', replace: '  !match.nil?\n' },
-  // Re-audit I-2: a fraction of a second after a BSD clock time is refused (what Integer("07.915") did).
-  { id: 'rb-diff-bsd-clock-without-fraction', file: 'fragment', find: "  clock = /\\A(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d{1,9})?\\z/.match(time)\n", replace: "  clock = /\\A(\\d{2}):(\\d{2}):(\\d{2})\\z/.match(time)\n" },
-  // Re-audit I-1 and I-3: an offset without the colon is refused by the envelope's second check.
-  { id: 'rb-diff-zone-colon-required', file: 'fragment', find: 'parserstudio_generic_iso_timestamp!(rfc3339[1], true)', replace: 'parserstudio_generic_iso_timestamp!(rfc3339[1])' },
-  // Re-audit I-6: the json library's leniency (comments, unknown escapes, two high surrogates) is back.
-  { id: 'rb-diff-json-library-leniency', file: 'fragment', find: "  raise ArgumentError, 'JSON text is outside RFC 8259' unless parserstudio_json_strict_text?(text)\n", replace: '' },
-  // CSV.parse_line alone on the positional route: ""a"" is taken as the quoted field "a".
-  { id: 'rb-diff-csv-library-quote-counting', file: 'fragment', find: "  text.match?(rule)\nend\n\ndef parserstudio_unescape(text)", replace: "  true\nend\n\ndef parserstudio_unescape(text)" },
-];
+  'translation-regex-sticky-unanchored', 'translation-truthiness-ruby', 'translation-null-is-nil', 'translation-length-in-characters',
+  'translation-split-ruby', 'runtime-undefined-exported-as-null', 'runtime-empty-string-is-true', 'runtime-zero-is-true',
+  'runtime-large-number-not-an-integer', 'runtime-length-in-characters',
+].map(fault => translationFault(fault, 'diff'));
 
 /**
  * Runs extraction cases on the target Ruby in batches, each batch in a process of its own with only the Fragments
@@ -1641,32 +1600,27 @@ function csvRows(separator: string, seed: number, count: number): string[] {
 }
 const FORMAT_TS_FAULTS: Mutant[] = [
   // The browser strips form feed and vertical tab at the edge of an unquoted CSV field again; the generated parser keeps them.
-  { id: 'ts-format-csv-form-feed-stripped', file: 'src/parser.ts', find: "text.replace(/^[ \\t]+|[ \\t]+$/g,'')", replace: "text.replace(/^[ \\t\\f\\v]+|[ \\t\\f\\v]+$/g,'')" },
+  { id: 'ts-format-csv-form-feed-stripped', file: 'src/grammar/extractEvent.ts', find: "const CSV_FIELD_EDGE = /^[ \\t]+|[ \\t]+$/gu;", replace: "const CSV_FIELD_EDGE = /^[ \\t\\f\\v]+|[ \\t\\f\\v]+$/gu;" },
   // The browser returns one empty field for a row of spaces again.
-  { id: 'ts-format-csv-empty-row-parsed', file: 'src/parser.ts', find: '  if (out.length === 1 && out[0] === null) return null;\n', replace: '' },
+  { id: 'ts-format-csv-empty-row-parsed', file: 'src/grammar/extractEvent.ts', find: "  if (out.length === 1 && out[0] === null) return null;\n", replace: "" },
   // The JSON format drops its source contract (8 levels, paired surrogates) in the browser.
-  { id: 'ts-format-json-source-contract-removed', file: 'src/parser.ts', find: "    if(!jsonSourceValueValid(parsed))\n      return {fields:{},errors:['JSON source exceeds", replace: "    if(false)\n      return {fields:{},errors:['JSON source exceeds" },
+  { id: 'ts-format-json-source-contract-removed', file: 'src/grammar/extractEvent.ts', find: "if (!jsonSourceValueValid(parsed)) return failure(", replace: "if (false) return failure(" },
   // The browser's field-loss check splits tokens at SP and TAB only again: a form feed after the last pair makes a complete event PARTIAL.
   // The browser's mixed router asks for PRI in front of a BSD timestamp again; the generated Ruby does not.
-  { id: 'ts-format-mixed-bsd-envelope-needs-pri', file: 'src/parser.ts', find: "const bsdEnvelope=/^(?:<\\d{1,3}>)?[A-Z][a-z]{2} +\\d{1,2} +\\d{2}:/.test(raw);", replace: "const bsdEnvelope=/^<\\d{1,3}>[A-Z][a-z]{2} +\\d{1,2} +\\d{2}:/.test(raw);" },
+  { id: 'ts-format-mixed-bsd-envelope-needs-pri', file: 'src/grammar/extractEvent.ts', find: "const BSD_ENVELOPE = new RegExp('^(?:<\\\\d{1,3}>)?' + SYSLOG_HEADER_TOKENS.BSD_MONTH", replace: "const BSD_ENVELOPE = new RegExp('^<\\\\d{1,3}>' + SYSLOG_HEADER_TOKENS.BSD_MONTH" },
   // The browser's mixed router takes a key=value message that starts with white space again (it tried every body parser).
-  { id: 'ts-format-mixed-message-prefix-not-exact', file: 'src/parser.ts', find: "/^[A-Za-z_][A-Za-z0-9_.-]*=/.test(message)?'kv' as const:null;", replace: "/^[ \\t]*[A-Za-z_][A-Za-z0-9_.-]*=/.test(message)?'kv' as const:null;" },
+  { id: 'ts-format-mixed-message-prefix-not-exact', file: 'src/grammar/extractEvent.ts', find: "      KEY_VALUE_START.test(message) ? 'kv' as const : null;", replace: "      /^[ \\t]*[A-Za-z_][A-Za-z0-9_.-]*=/u.test(message) ? 'kv' as const : null;" },
   { id: 'ts-format-guard-form-feed-in-value', file: 'src/grammar/parseStatus.ts', find: "ch === ' ' || ch === '\\t' || ch === '\\n' || ch === '\\v' || ch === '\\f' || ch === '\\r';", replace: "ch === ' ' || ch === '\\t';" },
 ];
+// The translation and runtime faults that change what an artifact of these formats returns for a generated line.
+// regex-line-anchors, runtime-undefined-exported-as-null, runtime-large-number-not-an-integer and
+// runtime-split-drops-trailing-fields leave every result of this stage unchanged; the translation conformance
+// probes detect them (scripts/verification/translation-conformance.ts).
 const FORMAT_RUBY_FAULTS: Mutant[] = [
-  // CSV.parse_line alone: ""a"" is taken as the quoted field "a".
-  { id: 'rb-format-csv-library-quote-counting', file: 'fragment', find: "  raise ArgumentError, 'CSV row is outside RFC 4180' unless parserstudio_csv_rfc4180?(text, separator, strip_edges)\n", replace: '' },
-  // An empty JSON object is emitted as an event without fields.
-  { id: 'rb-format-empty-record-emitted', file: 'fragment', find: "  raise ArgumentError, 'No field was extracted' if result.is_a?(Hash) && result.empty?\n", replace: '' },
-  // JSON.parse alone: comments, unknown escapes and two high surrogates are accepted.
-  { id: 'rb-format-json-library-leniency', file: 'fragment', find: "  raise ArgumentError, 'JSON text is outside RFC 8259' unless parserstudio_json_strict_text?(text)\n", replace: '' },
-  // A blank line becomes an event again (a TAB-separated row of empty fields).
-  { id: 'rb-format-blank-event-parsed', file: 'fragment', find: "  raise ArgumentError, 'Blank event' if parserstudio_blank_event?(text)\n", replace: '' },
-  // The blank rule knows ASCII white space only: a TAB-separated row whose only other characters are NBSP is an event again.
-  { id: 'rb-format-blank-event-ascii-only', file: 'fragment', find: "  view.valid_encoding? && view.match?(", replace: "  false && view.match?(" },
-  // The Ruby mixed router takes a message that starts with white space as key=value.
-  { id: 'rb-format-mixed-message-prefix-not-exact', file: 'fragment', find: "    elsif message && message.match?(/\\A[A-Za-z_][A-Za-z0-9_.-]*=/)\n      'rfc5424_kv'", replace: "    elsif message && message.match?(/\\A[ \\t]*[A-Za-z_][A-Za-z0-9_.-]*=/)\n      'rfc5424_kv'" },
-];
+  'translation-regex-sticky-unanchored', 'translation-truthiness-ruby', 'translation-null-is-nil', 'translation-length-in-characters',
+  'translation-split-ruby', 'translation-number-to-i', 'runtime-json-null-is-absent', 'runtime-empty-string-is-true',
+  'runtime-zero-is-true', 'runtime-length-in-characters',
+].map(fault => translationFault(fault, 'format'));
 const FORMAT_STREAM = 401;
 const FORMAT_LINES_PER_CONFIG = 1500;
 const CSV_ROWS_PER_SEPARATOR = 3000;
@@ -1753,9 +1707,21 @@ async function runFormatDifferential(expectedRuby: string): Promise<boolean> {
   // A fault is compiled into every Fragment that holds its target text and run on the cases of those formats,
   // batch by batch, until a batch reports more differences than the product does on the same cases.
   for (const fault of FORMAT_RUBY_FAULTS) {
-    const hit = [...configs.keys()].filter(name => fragments[`format:${name}`]!.split(fault.find).length === 2);
+    // A translation fault is injected into the generated grammar of every Fragment whose grammar it changes.
+    const faulty: Record<string, string> = {};
+    const hit: string[] = [];
+    for (const name of configs.keys()) {
+      const fragment = fragments[`format:${name}`]!;
+      if (fault.file === 'translation') {
+        try { faulty[`${fault.id}@${name}`] = applyMutant(fragment, fault); } catch (error) {
+          if (!String(error).includes('TRANSLATION_FAULT_NOT_APPLICABLE')) throw error;
+          continue;
+        }
+      } else if (fragment.split(fault.find).length === 2) faulty[`${fault.id}@${name}`] = applyMutant(fragment, fault);
+      else continue;
+      hit.push(name);
+    }
     if (hit.length === 0) throw new Error(`MUTANT_NOT_APPLICABLE ${fault.id}: target text is in no compiled Fragment`);
-    const faulty: Record<string, string> = Object.fromEntries(hit.map(name => [`${fault.id}@${name}`, applyMutant(fragments[`format:${name}`]!, fault)]));
     const scopedCases = cases.filter(item => hit.includes(item.config));
     // The row tokenizer is run again only for a fault that lives in the CSV Fragments alone.
     const scopedRows = hit.every(name => name.startsWith('csv-')) ? csvCasesList.filter(item => hit.includes(csvFragment(item.separator).slice('format:'.length))) : [];
@@ -1798,4 +1764,17 @@ if (mode === 'ts') process.exit(await runTs());
 else if (mode === 'native') process.exit(runNative());
 else if (mode === 'python') process.exit(runPython());
 else if (mode === 'differential') process.exit(await runDifferential());
-else { process.stderr.write('usage: semantic-oracle.ts ts|native|python|differential\n'); process.exit(2); }
+else if (mode === 'mutants') {
+  // Applicability of every source mutant: its target text must occur exactly once in its file.
+  const lists: Record<string, Mutant[]> = { TS_MUTANTS, TS_GENERIC_MUTANTS, TS_FAMILY_MUTANTS, TS_CSV_MUTANTS, TS_JSON_MUTANTS, PYTHON_MUTANTS, DIFFERENTIAL_TS_FAULTS, FORMAT_TS_FAULTS };
+  let stale = 0;
+  for (const [name, list] of Object.entries(lists)) for (const mutant of list) {
+    if (['contract', 'translation', 'fragment'].includes(mutant.file)) continue;
+    const path = [join(REPO, mutant.file), join(REPO, 'runtime/multipass', mutant.file)].find(candidate => { try { return statSync(candidate).isFile(); } catch { return false; } });
+    const count = path ? readFileSync(path, 'utf8').split(mutant.find).length - 1 : -1;
+    if (count !== 1) { stale += 1; process.stdout.write(`MUTANT_STALE ${name} ${mutant.id} file=${mutant.file} occurrences=${count} find=${JSON.stringify(mutant.find).slice(0, 150)}\n`); }
+  }
+  process.stdout.write(`MUTANT_APPLICABILITY stale=${stale}\n`);
+  process.exit(stale ? 1 : 0);
+}
+else { process.stderr.write('usage: semantic-oracle.ts ts|native|python|differential|mutants\n'); process.exit(2); }

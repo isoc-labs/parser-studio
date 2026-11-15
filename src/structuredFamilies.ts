@@ -5,6 +5,7 @@ import { parseRfc5424Subset } from './rfc5424Subset';
 import { isSupportedRfc5424Version, matchHeaderRule, matchesHeaderToken } from './grammar/syslogHeader';
 import { matchRfc3164Header } from './grammar/syslogHeader';
 import { parseStrictKeyValues } from './grammar/kvBody';
+import { getTag, matchAt, matchEnd, setTag } from './grammar/primitives';
 import { GRAMMAR_FRAGMENTS, SYSLOG_HEADER_SEMANTICS, SYSLOG_HEADER_TOKENS } from './grammar/syslogHeaderGrammar.generated';
 import {extractPortableRegexFields} from './portableRegexExtraction';
 /* Browser-only structural subset of RFC5424, CEF and LEEF.
@@ -18,9 +19,8 @@ const failure = (message: string): StructuredExtraction => ({ fields: {}, errors
 
 // Which body dialect an extraction actually parsed. Kept beside the result instead of inside it so the
 // result shape (fields, errors) stays what every consumer and test already expects.
-const BODY_KIND = new WeakMap<object, string>();
 const withBodyKind = <T extends StructuredExtraction>(extraction: T, kind: string | undefined): T => {
-  if (kind !== undefined && extraction.errors.length === 0) BODY_KIND.set(extraction, kind);
+  if (kind !== undefined && extraction.errors.length === 0) setTag(extraction, 'bodyKind', kind);
   return extraction;
 };
 /**
@@ -29,23 +29,22 @@ const withBodyKind = <T extends StructuredExtraction>(extraction: T, kind: strin
  * that happens to be called syslog_hostname is data (PR #311 review). A registered symbol, so that a second
  * copy of this module (the oracle's fault-injection copies) marks results the same way.
  */
-export const RFC3164_HEADER_RESULT = Symbol.for('parserstudio.rfc3164HeaderResult');
 /** 'kv', 'json', 'cef', 'leef', 'regex' or 'raw' when the extractor resolved a body dialect for this result (also for `auto`). */
-export const bodyKindOf = (extraction: StructuredExtraction): string | undefined => BODY_KIND.get(extraction);
+export const bodyKindOf = (extraction: StructuredExtraction): string | undefined => getTag(extraction, 'bodyKind') as string | undefined;
 
 export function detectStructuredFamily(input: string): StructuredFamily | null {
-  if (/^CEF:\d+\|/.test(input)) return 'cef';
-  if (/^LEEF:(?:1\.0|2\.0)\|/.test(input)) return 'leef';
+  if (/^CEF:\d+\|/u.test(input)) return 'cef';
+  if (/^LEEF:(?:1\.0|2\.0)\|/u.test(input)) return 'leef';
   // An RFC 5424 shaped header is labelled RFC 5424 only for a VERSION the contract supports.
-  const ietf = /^<\d{1,3}>([1-9]\d?) [^ \t\n\r\f\v]+ [^ \t\n\r\f\v]+ [^ \t\n\r\f\v]+ /.exec(input);
+  const ietf = /^<\d{1,3}>([1-9]\d?) [^ \t\n\r\f\v]+ [^ \t\n\r\f\v]+ [^ \t\n\r\f\v]+ /u.exec(input);
   if (ietf && isSupportedRfc5424Version(ietf[1]!)) return 'syslog_rfc5424';
-  if (/^<\d{1,3}>[A-Z][a-z]{2} +\d{1,2} +\d{2}:\d{2}:\d{2} /.test(input)) return 'syslog_rfc3164';
+  if (/^<\d{1,3}>[A-Z][a-z]{2} +\d{1,2} +\d{2}:\d{2}:\d{2} /u.test(input)) return 'syslog_rfc3164';
   // Bounded BSD security envelope without TAG: timestamp, an optional host
   // and then an explicit structured body. Free-form prose is excluded. The
   // header grammar comes from contracts/syslog-header-grammar.v1.json.
   // Detection is syntax only on the first line, like the PRI check above;
   // calendar and PRI range errors are reported by extraction.
-  const first = input.split(/\r?\n/, 1)[0] ?? '';
+  const first = input.split(/\r?\n/u, 1)[0] ?? '';
   const bsd = matchHeaderRule('rfc3164_tagged', first) ? null
     : matchHeaderRule('rfc3164_tagless', first) ?? matchHeaderRule('rfc3164_hostless', first);
   if (bsd && matchesHeaderToken('STRUCTURED_BODY', bsd.message ?? ''))
@@ -102,15 +101,15 @@ export function strictKeyValues(input: string): StructuredExtraction {
 // contract; the generated Ruby and the Python preview read the same values.
 // CEF and LEEF read their grammar from the shared contract (contracts/syslog-header-grammar.v1.json): the
 // generated Ruby and the Python preview compile the same fragments, so the three scanners have one control flow.
-const CEF_PAIR=new RegExp(GRAMMAR_FRAGMENTS.cef_pair.source,'y');
-const CEF_ESCAPE=new RegExp(SYSLOG_HEADER_TOKENS.CEF_ESCAPE,'g');
+const CEF_PAIR=new RegExp(GRAMMAR_FRAGMENTS.cef_pair.source,'yu');
+const CEF_ESCAPE=new RegExp(SYSLOG_HEADER_TOKENS.CEF_ESCAPE,'gu');
 const CEF_ESCAPES:Readonly<Record<string,string>>=SYSLOG_HEADER_SEMANTICS.cefExtensionEscapes;
 const CEF_VERSIONS:readonly string[]=SYSLOG_HEADER_SEMANTICS.cefSupportedVersions;
 const LEEF_VERSIONS:readonly string[]=SYSLOG_HEADER_SEMANTICS.leefSupportedVersions;
 const LEEF_DELIMITER_VERSIONS:readonly string[]=SYSLOG_HEADER_SEMANTICS.leefDelimiterFieldVersions;
-const LEEF_DELIMITER=new RegExp(GRAMMAR_FRAGMENTS.leef_delimiter.source,'y');
+const LEEF_DELIMITER=new RegExp(GRAMMAR_FRAGMENTS.leef_delimiter.source,'yu');
 const LEEF_EXTRA_DELIMITERS:readonly number[]=SYSLOG_HEADER_SEMANTICS.leefDelimiterExtraCodePoints;
-const LEEF_ATTRIBUTE=new RegExp(GRAMMAR_FRAGMENTS.leef_attribute.source,'y');
+const LEEF_ATTRIBUTE=new RegExp(GRAMMAR_FRAGMENTS.leef_attribute.source,'yu');
 const FORBIDDEN_KEYS:readonly string[]=SYSLOG_HEADER_SEMANTICS.kvForbiddenKeys;
 /** A backslash pair listed in the contract is decoded; any other pair is kept as written. */
 const decodeCefValue=(raw:string):string=>raw.replace(CEF_ESCAPE,pair=>
@@ -119,15 +118,14 @@ function cefExtensionValues(input:string):StructuredExtraction{
   const values:Record<string,unknown>=Object.create(null);
   let cursor=0,count=0;
   for(;;){
-    CEF_PAIR.lastIndex=cursor;
-    const match=CEF_PAIR.exec(input);
+    const match=matchAt(CEF_PAIR,input,cursor);
     if(!match)break;
     if(count++>=SYSLOG_HEADER_SEMANTICS.cefMaxExtensionFields)return failure('CEF extension field limit exceeded');
     const key=match.groups!.key!;
     if(FORBIDDEN_KEYS.includes(key))return failure('Unsupported CEF extension field');
     if(Object.prototype.hasOwnProperty.call(values,key))return failure(duplicateFieldMessage(key));
     values[key]=decodeCefValue(match.groups!.value!);
-    cursor=CEF_PAIR.lastIndex;
+    cursor=matchEnd(match);
   }
   // Text the pair grammar does not account for (a broken key boundary, a backslash that escapes nothing).
   if(cursor!==input.length)return failure('Unsupported CEF extension key boundary');
@@ -141,16 +139,14 @@ function cefExtensionValues(input:string):StructuredExtraction{
  */
 function leefDelimiter(field:string|undefined):string|null{
   if(field===undefined)return SYSLOG_HEADER_SEMANTICS.leefDefaultDelimiter;
-  LEEF_DELIMITER.lastIndex=0;
-  const match=LEEF_DELIMITER.exec(field);
+  const match=matchAt(LEEF_DELIMITER,field,0);
   if(match?.groups!.literal!==undefined)return match.groups!.literal;
   // Hexadecimal spelling, or one literal character from the contract list outside printable ASCII.
   const code=match?parseInt(match.groups!.hex!,16):([...field].length===1?field.codePointAt(0)!:-1);
   if(LEEF_EXTRA_DELIMITERS.includes(code))return String.fromCharCode(code);
   if(!match||code>126)return null;
   const named=String.fromCharCode(code);
-  LEEF_DELIMITER.lastIndex=0;
-  const valid=LEEF_DELIMITER.exec(named);
+  const valid=matchAt(LEEF_DELIMITER,named,0);
   return valid&&valid.groups!.literal!==undefined?named:null;
 }
 
@@ -178,10 +174,10 @@ function boundedJsonObject(text: string): StructuredExtraction {
 // A beginner may infer the bounded body dialect from the current sample,
 // but only a subsequent explicit project format is eligible for compilation.
 function deterministicBody(text:string):'raw'|'json'|'kv'|'cef'|'leef'{
- if(/^CEF:/.test(text))return 'cef';
- if(/^LEEF:/.test(text))return 'leef';
+ if(/^CEF:/u.test(text))return 'cef';
+ if(/^LEEF:/u.test(text))return 'leef';
  if(text.startsWith('{'))return 'json';
- if(/^[A-Za-z_][A-Za-z0-9_.-]*=/.test(text))return 'kv';
+ if(/^[A-Za-z_][A-Za-z0-9_.-]*=/u.test(text))return 'kv';
  return 'raw';
 }
 function regexBody(message:string,pattern:string|undefined):StructuredExtraction{
@@ -218,7 +214,7 @@ function parseRfc3164Strict(input:string,choice:'raw'|'json'|'kv'|'cef'|'leef'|'
  const body=parsedBody(message,mode,regexPattern);
  if(body.errors.length)return body;
  const result=withBodyKind({fields:{...fields,...body.fields},errors:[]},bodyKindOf(body));
- Object.defineProperty(result,RFC3164_HEADER_RESULT,{value:true});
+ setTag(result,'rfc3164Header',true);
  return result;
 }
 
@@ -250,7 +246,7 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
   }
   if (format === 'cef') {
     // dotAll: a value may hold U+2028/U+2029, which '.' alone excludes in ECMAScript but not in Ruby or Python.
-    const match = /^CEF:(\d+)\|(.*)$/s.exec(input);
+    const match = /^CEF:(\d+)\|(.*)$/su.exec(input);
     if (!match || !CEF_VERSIONS.includes(match[1]!)) return failure('Only standalone CEF version zero events are supported');
     const parts = splitEscaped(match[2], '|', 6);
     if (!parts) return failure('CEF requires six header fields and an extension slot');
@@ -261,7 +257,7 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
     };
     // An extension slot that holds nothing but ASCII white space is empty, as in the generated Ruby (strip).
     // trim() would also call U+2028 or NBSP empty and silently drop them; they are extension text.
-    if (/[^ \t\n\v\f\r\0]/.test(parts[6])) {
+    if (/[^ \t\n\v\f\r\0]/u.test(parts[6])) {
       const extension = cefExtensionValues(parts[6]);
       if (extension.errors.length) return extension;
       for (const [key, value] of Object.entries(extension.fields)) {
@@ -271,7 +267,7 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
     }
     return { fields: record, errors: [] };
   }
-  const match = /^LEEF:([0-9.]+)\|(.*)$/s.exec(input);
+  const match = /^LEEF:([0-9.]+)\|(.*)$/su.exec(input);
   if (!match || !LEEF_VERSIONS.includes(match[1]!)) return failure('Only standalone LEEF 1.0 or 2.0 events are supported');
   const carriesDelimiter = LEEF_DELIMITER_VERSIONS.includes(match[1]!);
   const headerFields = SYSLOG_HEADER_SEMANTICS.leefHeaderFields;
@@ -285,12 +281,11 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
   });
   if (parts[parts.length - 1]) {
     for (const part of parts[parts.length - 1].split(delimiter)) {
-      LEEF_ATTRIBUTE.lastIndex = 0;
-      const attribute = LEEF_ATTRIBUTE.exec(part);
+      const attribute = matchAt(LEEF_ATTRIBUTE, part, 0);
       const key = attribute?.groups!.key;
-      if (key === undefined || FORBIDDEN_KEYS.includes(key)) return failure('Unsupported LEEF extension token');
+      if (!attribute || key === undefined || FORBIDDEN_KEYS.includes(key)) return failure('Unsupported LEEF extension token');
       if (Object.prototype.hasOwnProperty.call(record, key)) return failure(duplicateFieldMessage(key));
-      record[key] = part.slice(LEEF_ATTRIBUTE.lastIndex);
+      record[key] = part.slice(matchEnd(attribute));
     }
   }
   return { fields: record, errors: [] };

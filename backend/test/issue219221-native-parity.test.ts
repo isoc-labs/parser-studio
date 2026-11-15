@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {compilePair} from '../src/compiler.js';
@@ -24,7 +25,7 @@ function native(project:ParserProject,raws:string[]):Record<string,unknown>[]{
   // Large generated Ruby fragments can exceed OS argument limits when passed
   // via ruby -e. Keep the fixed script short; send the fragment via stdin.
   assert.ok(code.length < 4096, 'Ruby -e argument must remain bounded');
-  const response=spawnSync('ruby',['-e',code],{
+  const response=spawnSync('ruby',rubyE(code),{
     input:JSON.stringify({fragment:Buffer.from(ruby).toString('base64'),lines:raws}),
     encoding:'utf8',timeout:20000,maxBuffer:4*1024*1024});
   assert.equal(response.status,0,response.stderr||String(response.error));

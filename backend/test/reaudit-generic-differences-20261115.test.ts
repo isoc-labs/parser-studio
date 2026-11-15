@@ -3,6 +3,7 @@
 // recognizer admits them (UTC offset without colon, Z, fraction of a second), and lines it parsed although they
 // are not JSON (comment, unknown escape, two high surrogates) or carry an offset minute of 60.
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import test from 'node:test';
@@ -35,7 +36,7 @@ function native(source:string,method:string,lines:string[]):string[]{
     "m=input.fetch('method').to_sym",
     "out=input.fetch('lines').map{|line| begin; 'OK '+JSON.generate(parser.send(m,line)); rescue ArgumentError, CSV::MalformedCSVError, JSON::ParserError => e; 'DECLINED '+e.message; end}",
     'STDOUT.write(JSON.generate(out))'].join('\n');
-  const run=spawnSync('ruby',['-e',code],{input:JSON.stringify({fragment:source,method,lines}),encoding:'utf8',timeout:20000,maxBuffer:64*1024*1024});
+  const run=spawnSync('ruby',rubyE(code),{input:JSON.stringify({fragment:source,method,lines}),encoding:'utf8',timeout:20000,maxBuffer:64*1024*1024});
   assert.equal(run.status,0,run.stderr||String(run.error));
   return JSON.parse(run.stdout) as string[];
 }
@@ -46,7 +47,7 @@ test('every listed golden exists',()=>{assert.deepEqual(cases.map(item=>item.id)
 
 test('Generic Structural: the generated Ruby reads the re-audit lines as the goldens say',{skip:!rubyAvailable},()=>{
   for(const extraction of [{format:'generic_structural'},{format:'generic_structural',genericStructuralFamilyGrammar:'dedicated'}]){
-    const results=native(fragment(extraction),'parserstudio_generic_structural',cases.map(item=>item.raw));
+    const results=native(fragment(extraction),'parserstudio_extract',cases.map(item=>item.raw));
     cases.forEach((item,index)=>{
       const result=results[index]!;
       if(item.expect.reject){assert.match(result,/^DECLINED /,item.id+' -> '+result.slice(0,160));return;}
@@ -61,7 +62,7 @@ test('JSON format: text outside RFC 8259 is declined, not repaired by the json l
   const B='\\';
   const lines=['{"a":1,"b":"x"}','{"s":"'+B+'ud83d'+B+'ude00 '+B+'u00e9 '+B+'n '+B+'/ '+B+'" '+B+B+'"}',
     '{"a":1 /* c */}','{"a":1} // c','{"a":"'+B+'x41"}','{"a":"'+B+'q"}','{"a":"'+B+'ud83d'+B+'ud83d"}','{"a":"'+B+'ud83d"}','{"a":"'+B+'ude00"}','{"'+B+'ud83d":1}'];
-  const results=native(fragment({format:'json'}),'parserstudio_json_object',lines);
+  const results=native(fragment({format:'json'}),'parserstudio_extract',lines);
   assert.match(results[0]!,/^OK /);
   assert.equal(results[1],'OK '+JSON.stringify({s:'\u{1F600} é \n / " \\'}));
   for(let index=2;index<lines.length;index+=1)assert.match(results[index]!,/^DECLINED /,lines[index]+' -> '+results[index]!.slice(0,120));
@@ -85,14 +86,14 @@ test('CSV format: a row outside RFC 4180 is declined before the library sees it'
 // depend on the interpreter: it strips field edges itself and never hands a strip option to the library.
 test('CSV format: the compiled parser strips field edges itself, on every Ruby',()=>{
   const source=fragment({format:'csv',csvDelimiter:',',csvColumns:['c1','c2','c3']});
-  assert.match(source,/input=strip_edges \? parserstudio_csv_strip_field_edges\(text,separator\) : text/);
+  assert.doesNotMatch(source,/CSV\.parse_line/);
   assert.doesNotMatch(source,/^[^#\n]*strip: *(?:true|strip_edges)/m);
   assert.doesNotMatch(source,/CSV::DEFAULT_OPTIONS/);
 });
 
 test('Generic Structural positional CSV: the same RFC 4180 rule',{skip:!rubyAvailable},()=>{
   const head='<14>Oct 16 15:44:21 PA01 1,2026/10/16 15:44:21,012345678901,TRAFFIC,end,2561,2026/10/16 15:44:20,10.0.0.1,198.51.100.1,203.0.113.1,198.51.100.1,';
-  const results=native(fragment({format:'generic_structural'}),'parserstudio_generic_structural',[head+'"a,b"',head+'""a""',head+'"""a"""']);
+  const results=native(fragment({format:'generic_structural'}),'parserstudio_extract',[head+'"a,b"',head+'""a""',head+'"""a"""']);
   assert.match(results[0]!,/^OK \{/);
   assert.match(results[1]!,/^DECLINED /,results[1]!.slice(0,160));
   assert.match(results[2]!,/^OK \{/);

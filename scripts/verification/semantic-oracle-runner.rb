@@ -81,7 +81,7 @@ input['cases'].each do |item|
       nil
     end
     begin
-      results[id] = { 'value' => oracle_plain(parser.send(:parserstudio_generic_structural, item['raw'].to_s)) }
+      results[id] = { 'value' => oracle_plain(parser.send(:parserstudio_extract, item['raw'].to_s)) }
     rescue ArgumentError => e
       results[id] = { 'declined' => e.message }
     rescue StandardError => e
@@ -100,7 +100,9 @@ input['cases'].each do |item|
     end
     begin
       value = if item['call'] == 'csv_tokens'
-        parser.send(:parserstudio_csv_parse_line, item['raw'].to_s, item['separator'].to_s, item['separator'].to_s != "\t")
+        row = parser.send(:psg_tokenize_csv_row, parser.send(:psg_text, item['raw'].to_s), item['separator'].to_s)
+        raise ArgumentError, 'Not a CSV row' if row.equal?(:psg_null)
+        parser.send(:psg_export, row)
       else
         parser.send(:parserstudio_extract, item['raw'].to_s)
       end
@@ -135,4 +137,13 @@ if input['grammar'].is_a?(Hash)
   end
 end
 
+# A result that JSON cannot carry (a non-finite number) is a defect of the artifact: it is reported for its
+# case, like an exception, and does not abort the run.
+results.each do |id, value|
+  begin
+    JSON.generate(value)
+  rescue JSON::GeneratorError
+    results[id] = { 'raised' => 'UnserializableResult' }
+  end
+end
 puts JSON.generate('ruby' => RUBY_VERSION, 'results' => results, 'grammar' => grammar)

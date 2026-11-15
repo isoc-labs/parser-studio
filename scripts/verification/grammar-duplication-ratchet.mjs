@@ -20,8 +20,8 @@ const ROOT = resolve('.');
 const BASELINE = 'contracts/grammar-duplication-baseline.v1.json';
 const SCAN_ROOTS = ['src', 'backend/src', 'backend/templates', 'runtime/multipass'];
 const GENERATED = new Set(['src/grammar/syslogHeaderGrammar.generated.ts', 'backend/src/syslog-header-grammar.generated.ts', 'runtime/multipass/syslog_header_grammar_generated.py',
-  // Derived from ruby-fragment.rb.tpl by scripts/grammar/generate-forwarder-template.mjs; never edited by hand.
-  'backend/templates/ruby-forwarder-family.rb.tpl']);
+  // The Ruby grammar, generated from the browser grammar by scripts/grammar/ts2rb; never edited by hand.
+  'backend/templates/grammar-core.generated.rb.tpl', 'backend/templates/grammar-generic.generated.rb.tpl']);
 /** Literal source text that identifies a hand-written copy of a contract token. */
 export const SIGNATURES = Object.freeze({
   'hostname-printable-ascii-255': '[!-~]{1,255}',

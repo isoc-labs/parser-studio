@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {sampleProject} from './fixture.js';
@@ -93,7 +94,7 @@ test('Ruby native parser matches six independent synthetic golden records across
   ].join('\n');
   const input=[...originals,{event_type:'unreviewed',src_ip:'203.0.113.10',token:'SECRET_DO_NOT_ECHO'}]
     .map(item=>JSON.stringify(item));
-  const result=spawnSync('ruby',['-e',program],{encoding:'utf8',
+  const result=spawnSync('ruby',rubyE(program),{encoding:'utf8',
     input:JSON.stringify(input),timeout:15000,maxBuffer:1024*1024});
   assert.equal(result.status,0,result.stderr||String(result.error));
   const output=JSON.parse(result.stdout) as Array<Record<string,unknown>>;

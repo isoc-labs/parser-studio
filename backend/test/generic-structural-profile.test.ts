@@ -1,24 +1,20 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {sampleProject} from './fixture.js';
 import {validateProject} from '../src/validate.js';
-import {compilePair,injectHeaderGrammar} from '../src/compiler.js';
+import {compilePair} from '../src/compiler.js';
+import {grammarSource,PROBE_ENTRIES} from './template-fixture.js';
 import {BACKEND_CAPABILITIES} from '../src/capabilities.js';
 
 const fixture=JSON.parse(readFileSync(new URL('../../tests/fixtures/roadmap-syslog-prefix-kv-20261020.json',import.meta.url),'utf8')) as {
   positive:Array<{name:string;raw:string;prefix:string;kv:Record<string,string>}>;
   negative:Array<{name:string;raw:string}>;
 };
-// The helper is never shipped alone: it is compiled into the Fragment and calls the Fragment's shared text
-// rules (the RFC 4180 row rule in front of CSV.parse_line). The same source text is loaded here.
-const fragmentSource=injectHeaderGrammar(readFileSync(new URL('../templates/ruby-fragment.rb.tpl',import.meta.url),'utf8'));
-const csvRuleStart=fragmentSource.indexOf('def parserstudio_csv_rfc4180?(text, separator, padded)');
-const csvRuleEnd=fragmentSource.indexOf('\ndef parserstudio_unescape(text)',csvRuleStart);
-assert.ok(csvRuleStart>=0&&csvRuleEnd>csvRuleStart,'The RFC 4180 row rule must remain in the compiled Fragment');
-const helper=fragmentSource.slice(csvRuleStart,csvRuleEnd)+'\n'+
-  injectHeaderGrammar(readFileSync(new URL('../templates/generic-structural-helper.rb.tpl',import.meta.url),'utf8'));
+// The generated grammar itself, with the test-only route aliases.
+const helper=grammarSource()+PROBE_ENTRIES;
 const ruby=process.env.PARSER_NATIVE_RUBY||'ruby';
 function runRuby(raw:string,profile?:string):{ok:boolean;fields?:Record<string,unknown>}{
   const source=["require 'json'","require 'csv'","require 'base64'","require 'ipaddr'","require 'time'",helper,
@@ -26,7 +22,7 @@ function runRuby(raw:string,profile?:string):{ok:boolean;fields?:Record<string,u
     "begin","  fields=parserstudio_generic_structural(input.fetch('raw'))",
     "  STDOUT.write(JSON.generate({'ok'=>true,'fields'=>fields}))",
     "rescue ArgumentError","  STDOUT.write(JSON.generate({'ok'=>false}))","end"].join('\n');
-  const out=spawnSync(ruby,['-e',source],{input:JSON.stringify({raw,profile}),encoding:'utf8',timeout:5000,maxBuffer:1024*1024});
+  const out=spawnSync(ruby,rubyE(source),{input:JSON.stringify({raw,profile}),encoding:'utf8',timeout:5000,maxBuffer:1024*1024});
   assert.equal(out.status,0,out.stderr||String(out.error));
   return JSON.parse(out.stdout);
 }

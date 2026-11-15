@@ -16,34 +16,29 @@ import {
   type SyslogHeaderRuleName,
 } from './syslogHeaderGrammar.generated';
 
+import { matchAt } from './primitives';
+
 export type HeaderCaptures = Readonly<Record<string, string | undefined>>;
 
-const compiled = new Map<SyslogHeaderRuleName, RegExp>();
+// Every contract rule and token, compiled once. The generated Ruby holds the same table.
+const COMPILED_RULES: Readonly<Record<string, RegExp>> = Object.fromEntries(
+  Object.entries(SYSLOG_HEADER_RULES).map(([name, rule]) => [name, new RegExp(rule.source,'u')]));
 
 /** Whole-line match of one contract rule; captures are returned by contract name. */
 export function matchHeaderRule(rule: SyslogHeaderRuleName, text: string): HeaderCaptures | null {
-  let expression = compiled.get(rule);
-  if (!expression) {
-    expression = new RegExp(SYSLOG_HEADER_RULES[rule].source);
-    compiled.set(rule, expression);
-  }
-  const match = expression.exec(text);
+  const match = COMPILED_RULES[rule]!.exec(text);
   if (!match) return null;
   const captures: Record<string, string | undefined> = {};
   for (const name of SYSLOG_HEADER_RULES[rule].captures) captures[name] = match.groups?.[name];
   return captures;
 }
 
-const compiledTokens = new Map<string, RegExp>();
+const COMPILED_TOKENS: Readonly<Record<string, RegExp>> = Object.fromEntries(
+  Object.entries(SYSLOG_HEADER_TOKENS).map(([name, source]) => [name, new RegExp('^(?:' + source + ')$','u')]));
 
 /** True when the whole text is one contract token (for example a STRUCTURED_BODY). */
 export function matchesHeaderToken(token: keyof typeof SYSLOG_HEADER_TOKENS, text: string): boolean {
-  let expression = compiledTokens.get(token);
-  if (!expression) {
-    expression = new RegExp('^(?:' + SYSLOG_HEADER_TOKENS[token] + ')$');
-    compiledTokens.set(token, expression);
-  }
-  return expression.test(text);
+  return COMPILED_TOKENS[token]!.test(text);
 }
 
 export type Rfc3164Rule = (typeof SYSLOG_HEADER_ALTERNATIVES.rfc3164)[number];
@@ -115,7 +110,7 @@ export function isSupportedRfc5424Version(version: string): boolean {
   return (SYSLOG_HEADER_SEMANTICS.rfc5424SupportedVersions as readonly string[]).includes(version);
 }
 
-const VERSION_HEAD = new RegExp(GRAMMAR_FRAGMENTS.rfc5424_version_head.source, 'y');
+const VERSION_HEAD = new RegExp(GRAMMAR_FRAGMENTS.rfc5424_version_head.source, 'yu');
 
 /**
  * VERSION of a line that claims to be RFC 5424 (<PRI>VERSION SP, then NILVALUE
@@ -124,9 +119,8 @@ const VERSION_HEAD = new RegExp(GRAMMAR_FRAGMENTS.rfc5424_version_head.source, '
  * its original text is kept and it is reported as unsupported.
  */
 export function unsupportedRfc5424Version(text: string): string | null {
-  VERSION_HEAD.lastIndex = 0;
-  const match = VERSION_HEAD.exec(text);
-  if (!match || match.index !== 0) return null;
+  const match = matchAt(VERSION_HEAD, text, 0);
+  if (!match) return null;
   const version = match.groups!.version!;
   return isSupportedRfc5424Version(version) ? null : version;
 }

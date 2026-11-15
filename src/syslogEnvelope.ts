@@ -56,14 +56,14 @@ function validCalendarDate(year:number,month:number,day:number):boolean{
 }
 
 function validClock(value:string):boolean{
-  const match=/^(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?$/.exec(value);
+  const match=/^(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?$/u.exec(value);
   if(!match)return false;
   return Number(match[1])<=23&&Number(match[2])<=59&&Number(match[3])<=59;
 }
 
 function validZone(value:string):boolean{
   if(value==='Z')return true;
-  const match=/^([+-])(\d{2}):?(\d{2})$/.exec(value);
+  const match=/^([+-])(\d{2}):?(\d{2})$/u.exec(value);
   return !!match&&Number(match[2])<=23&&Number(match[3])<=59;
 }
 
@@ -73,7 +73,7 @@ function validBsdTimestamp(month:string,dayText:string,time:string):boolean{
 }
 
 function validIsoTimestamp(value:string,requireZone:boolean):boolean{
-  const match=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)(Z|[+-]\d{2}:?\d{2})?$/.exec(value);
+  const match=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)(Z|[+-]\d{2}:?\d{2})?$/u.exec(value);
   if(!match)return false;
   if(requireZone&&!match[5])return false;
   return validCalendarDate(Number(match[1]),Number(match[2]),Number(match[3]))&&
@@ -82,13 +82,13 @@ function validIsoTimestamp(value:string,requireZone:boolean):boolean{
 
 function decomposePri(priText:string|undefined):Pick<SyslogEnvelope,'pri'|'facility'|'severity'>|null{
   if(priText===undefined)return {};
-  if(!/^\d{1,3}$/.test(priText))return null;
+  if(!/^\d{1,3}$/u.test(priText))return null;
   const pri=Number(priText);
   if(!Number.isInteger(pri)||pri<0||pri>191)return null;
   return {pri:priText,facility:Math.floor(pri/8),severity:pri%8};
 }
 
-const RX_SPLIT_PRI=new RegExp(String.raw`^<(${T.PRI})>`);
+const RX_SPLIT_PRI=new RegExp(String.raw`^<(${T.PRI})>`,'u');
 function splitPri(raw:string):{pri?:string;rest:string}|null{
   const match=RX_SPLIT_PRI.exec(raw);
   if(!match)return {rest:raw};
@@ -100,7 +100,7 @@ function splitPri(raw:string):{pri?:string;rest:string}|null{
 function fieldTokenValid(value:string,max:number):boolean{
   return value==='-'||(
     value.length>=1&&value.length<=max&&
-    /^[\x21-\x7e]+$/.test(value)
+    /^[\x21-\x7e]+$/u.test(value)
   );
 }
 
@@ -121,12 +121,12 @@ function parseStructuredData(input:string):{structuredData:string;message:string
 // which the Ruby export (/m) reads as ordinary message text.
 function decorateMessage(envelope:SyslogEnvelope):SyslogEnvelope{
   const body=envelope.message;
-  const tag=/^([A-Za-z0-9_.@\/-]{1,128})(?:\[(\d{1,10})\])?:[ \t]*(.*)$/s.exec(body);
+  const tag=/^([A-Za-z0-9_.@\/-]{1,128})(?:\[(\d{1,10})\])?:[ \t]*(.*)$/su.exec(body);
   if(!tag||tag[1]==='CEF'||tag[1]==='LEEF')return envelope;
   return {...envelope,appname:tag[1],...(tag[2]?{procid:tag[2]}:{}),message:tag[3]!};
 }
 
-const RX_PARSE_RFC5424=new RegExp(String.raw`^(${T.RFC5424_VERSION}) +([^ ]+) +([^ ]+) +([^ ]+) +([^ ]+) +([^ ]+) +(.*)$`,'s');
+const RX_PARSE_RFC5424=new RegExp(String.raw`^(${T.RFC5424_VERSION}) +([^ ]+) +([^ ]+) +([^ ]+) +([^ ]+) +([^ ]+) +(.*)$`,'su');
 function parseRfc5424(pri:string|undefined,rest:string):SyslogEnvelope|null{
   if(pri===undefined)return null;
   const match=RX_PARSE_RFC5424.exec(rest);
@@ -159,9 +159,9 @@ function withPri(pri:string|undefined):Pick<SyslogEnvelope,'pri'|'facility'|'sev
   return decomposePri(pri)??{};
 }
 
-const RX_PARSE_BSD_YEAR_BEFORE=new RegExp(String.raw`^(${T.BSD_MONTH}) +(\d{1,2}) +(\d{4}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$`,'s');
-const RX_PARSE_BSD_YEAR_AFTER=new RegExp(String.raw`^(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +(\d{4}) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$`,'s');
-const RX_PARSE_BSD_CLASSIC=new RegExp(String.raw`^(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$`,'s');
+const RX_PARSE_BSD_YEAR_BEFORE=new RegExp(String.raw`^(${T.BSD_MONTH}) +(\d{1,2}) +(\d{4}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$`,'su');
+const RX_PARSE_BSD_YEAR_AFTER=new RegExp(String.raw`^(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +(\d{4}) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$`,'su');
+const RX_PARSE_BSD_CLASSIC=new RegExp(String.raw`^(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$`,'su');
 function parseBsd(pri:string|undefined,rest:string):SyslogEnvelope|null{
   const yearBefore=RX_PARSE_BSD_YEAR_BEFORE.exec(rest);
   if(yearBefore&&validBsdTimestamp(yearBefore[1]!,yearBefore[2]!,yearBefore[4]!)&&
@@ -194,7 +194,7 @@ function parseBsd(pri:string|undefined,rest:string):SyslogEnvelope|null{
 }
 
 function parseRfc3339Loose(pri:string|undefined,rest:string):SyslogEnvelope|null{
-  const match=/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})?) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$/s.exec(rest);
+  const match=/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})?) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$/su.exec(rest);
   if(!match||!validIsoTimestamp(match[1]!,false))return null;
   return decorateMessage({
     variant:'rfc3339_loose',confidence:'strong',...withPri(pri),
@@ -202,12 +202,11 @@ function parseRfc3339Loose(pri:string|undefined,rest:string):SyslogEnvelope|null
   });
 }
 
+const SEPARATED_DATE_REST=' +(\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?)(?: +(Z|[+-]\\d{2}:?\\d{2}))? +([^ \\t\\n\\r\\f\\v]{1,255})(?: +(.*))?$';
+const RX_SLASH_DATE=new RegExp('^(\\d{4})\\/(\\d{2})\\/(\\d{2})'+SEPARATED_DATE_REST,'su');
+const RX_DASH_DATE=new RegExp('^(\\d{4})-(\\d{2})-(\\d{2})'+SEPARATED_DATE_REST,'su');
 function parseSeparatedDate(pri:string|undefined,rest:string,slash:boolean):SyslogEnvelope|null{
-  const datePattern=slash?'(\\d{4})\\/(\\d{2})\\/(\\d{2})':'(\\d{4})-(\\d{2})-(\\d{2})';
-  const match=new RegExp(
-    '^'+datePattern+' +(\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?)'+
-    '(?: +(Z|[+-]\\d{2}:?\\d{2}))? +([^ \\t\\n\\r\\f\\v]{1,255})(?: +(.*))?$','s'
-  ).exec(rest);
+  const match=(slash?RX_SLASH_DATE:RX_DASH_DATE).exec(rest);
   if(!match)return null;
   const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]);
   const time=match[4]!,zone=match[5];
@@ -220,7 +219,7 @@ function parseSeparatedDate(pri:string|undefined,rest:string,slash:boolean):Sysl
 }
 
 function parseColonDate(pri:string|undefined,rest:string):SyslogEnvelope|null{
-  const match=/^(\d{4}):(\d{2}):(\d{2})-(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$/s.exec(rest);
+  const match=/^(\d{4}):(\d{2}):(\d{2})-(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +([^ \t\n\r\f\v]{1,255})(?: +(.*))?$/su.exec(rest);
   if(!match||!validCalendarDate(Number(match[1]),Number(match[2]),Number(match[3]))||!validClock(match[4]!))return null;
   return decorateMessage({
     variant:'colon_date',confidence:'strong',...withPri(pri),
@@ -229,19 +228,19 @@ function parseColonDate(pri:string|undefined,rest:string):SyslogEnvelope|null{
   });
 }
 
-const RX_LOOKS_LIKE_MALFORMED_TIMESTAMP=new RegExp(String.raw`^${T.BSD_MONTH} +\d{1,2} +`);
+const RX_LOOKS_LIKE_MALFORMED_TIMESTAMP=new RegExp(String.raw`^${T.BSD_MONTH} +\d{1,2} +`,'u');
 function looksLikeMalformedTimestamp(rest:string):boolean{
   return RX_LOOKS_LIKE_MALFORMED_TIMESTAMP.test(rest)||
-    /^\d{4}[-/:]\d{2}[-/:]\d{2}/.test(rest)||
-    /^\d{1,3} +\d{4}-\d{2}-\d{2}T/.test(rest);
+    /^\d{4}[-/:]\d{2}[-/:]\d{2}/u.test(rest)||
+    /^\d{1,3} +\d{4}-\d{2}-\d{2}T/u.test(rest);
 }
 
 export function parseSyslogEnvelope(raw:string):SyslogEnvelope|null{
-  if(!raw||raw.includes('\0')||utf8Size(raw)>8192||/[\r\n]/.test(raw))return null;
+  if(!raw||raw.includes('\0')||utf8Size(raw)>8192||/[\r\n]/u.test(raw))return null;
   const split=splitPri(raw);
   if(!split)return null;
   // ASCII white space only, like Ruby String#lstrip: NBSP, BOM or U+2028 after PRI are data.
-  const rest=split.rest.replace(/^[ \t\n\r\f\v]+/,'');
+  const rest=split.rest.replace(/^[ \t\n\r\f\v]+/u,'');
   if(!rest)return null;
 
   const rfc5424=parseRfc5424(split.pri,rest);

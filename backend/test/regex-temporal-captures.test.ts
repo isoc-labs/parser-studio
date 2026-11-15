@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import test from 'node:test';
@@ -33,7 +34,7 @@ function native(raw:string){
   'parser=klass.new',
   'parser.parse(STDIN.read) {|_time,record| puts JSON.generate(record)}',
  ].join('\n');
- const result=spawnSync(rubyBinary,['-e',source],{
+ const result=spawnSync(rubyBinary,rubyE(source),{
   input:raw,encoding:'utf8',timeout:15000,maxBuffer:1024*1024,
  });
  assert.equal(result.status,0,result.stderr||String(result.error));

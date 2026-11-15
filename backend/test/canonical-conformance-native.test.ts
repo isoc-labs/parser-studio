@@ -1,4 +1,5 @@
 import {resolvedTemplate} from './template-fixture.js';
+import {rubyE} from './ruby-argv.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -45,7 +46,7 @@ function nativeSource(ruby:string,inputs:string[]):Array<Record<string,unknown>>
     "input.fetch('inputs').each{|line|parser.parse(line){|_time,record|rows << record}}",
     "STDOUT.write(JSON.generate(rows))",
   ].join('\n');
-  const result=spawnSync('ruby',['-e',runner],{
+  const result=spawnSync('ruby',rubyE(runner),{
     encoding:'utf8',timeout:15000,maxBuffer:1024*1024,
     input:JSON.stringify({ruby:Buffer.from(ruby).toString('base64'),inputs}),
   });
@@ -107,7 +108,7 @@ test('Both native Ruby templates have identical strict KV Unicode grammar',
     const signatures:string[]=[];
     for(const name of ['ruby-fragment.rb.tpl','ruby-forwarder-family.rb.tpl']){
       const template=resolvedTemplate(name);
-      const out=spawnSync('ruby',['-e',source],{
+      const out=spawnSync('ruby',rubyE(source),{
         encoding:'utf8',timeout:15000,maxBuffer:1024*1024,
         input:Buffer.from(template).toString('base64')+'\n'+JSON.stringify(raw),
       });
