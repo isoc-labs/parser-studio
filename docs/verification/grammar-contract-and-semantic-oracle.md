@@ -730,6 +730,14 @@ both had changed together:
 | a line with a NUL inside the PRI, the timestamp or the `CEF:0` marker was read on `main` and is declined now | intended: the header grammar does not match, so the event becomes a diagnostic record like every declined event (a diagnostic record never carries event text, on `main` either) |
 | CI-only scripts and the local qualification smokes (`backend/test_native`, run by `backend/scripts/qualify.sh`, not by CI) called hand-written methods that no longer exist and bounded an artifact at the size of the hand-written fragment | fixed: they call the generated grammar as the artifact does; the size bounds follow the product limit of 512,000 bytes for one parser file. The smokes that need no Fluentd were run on Ruby 2.4.9; the Fluentd ones need the pinned Fluentd profile and were not run locally |
 
+The owner-approval tests stop the CI job `web-quality` at its backend step, so the steps after it (cross-consumer
+mapping, lineage, canonical native conformance, executable evidence, the Python inventory and twelve Chromium
+suites) have not run in CI since the template hash began to wait for approval. Run locally on the same commit,
+they pass, with two notes: a Chromium expectation of the mixed Generic Structural profiles predated owner
+policy D-2 (the exported project of a new parser carries `genericStructuralFamilyGrammar: dedicated`) and is
+corrected; two cases of `grammar-conformance.ts` use a Regex without a static cost proof, which runs on Ruby 3.2
+and fails closed on Ruby 2.4.9 by design, so they need the CI runner.
+
 ## Rules for adding or changing a grammar or a mapping
 
 1. Change the contract and regenerate. Do not write a header pattern in a

@@ -106,7 +106,10 @@ async function inspectBothEvents(page:Page,ordered:string[]):Promise<EventSnapsh
 }
 
 function assertCompleteProject(project:BackendParserProject,snapshots:EventSnapshot[]){
-  expect(project.extraction).toEqual({format:'generic_structural',genericStructuralProfile:profile});
+  // A parser created now reads a CEF or LEEF event inside Generic Structural with the family grammar (owner
+  // policy D-2), and the exported project says so.
+  expect(project.extraction).toEqual({format:'generic_structural',genericStructuralFamilyGrammar:'dedicated',
+    genericStructuralProfile:profile});
   const {topFields,nsFields,vendorFields}=project.normalization;
   const sources=[...Object.keys(topFields),...Object.keys(nsFields),...Object.keys(vendorFields)];
   expect(sources).toHaveLength(expectedPaths.length);
