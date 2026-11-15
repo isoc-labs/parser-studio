@@ -683,6 +683,21 @@ Known limit, not a parser matter: blank-line framing splits a stream at LF LF. A
 (`\r\n\r\n`), so the receiver never cuts it, whereas the browser preview normalizes CRLF first. Multi-line
 sources must send LF line endings.
 
+## Template set approval (work order item 4)
+
+The reviewed-template hash (`pocTemplateSha256`, `KNOWN_TEMPLATES`) covers one artifact, compiled from a JSON
+sample project. A change to the Generic Structural grammar, the Regex helper, the source-copy helper or a CONF
+variant does not move it. `contracts/ruby-template-set.v1.json` records what decides the text of every
+generated parser: the SHA-256 of every file in `backend/templates`, the normalized Ruby and the CONF of every
+compiler variant (`backend/test/compiler-variants.ts`), the case-fold table as inflated, and one digest over
+all of it (`templateSetSha256`). `backend/test/template-set-approval.test.ts` recomputes the manifest, fails
+when the committed file is stale, and holds the digest to `APPROVED_TEMPLATE_SET_SHA256`, which only an owner
+review sets. The existing constants are unchanged and still gate the disposable POC upload.
+
+```
+node backend/node_modules/tsx/dist/cli.mjs scripts/verification/ruby-template-set.ts --write | --verify
+```
+
 ## Rules for adding or changing a grammar or a mapping
 
 1. Change the contract and regenerate. Do not write a header pattern in a
