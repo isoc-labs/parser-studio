@@ -261,13 +261,19 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
       error('extract', 'FIELD_LOSS_NOT_FULL',
         'A key=value pair of the original log is missing from the parsed result: ' +
         verdict.lostPairs.slice(0, 5).map(pair => pair.key).join(', ') + '. The event is not treated as fully parsed.');
-    else if (verdict.status === 'PARTIAL')
+    else if (verdict.status === 'PARTIAL' && verdict.reasons.some(reason => reason.includes('taken as the host name')))
       error('extract', 'HEADER_MISREAD_NOT_FULL',
         'The Syslog header was not read correctly: ' + verdict.reasons.join('; ') + '. The event is not treated as fully parsed.');
+    else if (verdict.status === 'PARTIAL')
+      // CSV, JSON, CEF and LEEF: the fields do not spell the text of the event (src/grammar/lossGuard.ts).
+      error('extract', 'TEXT_NOT_ACCOUNTED_NOT_FULL',
+        'Part of the original log is not accounted for by the parsed result: ' + verdict.reasons.join('; ') + '. The event is not treated as fully parsed.');
   }
   trace.push({ stage: 'Extraction', detail: matched ? Object.keys(fields).length + ' fields extracted' : 'No fields extracted', ok: matched });
   const normalized: Record<string, unknown> = draft.format==='generic_structural'&&matched
-    ? {parserstudio_source:structuredClone(draft.omitSourceRaw===true?withoutSourceRaw(fields):fields)}
+    // The source copy is omitted only from a FULL event: what a PARTIAL one does not hold in a field exists
+    // nowhere else than in that copy (the generated Ruby decides the same, per event).
+    ? {parserstudio_source:structuredClone(draft.omitSourceRaw===true&&parseStatus==='FULL'?withoutSourceRaw(fields):fields)}
     : {};
   const family=inspectEventProfile(fields,draft.eventProfiles);
   if(draft.eventProfiles&&!family.profile)

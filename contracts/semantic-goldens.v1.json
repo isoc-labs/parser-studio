@@ -1342,6 +1342,28 @@
       }
     },
     {
+      "id": "cef-header-backslash-pairs-other-than-pipe-and-backslash-are-literal",
+      "family": "cef",
+      "raw": "CEF:0|security|threat\\nmanager|1.0|100|a \\= b \\\"q\\\" \\t c|10|src=10.0.0.1 msg=line one\\nline two",
+      "provenance": "ArcSight Common Event Format, Implementing ArcSight CEF: in the header only the pipe and the backslash are escaped; \\n and \\r are defined for extension values only (\"multiple lines are only allowed in the value part of the extensions\") and \\= is an extension escape. A backslash pair that is not a header escape is header text as written. Found on 2026-11-15 by the three-way comparison: the Python preview decoded \\n, \\t, \\= and \\\" in header fields.",
+      "expect": {
+        "status": "FULL",
+        "header": {
+          "cef_version": "0",
+          "cef_device_vendor": "security",
+          "cef_device_product": "threat\\nmanager",
+          "cef_device_version": "1.0",
+          "cef_signature_id": "100",
+          "cef_name": "a \\= b \\\"q\\\" \\t c",
+          "cef_severity": "10"
+        },
+        "extension": {
+          "src": "10.0.0.1",
+          "msg": "line one\nline two"
+        }
+      }
+    },
+    {
       "id": "cef-multi-line-value",
       "family": "cef",
       "raw": "CEF:0|security|threatmanager|1.0|100|Detected a threat|10|src=10.0.0.1 msg=Detected a threat.\\n No action needed.",
@@ -1533,6 +1555,26 @@
         "extension": {
           "share": "\\\\server\\reports",
           "src": "10.1.1.1"
+        }
+      }
+    },
+    {
+      "id": "leef-header-backslash-pairs-other-than-pipe-and-backslash-are-literal",
+      "family": "leef",
+      "raw": "LEEF:1.0|Acme|Fire\\nwall \\| edge|2.1 \\= x|login \\t ok|src=10.0.0.1\tusrName=kim",
+      "provenance": "IBM QRadar Log Event Extended Format (LEEF) Guide: the header fields are separated by the pipe character; the product reads an escaped pipe and an escaped backslash in a header field (as in CEF) and no other escape. A backslash followed by another character is header text as written. Found on 2026-11-15 by the three-way comparison with the Python preview.",
+      "expect": {
+        "status": "FULL",
+        "header": {
+          "leef_version": "1.0",
+          "leef_vendor": "Acme",
+          "leef_product": "Fire\\nwall | edge",
+          "leef_product_version": "2.1 \\= x",
+          "leef_event_id": "login \\t ok"
+        },
+        "extension": {
+          "src": "10.0.0.1",
+          "usrName": "kim"
         }
       }
     },
@@ -1834,6 +1876,38 @@
       "id": "json-empty-object",
       "raw": "{}",
       "provenance": "Found on 2026-11-15 by the format-level browser/Ruby fuzz that followed the independent re-audit. Parsing Success Contract: an event from which no field was extracted is not a parsed event. The generated Ruby emitted an event without fields for an empty object; the browser reported UNKNOWN.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-decimal-with-more-digits-than-a-double-holds",
+      "raw": "{\"ratio\":0.1234567890123456789,\"ok\":true}",
+      "provenance": "RFC 8259 section 6: implementations that use IEEE 754 binary64 are interoperable only for numbers within its precision. A decimal with more than 15 significant digits is not the value a double holds; reporting the rounded double as the value of the event would be reporting a number the event does not contain, so no engine may report the event as parsed (src/jsonNumberSafety.ts). Found on 2026-11-15 by the three-way comparison: the Python preview reported the rounded value.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-integer-beyond-2-53-in-exponent-spelling",
+      "raw": "{\"bytes\":1e16,\"ok\":true}",
+      "provenance": "RFC 8259 section 6: integers outside [-(2^53)+1, (2^53)-1] are not interoperable. 1e16 names such an integer in exponent spelling; the browser and the generated Ruby decline the event, and so must the Python preview (which keeps only an integer written as an integer exactly). Found on 2026-11-15 by the three-way comparison.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-nonzero-decimal-that-underflows-to-zero",
+      "raw": "{\"p\":1e-400,\"ok\":true}",
+      "provenance": "RFC 8259 section 6: a number outside the range of binary64 is not interoperable. 1e-400 is not zero, and a double holds zero for it; no engine may report the event as parsed with p = 0 (src/jsonNumberSafety.ts).",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-nine-nested-levels",
+      "raw": "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":{\"f\":{\"g\":{\"h\":{\"i\":1}}}}}}}},\"ok\":true}",
+      "provenance": "RFC 8259 section 9: an implementation may set limits on the maximum depth of nesting. The JSON source contract of the product is eight nested levels (src/jsonSourceSafety.ts, enforced by the browser and by the generated Ruby); a value at the ninth level declines the event in every engine. Found on 2026-11-15 by the three-way comparison: the Python preview read forty levels.",
       "expect": {
         "status": "UNKNOWN"
       }

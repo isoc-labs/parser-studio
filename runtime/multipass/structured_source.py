@@ -62,6 +62,27 @@ def _unescape(segment:str)->str:
     return "".join(out)
 
 
+def _unescape_header(segment:str)->str:
+    """A CEF or LEEF header field as written: only the escaped pipe and the escaped backslash are decoded.
+
+    The browser extractor and the generated Ruby read a header field this way (ArcSight CEF: in the header the
+    pipe and the backslash are escaped; \\n, \\r and \\= belong to extension values). Any other backslash pair
+    is header text and is kept as written, so the three engines report the same header value.
+    """
+    out=[]
+    i=0
+    while i<len(segment):
+        c=segment[i]
+        if c=="\\" and i+1<len(segment):
+            c2=segment[i+1]
+            out.append(c2 if c2 in "\\|" else "\\"+c2)
+            i+=2
+        else:
+            out.append(c)
+            i+=1
+    return "".join(out)
+
+
 def _pipe_parts(raw:str,offset:int,header_count:int) -> tuple[list[tuple[str,int,int]],int]:
     """Return exact seven/six/etc header fields plus extension byte position."""
     parts=[]
@@ -72,7 +93,7 @@ def _pipe_parts(raw:str,offset:int,header_count:int) -> tuple[list[tuple[str,int
             i+=2
             continue
         if raw[i]=="|":
-            parts.append((_unescape(raw[start:i]),start,i))
+            parts.append((_unescape_header(raw[start:i]),start,i))
             if len(parts)==header_count:
                 return parts,i+1
             start=i+1

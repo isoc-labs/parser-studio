@@ -18,7 +18,9 @@ from typing import Any
 
 MAX_RAW_BYTES = 131072
 MAX_CAPTURED_FIELDS = 4096
-MAX_JSON_DEPTH = 40
+# The JSON source contract of the product: eight nested levels (src/jsonSourceSafety.ts). The browser and the
+# generated Ruby decline a value at the ninth level, so the preview does too.
+MAX_JSON_DEPTH = 8
 BSD = re.compile(r"^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +\d{1,2} \d\d:\d\d:\d\d +\S+ +")
 PRI = re.compile(r"^<(?P<priority>\d{1,3})>")
 IPv4_STRICT = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
@@ -110,6 +112,19 @@ class ParseResult:
         }
 
 
+def _unsafe_json_float(token:str,value:float) -> bool:
+    """The rule of hasUnsafeJsonNumbers (src/jsonNumberSafety.ts) for a number in decimal or exponent spelling."""
+    # An integer beyond 2^53 - 1, whatever its spelling, is not a number a double identifies.
+    if value==math.floor(value) and abs(value)>2**53-1:
+        return True
+    mantissa=re.split("[eE]",token,maxsplit=1)[0]
+    significant=re.sub(r"0+$","",re.sub(r"^[+-]?0*","",mantissa,count=1).replace(".","",1))
+    if len(significant)>15:
+        return True
+    # A nonzero decimal that underflows is not zero.
+    return value==0 and re.search("[1-9]",mantissa) is not None
+
+
 class SpanJsonDecoder:
     """Bounded strict JSON visitor with exact original character-index spans.
 
@@ -191,6 +206,12 @@ class SpanJsonDecoder:
         # exponents. Neither may become a verified original numeric value.
         if isinstance(value,float) and not math.isfinite(value):
             raise ValueError("JSON_NUMBER_RANGE_OR_CONSTANT_UNSUPPORTED")
+        # Number precision as the browser and the generated Ruby read it (src/jsonNumberSafety.ts): a number in
+        # decimal or exponent spelling that a double does not hold as written declines the event; the rounded
+        # double is not a value of the event. An integer written as an integer is kept exactly by Python and is
+        # reported with its digits.
+        if isinstance(value,float) and _unsafe_json_float(self.raw[self.i:end],value):
+            raise ValueError("JSON_NUMBER_PRECISION_UNSAFE")
         # RFC 8259 8.2 / RFC 3629: a surrogate escape without its partner names no character and has no UTF-8
         # form. Python's decoder keeps it as a lone surrogate; the browser and the generated Ruby decline it.
         if isinstance(value,str) and _has_unpaired_surrogate(value):

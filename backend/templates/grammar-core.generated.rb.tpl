@@ -4,9 +4,19 @@
 # Regenerate with: node scripts/grammar/ts2rb/generate.mjs --write
 # CI runs the generator with --verify, so a hand edit of this file fails the gate.
 
-# src/structuredFamilies.ts: CEF_ESCAPES
+# src/grammar/lossGuard.ts: CEF_ESCAPES
 def psg_k_cef_escapes
   @psg_k_cef_escapes ||= {'n' => "\u{a}", 'r' => "\u{d}", '=' => '=', '\\' => '\\'}
+end
+
+# src/structuredFamilies.ts: CEF_ESCAPES
+def psg_k_cef_escapes_2
+  @psg_k_cef_escapes_2 ||= {'n' => "\u{a}", 'r' => "\u{d}", '=' => '=', '\\' => '\\'}
+end
+
+# src/grammar/lossGuard.ts: CEF_HEADER_FIELDS
+def psg_k_cef_header_fields
+  @psg_k_cef_header_fields ||= ['cef_version', 'cef_device_vendor', 'cef_device_product', 'cef_device_version', 'cef_signature_id', 'cef_name', 'cef_severity']
 end
 
 # src/structuredFamilies.ts: CEF_VERSIONS
@@ -34,14 +44,29 @@ def psg_k_forbidden_keys
   @psg_k_forbidden_keys ||= ['__proto__', 'constructor', 'prototype']
 end
 
+# src/grammar/lossGuard.ts: JSON_ESCAPES
+def psg_k_json_escapes
+  @psg_k_json_escapes ||= {'"' => '"', '\\' => '\\', '/' => '/', 'b' => "\u{8}", 'f' => "\u{c}", 'n' => "\u{a}", 'r' => "\u{d}", 't' => "\u{9}"}
+end
+
 # src/structuredFamilies.ts: LEEF_DELIMITER_VERSIONS
 def psg_k_leef_delimiter_versions
   @psg_k_leef_delimiter_versions ||= ['2.0']
 end
 
+# src/grammar/lossGuard.ts: LEEF_DELIMITER_VERSIONS
+def psg_k_leef_delimiter_versions_2
+  @psg_k_leef_delimiter_versions_2 ||= ['2.0']
+end
+
 # src/structuredFamilies.ts: LEEF_EXTRA_DELIMITERS
 def psg_k_leef_extra_delimiters
   @psg_k_leef_extra_delimiters ||= [166]
+end
+
+# src/grammar/lossGuard.ts: LEEF_HEADER_FIELDS
+def psg_k_leef_header_fields
+  @psg_k_leef_header_fields ||= ['leef_version', 'leef_vendor', 'leef_product', 'leef_product_version', 'leef_event_id']
 end
 
 # src/structuredFamilies.ts: LEEF_VERSIONS
@@ -101,6 +126,84 @@ def psg_bounded_json_object(text)
     return psg_failure_2('RFC5424 JSON body is not valid JSON')
   end
   nil
+end
+
+# src/grammar/lossGuard.ts: bump
+def psg_bump(counts, token, delta)
+  counts[token] = ((psg_null?(psg_t1 = counts[token]) ? 0 : psg_t1) + delta)
+  nil
+end
+
+# src/grammar/lossGuard.ts: cefEventUnaccounted
+def psg_cef_event_unaccounted(text, fields)
+  cursor = length = blank = seen = key = value = index = unit = escaped = nil
+  cursor = psg_header_end(text, 'CEF:', psg_k_cef_header_fields, fields)
+  if (cursor < 0)
+    return 'a CEF header field is not the text of the event'
+  end
+  length = psg_len(text)
+  blank = cursor
+  while ((blank < length) && " \u{9}\u{a}\u{b}\u{c}\u{d}\u{0}".include?(psg_at(text, blank)))
+    blank += 1
+  end
+  seen = 0
+  while (blank < length)
+    while ((cursor < length) && ((psg_at(text, cursor) == ' ') || (psg_at(text, cursor) == "\u{9}")))
+      cursor += 1
+    end
+    if (cursor >= length)
+      break
+    end
+    key = ''
+    while ((((cursor < length) && (psg_at(text, cursor) != '=')) && (psg_at(text, cursor) != ' ')) && (psg_at(text, cursor) != "\u{9}"))
+      key += psg_at(text, cursor)
+      cursor += 1
+    end
+    if (psg_at(text, cursor) != '=')
+      return 'text of the CEF extension is not part of any extracted field'
+    end
+    cursor += 1
+    value = (psg_k_cef_header_fields.include?(key) ? nil : fields[key])
+    if !value.is_a?(String)
+      return 'a key=value pair of the CEF extension is missing from the extracted fields'
+    end
+    index = 0
+    while (index < psg_len(value))
+      unit = psg_at(text, cursor)
+      if unit.nil?
+        return 'an extracted CEF value is not the text of its key=value pair'
+      end
+      if (unit != '\\')
+        if (psg_at(value, index) != unit)
+          return 'an extracted CEF value is not the text of its key=value pair'
+        end
+        index += 1
+        cursor += 1
+        next
+      end
+      escaped = psg_at(text, (cursor + 1))
+      if escaped.nil?
+        return 'an extracted CEF value is not the text of its key=value pair'
+      end
+      if psg_k_cef_escapes.key?(escaped)
+        if (psg_at(value, index) != psg_k_cef_escapes[escaped])
+          return 'an extracted CEF value is not the text of its key=value pair'
+        end
+        index += 1
+      else
+        if ((psg_at(value, index) != '\\') || (psg_at(value, (index + 1)) != escaped))
+          return 'an extracted CEF value is not the text of its key=value pair'
+        end
+        index += 2
+      end
+      cursor += 2
+    end
+    seen += 1
+    if (((cursor < length) && (psg_at(text, cursor) != ' ')) && (psg_at(text, cursor) != "\u{9}"))
+      return 'an extracted CEF value ends before the text of its value does'
+    end
+  end
+  return ((fields.keys.length == (7 + seen)) ? :psg_null : 'an extracted field is not in the CEF extension')
 end
 
 # src/structuredFamilies.ts: cefExtensionValues
@@ -204,9 +307,109 @@ def psg_collect_leaves(value, key, out)
   nil
 end
 
+# src/grammar/lossGuard.ts: countJsonTextTokens
+def psg_count_json_text_tokens(text, counts)
+  length = hex = index = char = value = unit = escape = code = low = digits = literal = nil
+  length = psg_len(text)
+  hex = lambda { |at| psg_parse_int(((((psg_null?(psg_t1 = psg_at(text, at)) ? '' : psg_t1) + (psg_null?(psg_t2 = psg_at(text, (at + 1))) ? '' : psg_t2)) + (psg_null?(psg_t3 = psg_at(text, (at + 2))) ? '' : psg_t3)) + (psg_null?(psg_t4 = psg_at(text, (at + 3))) ? '' : psg_t4)), 16) }
+  index = 0
+  while (index < length)
+    char = psg_at(text, index)
+    if (char == '"')
+      value = ''
+      index += 1
+      while true
+        if (index >= length)
+          return false
+        end
+        unit = psg_at(text, index)
+        if (unit == '"')
+          index += 1
+          break
+        end
+        if (unit != '\\')
+          value += unit
+          index += 1
+          next
+        end
+        escape = (psg_null?(psg_t5 = psg_at(text, (index + 1))) ? '' : psg_t5)
+        if (escape != 'u')
+          if !psg_k_json_escapes.key?(escape)
+            return false
+          end
+          value += psg_k_json_escapes[escape]
+          index += 2
+          next
+        end
+        code = hex.call((index + 2))
+        if ((((code >= 55296) && (code <= 56319)) && (psg_at(text, (index + 6)) == '\\')) && (psg_at(text, (index + 7)) == 'u'))
+          low = hex.call((index + 8))
+          if !((low >= 56320) && (low <= 57343))
+            return false
+          end
+          value += psg_from_code_point(((65536 + psg_mul((code - 55296), 1024)) + (low - 56320)))
+          index += 12
+        else
+          if (!(code >= 0) || ((code >= 55296) && (code <= 57343)))
+            return false
+          end
+          value += psg_from_code_point(code)
+          index += 6
+        end
+      end
+      psg_bump(counts, ('s:' + value), 1)
+    elsif '-0123456789'.include?(char)
+      digits = char
+      index += 1
+      while ((index < length) && '0123456789eE+-.'.include?(psg_at(text, index)))
+        digits += psg_at(text, index)
+        index += 1
+      end
+      psg_bump(counts, ('n:' + psg_str(psg_num(digits))), 1)
+    elsif (((char == 't') || (char == 'f')) || (char == 'n'))
+      literal = ((char == 't') ? 'true' : ((char == 'f') ? 'false' : 'null'))
+      psg_bump(counts, ('l:' + literal), 1)
+      index += psg_len(literal)
+    else
+      index += 1
+    end
+  end
+  return true
+end
+
+# src/grammar/lossGuard.ts: countJsonValueTokens
+def psg_count_json_value_tokens(value, counts)
+  if value.is_a?(Array)
+    value.each do |item|
+      psg_count_json_value_tokens(item, counts)
+    end
+    return nil
+  end
+  if (!value.equal?(:psg_null) && (psg_typeof(value) == 'object'))
+    psg_entries(value).each do |(name, item_2)|
+      psg_bump(counts, ('s:' + name), (-1))
+      psg_count_json_value_tokens(item_2, counts)
+    end
+    return nil
+  end
+  if value.is_a?(String)
+    psg_bump(counts, ('s:' + value), (-1))
+  elsif value.is_a?(Numeric)
+    psg_bump(counts, ('n:' + psg_str(value)), (-1))
+  else
+    psg_bump(counts, ('l:' + psg_str(value)), (-1))
+  end
+  nil
+end
+
+# src/grammar/lossGuard.ts: csvRowUnaccounted
+def psg_csv_row_unaccounted(text, delimiter, cells)
+  return psg_row_unaccounted(text, delimiter, cells, (delimiter != "\u{9}"))
+end
+
 # src/structuredFamilies.ts: decodeCefValue
 def psg_decode_cef_value(raw)
-  psg_replace(raw, /\\(?:[^\\]|\\)/, true, lambda { |pair| (psg_k_cef_escapes.key?(psg_at(pair, 1)) ? psg_k_cef_escapes[psg_at(pair, 1)] : pair) })
+  psg_replace(raw, /\\(?:[^\\]|\\)/, true, lambda { |pair| (psg_k_cef_escapes_2.key?(psg_at(pair, 1)) ? psg_k_cef_escapes_2[psg_at(pair, 1)] : pair) })
 end
 
 # src/structuredFamilies.ts: deterministicBody
@@ -238,7 +441,7 @@ end
 
 # src/grammar/extractEvent.ts: extractCsvRow
 def psg_extract_csv_row(raw, columns, delimiter)
-  values = fields = index = nil
+  values = fields = index = result = nil
   if !psg_k_csv_delimiters.include?(delimiter)
     return psg_failure('Unsupported CSV data delimiter')
   end
@@ -258,7 +461,9 @@ def psg_extract_csv_row(raw, columns, delimiter)
     fields[psg_at(columns, index)] = psg_at(values, index)
     index += 1
   end
-  return {'fields' => fields, 'errors' => []}
+  result = {'fields' => fields, 'errors' => []}
+  psg_set_tag(result, 'bodyKind', 'csv')
+  return result
 end
 
 # src/grammar/extractEvent.ts: extractEvent
@@ -297,7 +502,7 @@ end
 
 # src/grammar/extractEvent.ts: extractJsonObject
 def psg_extract_json_object(raw)
-  parsed = nil
+  parsed = result = nil
   begin
     parsed = psg_json_parse(raw)
     if ((!psg_t(parsed) || parsed.is_a?(Array)) || !(psg_typeof(parsed) == 'object'))
@@ -312,7 +517,9 @@ def psg_extract_json_object(raw)
     if !psg_json_source_value_valid(parsed)
       return psg_failure('JSON source exceeds the native nesting limit or has an invalid Unicode surrogate')
     end
-    return {'fields' => parsed, 'errors' => []}
+    result = {'fields' => parsed, 'errors' => []}
+    psg_set_tag(result, 'bodyKind', 'json')
+    return result
   rescue StandardError
     return psg_failure('Invalid JSON object')
   end
@@ -364,7 +571,7 @@ end
 
 # src/structuredFamilies.ts: extractStructuredFamily
 def psg_extract_structured_family(input, v_format, bodyFormat = nil, regexPattern = nil)
-  scanned = body = bodyKind = mode = nested = match = parts = record = extension = match_2 = carriesDelimiter = headerFields = parts_2 = delimiter = record_2 = attribute = key = nil
+  scanned = body = bodyKind = mode = nested = result = match = parts = record = extension = match_2 = carriesDelimiter = headerFields = parts_2 = delimiter = record_2 = attribute = key = nil
   bodyFormat = 'raw' if bodyFormat.nil?
   if (input.include?("\u{a}") || input.include?("\u{d}"))
     return psg_failure_2('Only one logical record per physical line is supported for pairing.')
@@ -394,7 +601,11 @@ def psg_extract_structured_family(input, v_format, bodyFormat = nil, regexPatter
         return psg_failure_2('Unsupported RFC5424 body dialect')
       end
     end
-    return psg_with_body_kind({'fields' => {}.merge!(scanned['fields']).merge!(body), 'errors' => []}, bodyKind)
+    result = psg_with_body_kind({'fields' => {}.merge!(scanned['fields']).merge!(body), 'errors' => []}, bodyKind)
+    if psg_t(scanned['message'])
+      psg_set_tag(result, 'bodyText', scanned['message'])
+    end
+    return result
   end
   if (v_format == 'cef')
     match = (/\ACEF:([0-9]+)\|((?m:.)*)\z/.match(input) || :psg_null)
@@ -418,7 +629,7 @@ def psg_extract_structured_family(input, v_format, bodyFormat = nil, regexPatter
         record[key_2] = value
       end
     end
-    return {'fields' => record, 'errors' => []}
+    return psg_with_body_kind({'fields' => record, 'errors' => []}, 'cef')
   end
   match_2 = (/\ALEEF:([0-9.]+)\|((?m:.)*)\z/.match(input) || :psg_null)
   if (!psg_t(match_2) || !psg_k_leef_versions.include?(match_2[1]))
@@ -448,7 +659,7 @@ def psg_extract_structured_family(input, v_format, bodyFormat = nil, regexPatter
       record_2[key] = psg_slice(part, psg_match_end(attribute))
     end
   end
-  return {'fields' => record_2, 'errors' => []}
+  return psg_with_body_kind({'fields' => record_2, 'errors' => []}, 'leef')
 end
 
 # src/grammar/extractEvent.ts: failure
@@ -463,12 +674,17 @@ end
 
 # src/grammar/readEvent.ts: gradeExtraction
 def psg_grade_extraction(raw, settings, extraction)
-  keyValueBody = nil
+  keyValueBody = verdict = reason = nil
   if (settings['format'] == 'generic_structural')
     return psg_classify_generic_structural(raw, extraction)
   end
   keyValueBody = (((settings['format'] == 'kv') || (psg_body_kind_of(extraction) == 'kv')) || (((settings['format'] == 'syslog_rfc3164') || (settings['format'] == 'syslog_rfc5424')) && (settings['syslogBodyFormat'] == 'kv')))
-  return psg_classify_structured_parse(raw, extraction, (keyValueBody ? 'kv' : 'other'))
+  verdict = psg_classify_structured_parse(raw, extraction, (keyValueBody ? 'kv' : 'other'))
+  if (verdict['status'] != 'FULL')
+    return verdict
+  end
+  reason = psg_unaccounted_text(raw, settings, extraction)
+  return (reason.equal?(:psg_null) ? verdict : {'status' => 'PARTIAL', 'lostPairs' => [], 'reasons' => [reason]})
 end
 
 # src/jsonDuplicateKeys.ts: hasDuplicateJsonObjectKeys
@@ -578,6 +794,54 @@ def psg_has_unsafe_json_numbers(source)
     index += 1
   end
   return false
+end
+
+# src/grammar/lossGuard.ts: headerEnd
+def psg_header_end(text, prefix, names, fields)
+  version = cursor = index = field = nil
+  version = fields[names[0]]
+  if (!version.is_a?(String) || !text.start_with?(((prefix + version) + '|')))
+    return (-1)
+  end
+  cursor = ((psg_len(prefix) + psg_len(version)) + 1)
+  index = 1
+  while (index < names.length)
+    field = psg_header_field_at(text, cursor)
+    if (field.equal?(:psg_null) || (fields[psg_at(names, index)] != field['value']))
+      return (-1)
+    end
+    cursor = field['next']
+    index += 1
+  end
+  return cursor
+end
+
+# src/grammar/lossGuard.ts: headerFieldAt
+def psg_header_field_at(text, from)
+  value = at = unit = escaped = nil
+  value = ''
+  at = from
+  while true
+    unit = psg_at(text, at)
+    if unit.nil?
+      return :psg_null
+    end
+    if (unit == '|')
+      return {'value' => value, 'next' => (at + 1)}
+    end
+    if (unit != '\\')
+      value += unit
+      at += 1
+      next
+    end
+    escaped = psg_at(text, (at + 1))
+    if escaped.nil?
+      return :psg_null
+    end
+    value += (((escaped == '|') || (escaped == '\\')) ? escaped : ('\\' + escaped))
+    at += 2
+  end
+  nil
 end
 
 # src/grammar/parseStatus.ts: independentKeyValuePairs
@@ -726,6 +990,25 @@ def psg_json_source_value_valid(value, maxDepth = nil)
   return true
 end
 
+# src/grammar/lossGuard.ts: jsonTextUnaccounted
+def psg_json_text_unaccounted(text, fields)
+  counts = nil
+  counts = {}
+  if !psg_count_json_text_tokens(text, counts)
+    return 'the JSON text could not be read a second time'
+  end
+  psg_count_json_value_tokens(fields, counts)
+  counts.to_a.each do |(_token, count)|
+    if (count > 0)
+      return 'a name or value of the JSON text is missing from the extracted fields'
+    end
+    if (count < 0)
+      return 'an extracted field holds a name or value that is not in the JSON text'
+    end
+  end
+  return :psg_null
+end
+
 # src/structuredFamilies.ts: leefDelimiter
 def psg_leef_delimiter(field = nil)
   match = code = named = valid = nil
@@ -746,6 +1029,66 @@ def psg_leef_delimiter(field = nil)
   named = psg_from_code_point(code)
   valid = psg_match_at(/\G(?:(?:(?<literal>[\t!-<>-\[\]-~])|(?:0x|x)(?<hex>[0-9A-Fa-f]{1,4}))\z)/, named, 0)
   return ((psg_t(valid) && !psg_group(valid, 'literal').nil?) ? named : :psg_null)
+end
+
+# src/grammar/lossGuard.ts: leefEventUnaccounted
+def psg_leef_event_unaccounted(text, fields)
+  cursor = delimiter = declared = spelled = code = length = seen = key = value = nil
+  cursor = psg_header_end(text, 'LEEF:', psg_k_leef_header_fields, fields)
+  if (cursor < 0)
+    return 'a LEEF header field is not the text of the event'
+  end
+  delimiter = "\u{9}"
+  if psg_k_leef_delimiter_versions_2.include?(psg_str(fields['leef_version']))
+    declared = psg_header_field_at(text, cursor)
+    if declared.equal?(:psg_null)
+      return 'the LEEF delimiter field is incomplete'
+    end
+    cursor = declared['next']
+    spelled = declared['value']
+    if (psg_len(spelled) == 1)
+      delimiter = spelled
+    else
+      code = psg_parse_int((spelled.start_with?('0x') ? psg_slice(spelled, 2) : psg_slice(spelled, 1)), 16)
+      if !(code >= 0)
+        return 'the LEEF delimiter field does not declare a delimiter'
+      end
+      delimiter = psg_from_code_point(code)
+    end
+  end
+  length = psg_len(text)
+  seen = 0
+  while (cursor < length)
+    key = ''
+    while (((cursor < length) && (psg_at(text, cursor) != '=')) && (psg_at(text, cursor) != delimiter))
+      key += psg_at(text, cursor)
+      cursor += 1
+    end
+    if (psg_at(text, cursor) != '=')
+      return 'text of the LEEF extension is not part of any extracted attribute'
+    end
+    cursor += 1
+    value = (psg_k_leef_header_fields.include?(key) ? nil : fields[key])
+    if !value.is_a?(String)
+      return 'an attribute of the LEEF extension is missing from the extracted fields'
+    end
+    if !psg_starts_with(text, value, cursor)
+      return 'an extracted LEEF value is not the text of its attribute'
+    end
+    cursor += psg_len(value)
+    seen += 1
+    if (cursor == length)
+      break
+    end
+    if (psg_at(text, cursor) != delimiter)
+      return 'an extracted LEEF value ends before the text of its value does'
+    end
+    cursor += 1
+    if (cursor == length)
+      return 'text of the LEEF extension is not part of any extracted attribute'
+    end
+  end
+  return ((fields.keys.length == (5 + seen)) ? :psg_null : 'an extracted field is not in the LEEF extension')
 end
 
 # src/grammar/syslogHeader.ts: matchHeaderRule
@@ -866,6 +1209,7 @@ def psg_parse_rfc3164_strict(input, choice, regexPattern = nil)
   end
   result = psg_with_body_kind({'fields' => {}.merge!(fields).merge!(body['fields']), 'errors' => []}, psg_body_kind_of(body))
   psg_set_tag(result, 'rfc3164Header', true)
+  psg_set_tag(result, 'bodyText', message)
   return result
 end
 
@@ -966,6 +1310,43 @@ end
 # src/structuredFamilies.ts: regexBody
 def psg_regex_body(message, pattern = nil)
   return psg_x_portable_regex_fields(message, (psg_null?(psg_t1 = pattern) ? '' : psg_t1))
+end
+
+# src/grammar/lossGuard.ts: rowUnaccounted
+def psg_row_unaccounted(text, delimiter, cells, strip)
+  cursor = index = cell = written = nil
+  cursor = 0
+  index = 0
+  while (index < cells.length)
+    if strip
+      while ((psg_at(text, cursor) == ' ') || (psg_at(text, cursor) == "\u{9}"))
+        cursor += 1
+      end
+    end
+    cell = psg_at(cells, index)
+    if cell.is_a?(String)
+      written = ((psg_at(text, cursor) == '"') ? (('"' + psg_join(psg_split(cell, '"'), '""')) + '"') : cell)
+      if !psg_starts_with(text, written, cursor)
+        return (('CSV cell ' + psg_str((index + 1))) + ' is not the text of the row at its position')
+      end
+      cursor += psg_len(written)
+    elsif !cell.equal?(:psg_null)
+      return (('CSV cell ' + psg_str((index + 1))) + ' is not text')
+    end
+    if strip
+      while ((psg_at(text, cursor) == ' ') || (psg_at(text, cursor) == "\u{9}"))
+        cursor += 1
+      end
+    end
+    if (index < (cells.length - 1))
+      if (psg_at(text, cursor) != delimiter)
+        return ('the row has no delimiter after CSV cell ' + psg_str((index + 1)))
+      end
+      cursor += 1
+    end
+    index += 1
+  end
+  return ((cursor == psg_len(text)) ? :psg_null : 'text after the last CSV cell is not part of any cell')
 end
 
 # src/rfc5424Subset.ts: safeParameterKey
@@ -1276,6 +1657,33 @@ def psg_tokenize_csv_row(raw, delimiter)
     return :psg_null
   end
   return out
+end
+
+# src/grammar/readEvent.ts: unaccountedText
+def psg_unaccounted_text(raw, settings, extraction)
+  kind = cells = message = text = body = fields = nil
+  kind = psg_body_kind_of(extraction)
+  if (kind == 'csv')
+    cells = psg_map((psg_null?(psg_t1 = settings['csvColumns']) ? [] : psg_t1), lambda { |name| extraction['fields'][name] })
+    if (extraction['fields'].keys.length != cells.length)
+      return 'an extracted field is not a CSV column of the row'
+    end
+    return psg_csv_row_unaccounted(raw, (psg_null?(psg_t2 = settings['csvDelimiter']) ? ',' : psg_t2), cells)
+  end
+  if (((kind != 'json') && (kind != 'cef')) && (kind != 'leef'))
+    return :psg_null
+  end
+  message = psg_get_tag(extraction, 'bodyText')
+  text = (message.is_a?(String) ? message : raw)
+  body = (message.is_a?(String) ? extraction['fields']['body'] : extraction['fields'])
+  if ((body.equal?(:psg_null) || !(psg_typeof(body) == 'object')) || body.is_a?(Array))
+    return 'the fields of the event body are not where the extractor reports them'
+  end
+  fields = body
+  if (kind == 'json')
+    return psg_json_text_unaccounted(text, fields)
+  end
+  return ((kind == 'cef') ? psg_cef_event_unaccounted(text, fields) : psg_leef_event_unaccounted(text, fields))
 end
 
 # src/grammar/kvBody.ts: unescapeKvValue

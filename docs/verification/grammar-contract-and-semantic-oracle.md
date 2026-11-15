@@ -610,6 +610,79 @@ one source, a translator whose every rule is probed, and faults that show the pr
   with a conformance probe and a fault. It is never worked around in the template.
 - The grammar reads text by code unit and by sticky match; it does not cut windows out of the text.
 
+## Loss accounting for CSV, JSON, CEF, LEEF and Generic Structural (W7, 2026-11-15)
+
+The Parsing Success Contract used to account for key=value pairs only. For the other dialects "the extractor
+returned no error" was the whole argument, which is not an argument: a tokenizer that drops a cell or cuts a
+value also returns no error. `src/grammar/lossGuard.ts` closes this. After a successful extraction it reads the
+original text of the event a second time, with code that shares no expression, splitter or decoder with the
+extractor, and asks whether the fields spell that text, all of it and nothing else:
+
+| Dialect | Accounting |
+|---|---|
+| CSV | reconstruction: the cells, written back as RFC 4180 writes them (quoted or not, SP and TAB beside a cell with `,` and `;`), spell the row; the fields are exactly the declared columns |
+| JSON | token count: the member names, strings, numbers and literals of the text, read by a scanner of its own, are exactly those of the fields |
+| CEF | reconstruction: the header fields spell the header; the extension is, from first to last character, `key=value` pairs in which every key is a field and every value, with the contract escapes read on the way, is that field |
+| LEEF | reconstruction: the same for the header; the extension is attributes joined by the event's own delimiter |
+| Generic Structural | the same four accountings for the modes whose body is JSON, CEF, LEEF or positional CSV (`classifyGenericStructural`); key=value modes keep their pair accounting |
+
+A result that fails the accounting is PARTIAL. `gradeExtraction` (`src/grammar/readEvent.ts`) applies it for
+every route: the format alone, the body of an RFC 3164 or RFC 5424 event, and the families of the mixed router.
+The generated Ruby executes the same functions (they are translated like the rest of the grammar) and hands an
+event over only when the reading is FULL, so the guard is a run-time guard on the sensor, not a test. The
+reasons never contain event text.
+
+Generic Structural hands over a PARTIAL event (owner policy D-2). What such an event does not hold in a field
+exists only in the copy of the original line, so `omitSourceRaw` applies to FULL events only; the verdict
+travels with the event (`readingStatus` tag) and `parserstudio_normalize` decides per event.
+
+Verified in both directions (Ruby 2.4.9: `backend/test/runtime-loss-accounting.test.ts`,
+`issue219221-native-parity.test.ts`; browser: `src/grammar/lossGuard.test.ts`,
+`genericLossGuard.test.ts`, `src/genericPartialKeepsSource.test.ts`):
+
+- no false rejection: hand-written vendor-style events of every route, the model-generated CSV, JSON, CEF and
+  LEEF cases, every golden, and the lines of the format differential compared with the tree before this change
+  (no verdict changed on 15,961 + 13,461 lines);
+- no silent loss: an extraction with one field dropped, cut by one character or invented is rejected on every
+  route, in the browser and in the generated Ruby.
+
+Found while wiring it (each with a regression test):
+
+- Generic Structural called a manufacturer field named `source_raw` or `message_raw` a lost pair (false
+  PARTIAL). Only the copies in the nodes the grammar builds are provenance.
+- A CEF or LEEF event behind a Syslog header was read by the CEF grammar with up to four pairs and by the
+  generic space-separated key=value route with five or more (header and first pair in prefix tokens, verdict
+  FULL). The claim of an enveloped message is now honoured like the claim of a bare line: read by the family
+  grammar or declined on the dedicated route; unchanged output and verdict PARTIAL on the legacy route.
+
+## What the gates reach since 2026-11-15 (work order item 3)
+
+| Was outside the gates | Now |
+|---|---|
+| Regex body inside Syslog | format differential configurations `syslog_rfc3164+regex`, `syslog_rfc5424+regex` |
+| Java stack trace, multi-line JSON | configurations `java_stacktrace`, `json-blank-line` (LF LF framing, events with LF) |
+| Generic Structural profiles | the three profiles on a stream of their own (`GENERIC_DIFFERENTIAL_PROFILE`) |
+| LF, CR, CRLF | line-ending stage (`LINE_ENDING_DIFFERENTIAL`): streams are cut into frames as the receiver cuts them, and the events of the browser preview of the stream must be the events the generated Ruby returns for the frames |
+| JSON numbers around 2^53 | seeds for integers, decimals and exponent spellings at the limits of a double, in every JSON route |
+| Python preview | three-way comparison in `semantic-oracle.ts python` (`PYTHON_THREE_WAY`): a line the preview reports as completely parsed is read by the browser, in that format, to the same fields |
+
+Found this way and fixed at the cause:
+
+- RFC 5424: the structured-data scanner measured its 1024-byte limit by cutting a prefix of the text at every
+  code unit. In the generated Ruby that cut inside a character and declined every event with a character
+  beyond the BMP in an SD-PARAM value. The size is now counted as the scan advances.
+- Line endings: the generated Ruby declined every CRLF-terminated line in the non-JSON formats (the frame ends
+  in CR) while the browser parsed it, and accepted a bare CR or an unframed LF inside JSON that the browser
+  declines. One rule now, in both: CRLF is a line terminator, a bare CR declines the event, LF belongs to an
+  event only in the blank-line framing of its format.
+- Python preview: it decoded `\n`, `\t`, `\=` and `\"` in CEF and LEEF header fields (the header has two
+  escapes, the pipe and the backslash), and it reported a JSON decimal with more digits than a double holds, or
+  an integer beyond 2^53 in exponent spelling, as parsed with the rounded value.
+
+Known limit, not a parser matter: blank-line framing splits a stream at LF LF. A CRLF stream has no LF LF
+(`\r\n\r\n`), so the receiver never cuts it, whereas the browser preview normalizes CRLF first. Multi-line
+sources must send LF line endings.
+
 ## Rules for adding or changing a grammar or a mapping
 
 1. Change the contract and regenerate. Do not write a header pattern in a

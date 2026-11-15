@@ -215,6 +215,8 @@ function parseRfc3164Strict(input:string,choice:'raw'|'json'|'kv'|'cef'|'leef'|'
  if(body.errors.length)return body;
  const result=withBodyKind({fields:{...fields,...body.fields},errors:[]},bodyKindOf(body));
  setTag(result,'rfc3164Header',true);
+ // The text the body dialect read, for the loss accounting of the Parsing Success Contract.
+ setTag(result,'bodyText',message);
  return result;
 }
 
@@ -242,7 +244,9 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
         body.body = nested.fields;
       } else return failure('Unsupported RFC5424 body dialect');
     }
-    return withBodyKind({ fields: { ...scanned.fields, ...body }, errors: [] }, bodyKind);
+    const result = withBodyKind({ fields: { ...scanned.fields, ...body }, errors: [] }, bodyKind);
+    if (scanned.message) setTag(result, 'bodyText', scanned.message);
+    return result;
   }
   if (format === 'cef') {
     // dotAll: a value may hold U+2028/U+2029, which '.' alone excludes in ECMAScript but not in Ruby or Python.
@@ -265,7 +269,7 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
         record[key] = value;
       }
     }
-    return { fields: record, errors: [] };
+    return withBodyKind({ fields: record, errors: [] }, 'cef');
   }
   const match = /^LEEF:([0-9.]+)\|(.*)$/su.exec(input);
   if (!match || !LEEF_VERSIONS.includes(match[1]!)) return failure('Only standalone LEEF 1.0 or 2.0 events are supported');
@@ -288,5 +292,5 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
       record[key] = part.slice(matchEnd(attribute));
     }
   }
-  return { fields: record, errors: [] };
+  return withBodyKind({ fields: record, errors: [] }, 'leef');
 }

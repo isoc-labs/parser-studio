@@ -6,6 +6,8 @@
  * when its status is FULL; "the extractor returned no error" is never enough (src/grammar/parseStatus.ts).
  */
 import { bodyKindOf, type StructuredExtraction } from '../structuredFamilies';
+import { getTag } from './primitives';
+import { cefEventUnaccounted, csvRowUnaccounted, jsonTextUnaccounted, leefEventUnaccounted } from './lossGuard';
 import { inspectDeclaredForwarders, type ForwarderHop } from '../guided/declaredForwarder';
 import { extractEvent, type ExtractionSettings } from './extractEvent';
 import { classifyGenericStructural } from './genericParseStatus';
@@ -22,6 +24,28 @@ export interface EventReading {
   forwarderHops: ForwarderHop[];
 }
 
+/**
+ * What of a CSV, JSON, CEF or LEEF event the fields do not account for (src/grammar/lossGuard.ts); null when
+ * the fields spell the text, and for the dialects that have another contract (key=value) or none (raw, regex).
+ */
+function unaccountedText(raw: string, settings: ExtractionSettings, extraction: StructuredExtraction): string | null {
+  const kind = bodyKindOf(extraction);
+  if (kind === 'csv') {
+    const cells = (settings.csvColumns ?? []).map(name => extraction.fields[name]);
+    if (Object.keys(extraction.fields).length !== cells.length) return 'an extracted field is not a CSV column of the row';
+    return csvRowUnaccounted(raw, settings.csvDelimiter ?? ',', cells);
+  }
+  if (kind !== 'json' && kind !== 'cef' && kind !== 'leef') return null;
+  // Inside a Syslog envelope the dialect read the message of the envelope, and its fields are under `body`.
+  const message = getTag(extraction, 'bodyText');
+  const text = typeof message === 'string' ? message : raw;
+  const body = typeof message === 'string' ? extraction.fields.body : extraction.fields;
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return 'the fields of the event body are not where the extractor reports them';
+  const fields = body as Record<string, unknown>;
+  if (kind === 'json') return jsonTextUnaccounted(text, fields);
+  return kind === 'cef' ? cefEventUnaccounted(text, fields) : leefEventUnaccounted(text, fields);
+}
+
 /** The verdict on an extraction the caller already holds. */
 export function gradeExtraction(raw: string, settings: ExtractionSettings, extraction: StructuredExtraction): ParseVerdict {
   if (settings.format === 'generic_structural') return classifyGenericStructural(raw, extraction);
@@ -29,7 +53,11 @@ export function gradeExtraction(raw: string, settings: ExtractionSettings, extra
   // says it parsed (an `auto` body that resolved to key=value, the key=value branches of a mixed allowlist).
   const keyValueBody = settings.format === 'kv' || bodyKindOf(extraction) === 'kv' ||
     ((settings.format === 'syslog_rfc3164' || settings.format === 'syslog_rfc5424') && settings.syslogBodyFormat === 'kv');
-  return classifyStructuredParse(raw, extraction, keyValueBody ? 'kv' : 'other');
+  const verdict = classifyStructuredParse(raw, extraction, keyValueBody ? 'kv' : 'other');
+  if (verdict.status !== 'FULL') return verdict;
+  // "No error and no lost pair" is not yet "nothing lost" for the dialects without key=value accounting.
+  const reason = unaccountedText(raw, settings, extraction);
+  return reason === null ? verdict : { status: 'PARTIAL', lostPairs: [], reasons: [reason] };
 }
 
 export function readEvent(raw: string, settings: ExtractionSettings): EventReading {

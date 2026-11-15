@@ -22,26 +22,36 @@ end
 # result.
 def parserstudio_extract(text)
   raise ArgumentError, 'Record is longer than the configured message limit' if text.bytesize > @parser_rule_set['receiver']['messageLengthLimit']
-  raise ArgumentError, 'Blank event' if parserstudio_blank_event?(text)
   settings = @parser_rule_set['extraction']
-  # Only bounded TCP LF LF framed Java and JSON source modes can contain LF.
-  # Every other source is strictly one line, never implicit reconstruction.
   framing = @parser_rule_set['receiver']['tcpFraming']
+  # Only the blank-line (LF LF) framing of the Java and JSON source modes delivers an event that contains LF.
+  # Every other event is strictly one line, never an implicit reconstruction.
+  blank_line_framed = (settings['format'] == 'java_stacktrace' && framing == 'blank_line_java') ||
+                      (settings['format'] == 'json' && framing == 'blank_line_json')
+  # Line endings as the browser preview reads them: CRLF is a line terminator, a bare CR is not one. A frame
+  # cut at LF from a CRLF-terminated stream still ends in the CR of its terminator; inside a blank-line framed
+  # event CRLF is a line break. Any other CR declines the event, in JSON too (where CR alone is white space).
+  if text.include?("\r")
+    text = text.chomp("\r")
+    text = text.gsub("\r\n", "\n") if blank_line_framed
+    raise ArgumentError, 'A bare carriage return is not a line ending' if text.include?("\r")
+  end
+  raise ArgumentError, 'Blank event' if parserstudio_blank_event?(text)
   if settings['format'] == 'java_stacktrace'
     raise ArgumentError, 'Java stack trace requires explicit LF LF TCP framing' unless
       framing == 'blank_line_java'
-  elsif settings['format'] != 'json' && (text.include?("\n") || text.include?("\r"))
+  elsif text.include?("\n") && !blank_line_framed
     raise ArgumentError, 'Multiline unframed event is unsupported'
   end
   reading = psg_read_event(psg_text(text), settings)
   # Parsing Success Contract at run time: only a FULL reading is a parsed event. A Generic Structural reading
-  # that is PARTIAL is still handed over (owner policy D-2 keeps the legacy route working); it is marked by
-  # parserstudio_normalize and never loses its original text.
+  # that is PARTIAL is still handed over (owner policy D-2 keeps the legacy route working); the verdict travels
+  # with the event, and parserstudio_normalize never drops the original text of a PARTIAL one.
   unless reading['status'] == 'FULL' || (reading['status'] == 'PARTIAL' && settings['format'] == 'generic_structural')
     raise ArgumentError, (reading['reasons'][0] || 'The event is not completely parsed')
   end
   result = psg_export(reading['fields'])
-  @parserstudio_reading_status = reading['status']
+  psg_set_tag(result, 'readingStatus', reading['status'])
   unless reading['forwarderHops'].empty?
     result['__parserstudio_forwarder_hops'] = reading['forwarderHops'].map do |hop|
       {'relay_host'=>hop['relayHost'], 'relay_timestamp'=>hop['relayTimestamp'], 'envelope'=>hop['format'],

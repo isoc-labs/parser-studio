@@ -18,6 +18,7 @@ import { hasUnsafeJsonNumbers } from '../jsonNumberSafety';
 import { jsonSourceValueValid } from '../jsonSourceSafety';
 import { extractPortableRegexFields } from '../portableRegexExtraction';
 import { extractStructuredFamily, strictKeyValues, type StructuredExtraction } from '../structuredFamilies';
+import { setTag } from './primitives';
 import { matchRfc3164Header } from './syslogHeader';
 import { SYSLOG_HEADER_TOKENS } from './syslogHeaderGrammar.generated';
 
@@ -45,7 +46,9 @@ export function extractJsonObject(raw: string): StructuredExtraction {
     if (hasDuplicateJsonObjectKeys(raw)) return failure('Duplicate JSON object key: review the source before generating a parser');
     if (hasUnsafeJsonNumbers(raw)) return failure('Unsafe JSON numeric precision: quote large integer identifiers as strings before mapping');
     if (!jsonSourceValueValid(parsed)) return failure('JSON source exceeds the native nesting limit or has an invalid Unicode surrogate');
-    return { fields: parsed as Record<string, unknown>, errors: [] };
+    const result: StructuredExtraction = { fields: parsed as Record<string, unknown>, errors: [] };
+    setTag(result, 'bodyKind', 'json');
+    return result;
   } catch {
     return failure('Invalid JSON object');
   }
@@ -109,7 +112,9 @@ export function extractCsvRow(raw: string, columns: readonly string[], delimiter
     return failure('CSV column count mismatch: expected ' + columns.length + ', received ' + values.length);
   const fields: Record<string, unknown> = {};
   for (let index = 0; index < columns.length; index++) fields[columns[index]!] = values[index];
-  return { fields, errors: [] };
+  const result: StructuredExtraction = { fields, errors: [] };
+  setTag(result, 'bodyKind', 'csv');
+  return result;
 }
 
 const MIXED_FAMILIES: readonly string[] = ['json', 'kv', 'cef', 'leef', 'rfc5424_cef', 'rfc5424_leef', 'rfc3164_kv', 'rfc5424_json', 'rfc5424_kv', 'rfc3164_cef', 'rfc3164_leef', 'csv'];

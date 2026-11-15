@@ -35,8 +35,9 @@ assert.deepEqual(shared,packaged,'packaged backend policy must match canonical s
 const templateFiles=[
   'backend/templates/canonical-operators.rb.tpl',
   'backend/templates/ruby-fragment.rb.tpl',
-  'backend/templates/ruby-forwarder-family.rb.tpl',
-  'backend/templates/generic-structural-helper.rb.tpl',
+  'backend/templates/grammar-runtime.rb.tpl',
+  'backend/templates/grammar-core.generated.rb.tpl',
+  'backend/templates/grammar-generic.generated.rb.tpl',
 ];
 const sourceFiles=[
   'backend/src/compiler.ts','backend/src/validate.ts',

@@ -116,3 +116,25 @@ test('Issue #221: native Generic Structural drops synthetic raw copy but preserv
     assert.equal(row.username,'alice');
     assert.equal(row.parser_err_stage,undefined);
   });
+
+test('W7: a PARTIAL Generic Structural event keeps its original line although the project omits source copies',
+  {skip:!rubyAvailable},()=>{
+    const p=sampleProject();
+    p.receiver.port=6801;
+    p.extraction={format:'generic_structural',omitSourceRaw:true};
+    p.normalization.topFields={'generic.kv.user':{normalized_name:'username',data_type:'string'}};
+    p.normalization.nsFields={};
+    p.normalization.vendorFields={};
+    p.classification.rules=[];
+    assert.equal(validateProject(p).ok,true);
+    // Legacy compatibility route (owner policy D-2): the CEF header is in no field, the reading is PARTIAL.
+    const partial='CEF:0|Security|threatmanager|1.0|100|worm successfully stopped|10|src=10.0.0.1 dst=2.1.2.2 spt=1232 dpt=80 act=blocked proto=tcp';
+    const complete='<134>date=2023-02-23 time=22:49:29 devname=FMG-VM log_id=0001010018 type=event user=alice status=success';
+    const rows=native(p,[partial,complete,partial]);
+    const generic=(row:Record<string,unknown>)=>(row.parserstudio_source as {generic:Record<string,unknown>}).generic;
+    assert.equal(generic(rows[0]!).source_raw,partial);
+    // The verdict belongs to the event: a FULL event between two PARTIAL ones still drops its copy.
+    assert.equal('source_raw' in generic(rows[1]!),false);
+    assert.equal(rows[1]!.username,'alice');
+    assert.equal(generic(rows[2]!).source_raw,partial);
+  });

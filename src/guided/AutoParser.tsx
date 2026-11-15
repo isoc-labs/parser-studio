@@ -1256,7 +1256,7 @@ export default function AutoParser({
          {(suite?.events??[]).some(event=>event.parseStatus==='PARTIAL')&&<span role="note" aria-label="Partially parsed sample events">
            {(suite?.events??[]).filter(event=>event.parseStatus==='PARTIAL').length} of {suite?.events.length??0} sample events are only partially parsed, not completely.{' '}
            {(suite?.events??[]).find(event=>event.parseStatus==='PARTIAL')?.diagnostics.find(item=>
-             item.code==='GENERIC_STRUCTURAL_NOT_FULL'||item.code==='FIELD_LOSS_NOT_FULL'||item.code==='HEADER_MISREAD_NOT_FULL')?.message
+             item.code==='GENERIC_STRUCTURAL_NOT_FULL'||item.code==='FIELD_LOSS_NOT_FULL'||item.code==='HEADER_MISREAD_NOT_FULL'||item.code==='TEXT_NOT_ACCOUNTED_NOT_FULL')?.message
              ??'Part of the original text is not in a field.'}{' '}
            The original text is kept unchanged. This parser keeps the reading it was created with.
          </span>}

@@ -7,6 +7,7 @@ Input (stdin, JSON):
    "familyLines": [{"family": "cef" | "leef", "raw": "<raw line>"}, ...],
    "csvLines": ["<comma-separated row>", ...],
    "jsonLines": ["<JSON object event>", ...],
+   "previewLines": ["<any line>", ...],
    "versions": ["1", "2", ...]}
 Output (stdout, JSON):
   {"python": "<version>",
@@ -15,6 +16,7 @@ Output (stdout, JSON):
    "family": [{"status": "<preview status>", "header": {...}, "extension": {...}}, ...],
    "csv": [{"candidate": bool, "values": [<field>, ...]}, ...],
    "json": [{"status": "<preview status>", "fields": {...}}, ...],
+   "preview": [{"status": "<preview status>", "syntax": "<detected syntax>", "issues": [...], "fields": {...}}, ...],
    "rfc5424": {"<version>": {"extract_rfc5424": bool, "extract_pair_envelope": bool,
                              "short_rfc5424_json": bool, "short_ietf_csv": bool,
                              "parse_generic_structural": bool}}}
@@ -104,5 +106,27 @@ for raw in request.get("jsonLines", []):
     result = multipass_preview_api.preview(raw)
     json_events.append({"status": result["status"], "fields": exact(result.get("fields") or {})})
 
+# Any line, through the preview entry point, with what the preview says about it (three-way comparison). An
+# integer beyond 2^53 is handed over as {"__digits": "<decimal digits>"}.
+def exact_marked(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and abs(value) > 2 ** 53 - 1:
+        return {"__digits": str(value)}
+    if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+        return {"__nonfinite": str(value)}
+    if isinstance(value, dict):
+        return {key: exact_marked(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [exact_marked(item) for item in value]
+    return value
+
+
+previews = []
+for raw in request.get("previewLines", []):
+    result = multipass_preview_api.preview(raw)
+    previews.append({"status": result["status"], "syntax": result.get("syntax") or "", "issues": result.get("issues") or [],
+                     "fields": exact_marked(result.get("fields") or {})})
+
 json.dump({"python": ".".join(map(str, sys.version_info[:3])), "envelope": envelope, "rfc5424": rfc5424, "kv": kv, "family": family, "csv": csv_rows,
-           "json": json_events}, sys.stdout)
+           "json": json_events, "preview": previews}, sys.stdout)

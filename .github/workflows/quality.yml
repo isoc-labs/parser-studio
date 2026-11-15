@@ -153,7 +153,7 @@ jobs:
           export PATH="$PWD/scripts/verification/ruby24-docker-shim:$PATH"
           ruby -v | grep -F 'ruby 2.4.9'
           PARSER_STUDIO_EXPECT_RUBY=2.4.9 node backend/node_modules/tsx/dist/cli.mjs scripts/verification/semantic-oracle.ts native
-      - name: Browser versus generated Ruby differential (Generic Structural and 25 configurations of the other formats) and fault injection on the Ruby 2.4.9 target
+      - name: Browser versus generated Ruby differential (Generic Structural with its profiles, 29 configurations of the other formats, line endings) and fault injection on the Ruby 2.4.9 target
         run: |
           set -euo pipefail
           image=$(node -e 'const c=require("./contracts/target-runtime-profiles.v1.json");const p=c.profiles.find(x=>x.id==="stellar70-observed-ruby24");if(!p?.ciContainerImage?.startsWith("ruby:2.4.9@sha256:"))process.exit(1);process.stdout.write(p.ciContainerImage)')
@@ -243,9 +243,13 @@ jobs:
       # parse result. They need only the backend tooling (tsx), not its build.
       - name: Install backend tooling for the semantic oracles
         run: npm ci --prefix backend --no-audit --no-fund
+      # Every Ruby template file and the artifact of every compiler variant, in one manifest. This step only says
+      # whether the committed manifest is current; whether its digest is approved is a backend test.
+      - name: Ruby template set manifest in sync with the templates and the compiler
+        run: node backend/node_modules/tsx/dist/cli.mjs scripts/verification/ruby-template-set.ts --verify
       - name: Semantic Golden oracle, model-based properties and fault injection (browser TypeScript)
         run: node backend/node_modules/tsx/dist/cli.mjs scripts/verification/semantic-oracle.ts ts
-      - name: Semantic Golden oracle, key=value bodies, RFC 5424 VERSION policy and fault injection (Python Multi-Pass)
+      - name: Semantic Golden oracle, RFC 5424 VERSION policy, three-way comparison with the browser and fault injection (Python Multi-Pass)
         run: node backend/node_modules/tsx/dist/cli.mjs scripts/verification/semantic-oracle.ts python
       # Placed before the template-hash gate on purpose: a hash that is waiting for owner approval must not
       # keep the independently authored goldens from running.
@@ -292,10 +296,12 @@ jobs:
           npm ci --prefix backend --no-audit --no-fund
           npm run check --prefix backend
           npm run build --prefix backend
-          # The runner provides Ruby; verify the native helper parses before
-          # the complete offline authoring test gate.
-          ruby -c backend/templates/generic-structural-helper.rb.tpl
-          ruby -c backend/templates/ruby-forwarder-family.rb.tpl
+          # The runner provides Ruby; verify that the grammar of the generated parser (the hand-written
+          # primitives and the Ruby generated from the browser grammar) parses before the complete offline
+          # authoring test gate.
+          ruby -c backend/templates/grammar-runtime.rb.tpl
+          ruby -c backend/templates/grammar-core.generated.rb.tpl
+          ruby -c backend/templates/grammar-generic.generated.rb.tpl
           # Product scope is a finite, explicit list; keep broader historical
           # target/Drain3 regression failures visible in backend documentation.
           PARSER_STUDIO_NATIVE_CONFORMANCE_REQUIRED=1 npm run test:authoring --prefix backend

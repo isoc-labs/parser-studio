@@ -7,7 +7,7 @@ import {GRAMMAR_FRAGMENTS,SYSLOG_HEADER_SEMANTICS,SYSLOG_HEADER_TOKENS as T} fro
 import {hasDuplicateJsonObjectKeys} from './jsonDuplicateKeys';
 import {hasUnsafeJsonNumbers} from './jsonNumberSafety';
 import {jsonSourceValueValid} from './jsonSourceSafety';
-import {matchAt,namedGroups} from './grammar/primitives';
+import {matchAt,namedGroups,setTag} from './grammar/primitives';
 export type {GenericStructuralProfile} from './genericStructuralProfiles';
 
 // The header tokens of the sub-profile expressions below are the grammar contract's (contracts/
@@ -21,6 +21,16 @@ const RFC5424_VERSION=SYSLOG_HEADER_SEMANTICS.rfc5424SupportedVersions.join('|')
 // U+2028 / U+2029; LF never reaches these expressions) and trims with ASCII_EDGE_SPACE instead of trim().
 const ASCII_EDGE_SPACE=/^[ \t\n\v\f\r]+|[ \t\n\v\f\r]+$/gu;
 const ASCII_TRAIL_SPACE=/[ \t\n\v\f\r]+$/u;
+
+/**
+ * Marks a result whose body is JSON, CEF, LEEF or positional CSV with the dialect and the exact text the
+ * dialect read, for the loss accounting of the Parsing Success Contract (src/grammar/genericParseStatus.ts).
+ */
+function withBodyText(fields:Record<string,unknown>,kind:'json'|'cef'|'leef'|'positional_csv',text:string):Record<string,unknown>{
+  setTag(fields,'bodyKind',kind);
+  setTag(fields,'bodyText',text);
+  return fields;
+}
 
 /**
  * Every JSON body inside Generic Structural is read here: a repeated member name or an integer that the
@@ -74,10 +84,10 @@ function shortRfc5424Json(raw:string):Record<string,unknown>|null{
   if(!Number.isInteger(pri)||pri<0||pri>191||!validRfc3339(match[3]!))return null;
   const body=parseJsonBody(match[5]!);
   if(!body||Array.isArray(body)||typeof body!=='object')return null;
-  return {
+  return withBodyText({
     syslog:{pri:match[1],version:match[2],timestamp:match[3],hostname:match[4]},
     body:body as Record<string,unknown>,
-  };
+  },'json',match[5]!);
 }
 
 function prefixedJson(raw:string):Record<string,unknown>|null{
@@ -86,10 +96,10 @@ function prefixedJson(raw:string):Record<string,unknown>|null{
   if(!match)return null;
   const body=parseJsonBody(match[2]!);
   if(!body||Array.isArray(body)||typeof body!=='object')return null;
-  return {
+  return withBodyText({
     generic:{mode:'prefixed_json',prefix:match[1],source_raw:raw},
     body:body as Record<string,unknown>,
-  };
+  },'json',match[2]!);
 }
 
 const RX_SHORT_RFC5424_STRUCTURED=new RegExp(String.raw`^<(${T.PRI})>(${RFC5424_VERSION}) ([^ \t\n\r\f\v]{1,64}) (${T.RFC5424_HOSTNAME}) ((?:CEF:0\|.*|LEEF:(?:1\.0|2\.0)\|.*))$`,'su');
@@ -737,12 +747,12 @@ function rfc3164PositionalCsv(raw:string):Record<string,unknown>|null{
     month:head[2],day:head[3],time:head[4],hostname:head[5],
   };
   if(head[1]!==undefined)syslog.pri=head[1];
-  return {
+  return withBodyText({
     syslog,
     generic:panos
       ?{mode:'panos_traffic_csv',delimiter:',',source_raw:raw,fields:panos}
       :{mode:'rfc3164_positional_csv',delimiter:',',source_raw:raw,columns},
-  };
+  },'positional_csv',body);
 }
 
 
@@ -890,28 +900,28 @@ function syslogEnvelopeStructuredFallback(raw:string):Record<string,unknown>|nul
     if(!/^CEF:0\|/u.test(message))return null;
     const parsed=extractStructuredFamily(message,'cef');
     if(parsed.errors.length)return null;
-    return {
+    return withBodyText({
       syslog,body:parsed.fields,
       generic:{mode:'syslog_envelope_cef',source_raw:raw,message_raw:message},
-    };
+    },'cef',message);
   }
   if(message.startsWith('LEEF:')){
     if(!/^LEEF:(?:1\.0|2\.0)\|/u.test(message))return null;
     const parsed=extractStructuredFamily(message,'leef');
     if(parsed.errors.length)return null;
-    return {
+    return withBodyText({
       syslog,body:parsed.fields,
       generic:{mode:'syslog_envelope_leef',source_raw:raw,message_raw:message},
-    };
+    },'leef',message);
   }
 
   if(message.startsWith('{')){
     const json=boundedEnvelopeJson(message);
     if(!json)return null;
-    return {
+    return withBodyText({
       syslog,body:json,
       generic:{mode:'syslog_envelope_json',source_raw:raw,message_raw:message},
-    };
+    },'json',message);
   }
 
   const panosValues=positionalCsvValues(message);
@@ -923,20 +933,20 @@ function syslogEnvelopeStructuredFallback(raw:string):Record<string,unknown>|nul
   const panos=panosPositionalCsvBody(message);
   if(panos){
     const named=panosValues?panosTrafficFields(panosValues):null;
-    return {
+    return withBodyText({
       syslog,
       generic:named
         ?{mode:'panos_traffic_csv',profile:'panos',delimiter:',',source_raw:raw,message_raw:message,fields:named}
         :{mode:'syslog_envelope_positional_csv',profile:'panos',delimiter:',',source_raw:raw,message_raw:message,columns:panos},
-    };
+    },'positional_csv',message);
   }
   if(panosLike)return null;
 
   const positional=securityPositionalCsvBody(message);
-  if(positional)return {
+  if(positional)return withBodyText({
     syslog,
     generic:{mode:'syslog_envelope_positional_csv',delimiter:',',source_raw:raw,message_raw:message,columns:positional},
-  };
+  },'positional_csv',message);
 
   const comma=delimitedCommaKv(message);
   if(comma?.generic&&typeof comma.generic==='object')return {
@@ -1051,6 +1061,14 @@ export function structuredFamilyClaim(raw:string):'CEF'|'LEEF'|null{
   const match=matchAt(FAMILY_CLAIM,raw,0);
   return match?match.groups!.family as 'CEF'|'LEEF':null;
 }
+/**
+ * The same claim made by the message of a Syslog envelope. A line is one vendor's CEF or LEEF event whether or
+ * not a relay put a Syslog header in front of it, and it is read by one grammar either way.
+ */
+export function envelopedFamilyClaim(raw:string):'CEF'|'LEEF'|null{
+  const envelope=parseSyslogEnvelope(raw);
+  return envelope&&envelope.variant!=='colon_date'?structuredFamilyClaim(envelope.message):null;
+}
 /** Modes that read a CEF/LEEF event with the CEF/LEEF grammar. */
 export const GENERIC_FAMILY_MODES:readonly string[]=['structured_family_cef','structured_family_leef','syslog_envelope_cef','syslog_envelope_leef','leef2_implicit_tab'];
 
@@ -1085,8 +1103,18 @@ export function extractGenericStructural(raw:string,profile?:GenericStructuralPr
     const parsed=extractStructuredFamily(raw,claim==='CEF'?'cef':'leef');
     if(parsed.errors.length)
       return {fields:{},errors:['The event claims to be '+claim+' but does not match the '+claim+' grammar; it is not read as generic key=value']};
-    return {fields:{body:parsed.fields,
-      generic:{mode:claim==='CEF'?'structured_family_cef':'structured_family_leef',source_raw:raw}},errors:[]};
+    return {fields:withBodyText({body:parsed.fields,
+      generic:{mode:claim==='CEF'?'structured_family_cef':'structured_family_leef',source_raw:raw}},claim==='CEF'?'cef':'leef',raw),errors:[]};
+  }
+  // The claim of an enveloped message is honoured the same way: before this, a CEF event with five or more
+  // pairs behind a Syslog header was taken by the space-separated key=value route (its header and first pair
+  // became prefix tokens), while the same event with fewer pairs was read as CEF.
+  const enveloped=familyGrammar==='dedicated'?envelopedFamilyClaim(raw):null;
+  if(enveloped){
+    const fields=syslogEnvelopeStructuredFallback(raw);
+    const generic=fields?.generic as {mode?:unknown}|undefined;
+    if(fields&&typeof generic?.mode==='string'&&GENERIC_FAMILY_MODES.includes(generic.mode))return {fields,errors:[]};
+    return {fields:{},errors:['The event claims to be '+enveloped+' inside a Syslog envelope but does not match the '+enveloped+' grammar; it is not read as generic key=value']};
   }
   const fields=shortRfc5424Structured(raw)??shortRfc5424Json(raw)??prefixedJson(raw)??isoPriMixed(raw)??isoPriPositional(raw)??asa(raw)??watchguardProfile(raw)??watchguardMessageProfile(raw)??dualTimestampSessionProfile(raw)??bsdBracketPidMessageProfile(raw)??
     juniperLegacyProfile(raw)??junosRfc5424Sd(raw)??bracketColonKv(raw)??

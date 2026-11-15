@@ -43,7 +43,9 @@ function insertBeforeParseEnd(fragment: string, helper: string): string {
 }
 const GENERIC_STRUCTURAL_NORMALIZE_NEEDLE = "def parserstudio_normalize(original)\n  normalized = {}";
 const GENERIC_STRUCTURAL_NORMALIZE_BRANCH = "def parserstudio_normalize(original)\n  normalized = {'parserstudio_source' => original}";
-const GENERIC_STRUCTURAL_NORMALIZE_NO_RAW_BRANCH = "def parserstudio_normalize(original)\n  normalized = {'parserstudio_source' => parserstudio_without_source_raw(original)}";
+// The source copies are omitted from a FULL event only: what a PARTIAL event does not hold in a field exists
+// nowhere else than in the copy of its original line.
+const GENERIC_STRUCTURAL_NORMALIZE_NO_RAW_BRANCH = "def parserstudio_normalize(original)\n  normalized = {'parserstudio_source' => (psg_get_tag(original, 'readingStatus') == 'FULL' ? parserstudio_without_source_raw(original) : original)}";
 // Only emitted when extraction.omitSourceRaw is true; default artifacts are byte-identical.
 const SOURCE_RAW_STRIP_HELPER = String.raw`
 # Parser Studio: omit generated full-line copies only from known grammar-owned nodes.
