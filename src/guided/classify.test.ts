@@ -70,4 +70,38 @@ describe('explainable local classification suggestions', () => {
     options.groups = { m1: 'vendor_fields', m2: 'vendor_fields' };
     expect(suggestClassification(preview('{"action":"deny"}', draft).events[0]!, options, draft)).toMatchObject({ status: 'fallback' });
   });
+
+  // Independent re-audit of 2026-11-15: the generated parser classifies an event only after extraction, mapping
+  // and enrichment have succeeded; an event with a mapped-field error is a diagnostic record there, in no
+  // category. The browser hint said "Condition Matched" for the same event.
+  it('does not classify an event whose mapped field has an error, as the generated parser does not', () => {
+    const draft = createDraft();
+    draft.format = 'json';
+    draft.mappings = [
+      { id: 'm1', source: 'dpt', target: 'dstport', type: 'port' },
+      { id: 'm2', source: 'act', target: 'action', type: 'string' },
+    ];
+    const options = defaultGuidedOptions();
+    options.groups = { m1: 'top_fields', m2: 'top_fields' };
+    options.classification.rules = [{ id: 'r1', sourceField: 'act', equals: 'deny', index: 'Threat' }];
+    draft.guided = options;
+    const [good, bad] = preview('{"dpt":443,"act":"deny"}\n{"dpt":70000,"act":"deny"}', draft).events;
+    expect(suggestClassification(good!, options, draft)).toMatchObject({ index: 'Threat', rule: 0, status: 'matched' });
+    expect(bad!.diagnostics.some(issue => issue.severity === 'error' && issue.code === 'TYPE_ERROR')).toBe(true);
+    expect(suggestClassification(bad!, options, draft)).toMatchObject({ index: null, rule: null, status: 'unresolved' });
+  });
+
+  // The export refuses a classification path it cannot address (CLASSIFICATION_FIELD_PATH_UNSUPPORTED); the hint
+  // must not promise a category that no generated parser will assign.
+  it('does not match on a manufacturer field whose path the export refuses', () => {
+    const draft = createDraft();
+    draft.format = 'json';
+    draft.vendor = 'Acme Corp';
+    draft.mappings = [{ id: 'm1', source: 'action', target: 'act', type: 'string' }];
+    const options = defaultGuidedOptions();
+    options.groups = { m1: 'vendor_fields' };
+    options.classification.rules = [{ id: 'r1', sourceField: 'action', equals: 'deny', index: 'Threat' }];
+    const event = preview('{"action":"deny"}', draft).events[0]!;
+    expect(suggestClassification(event, options, draft)).toMatchObject({ status: 'fallback' });
+  });
 });

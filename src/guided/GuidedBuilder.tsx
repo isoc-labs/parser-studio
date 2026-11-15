@@ -1763,7 +1763,7 @@ export default function GuidedBuilder(props: GuidedBuilderProps) {
                 return <div className="guided-routing-row" key={event.id}>
                   <span className="guided-routing-event">#{event.line}</span>
                   <div><strong className={hint.status === 'unresolved' ? 'unresolved' : hint.status === 'matched' ? 'matched' : 'fallback'}>{hint.index ?? 'Unclassified'}</strong><small>{hint.reason}</small></div>
-                  <span className={'guided-route-state ' + hint.status}>{hint.status === 'unresolved' ? 'Extraction Failed' : hint.status === 'matched' ? 'Condition Matched' : 'Default'}</span>
+                  <span className={'guided-route-state ' + hint.status}>{hint.status === 'unresolved' ? (event.matched ? 'Field Error' : 'Extraction Failed') : hint.status === 'matched' ? 'Condition Matched' : 'Default'}</span>
                 </div>;
               })}
               {(suite?.events.length ?? 0) > 30 && <p className="guided-route-empty">Only the first 30 events are shown. Run the full suite in step 5.</p>}

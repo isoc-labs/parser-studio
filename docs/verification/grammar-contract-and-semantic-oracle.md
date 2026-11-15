@@ -715,6 +715,22 @@ agreed on about 600 end-to-end lines. What it found, and what was done:
 | declined, not mis-parsed (both engines agree): an empty unquoted key=value value, a quoted value ending in a backslash, a JSON number a double does not hold or nesting beyond eight levels, a backslash other than `\"` `\\` `\]` in an RFC 5424 SD-PARAM, several RFC 3164 shapes (TAG with `/`, ISO timestamp, no host, Cisco ASA forms), Java frames such as `<init>`, Generic Structural thresholds (five pairs) | scope: honest refusals of input outside the supported grammar; listed for the owner, not changed |
 | `java_stacktrace` reports FULL with the exception class, frame count and cause only | by design of that format (a summary); the message and the frames are in no field. Listed for the owner |
 
+### Re-audit of the fixes (2026-11-15)
+
+A second reviewer audited the fix commits alone (`85e3915..fdb6411`): 26,500 random key=value lines through
+the browser, Ruby 2.4.9 and the Python preview (0 differences; every changed reading has a backslash before
+white space or at the end of the value), the independent tokenizer against the grammar (0 disagreements), the
+Regex spellings, the ASCII escapes (same 25 code points; trim and number reading equal to ECMAScript over the
+BMP), the declined-event names (no path where the error escapes) and 145 end-to-end lines (0 differences in
+fields, types and verdicts). It found nothing wrong in the diff and one older difference, now fixed:
+
+| Finding | Decision |
+|---|---|
+| the browser classification hint said "Condition Matched" for an event with a mapped-field error; the generated parser reports such an event as a diagnostic record, in no category | fixed: an event with an error of extraction, mapping or enrichment is not classified in the hint (`src/guided/classify.ts`), and the row says "Field Error" |
+| the hint matched on a manufacturer field whose path the export refuses (a manufacturer name with a space) | fixed: the hint applies the path rule of the export |
+| the LEEF assertion of the local smoke did not look at the value it names | fixed: the extracted value is compared |
+| listed, not changed: the specific Regex reason is replaced by a generic one inside a group (the pattern is refused either way); `X{n,n}?` is refused although both engines agree on it (`X{n}` says the same); JSON nested deeper than 100 levels or with a lone surrogate escape is declined by both engines, with the name `JSON::ParserError` on Ruby; a product name beyond ASCII appears in a comment of the `.conf` (the Ruby stays ASCII) | P3 |
+
 ## Error records and target-side checks after the first CI run (2026-11-15)
 
 The first CI run of the generated grammar and a comparison with artifacts downloaded from `main` on abnormal

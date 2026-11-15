@@ -230,4 +230,10 @@ assert(cef_dangling['parser_err_msg'] == 'ArgumentError' &&
 _, leef_literal = execute_parser(folder, 'sample_leef', "LEEF:1.0|Synthetic|FW|1|500|src=203.0.113.7\tpath=C:\\Temp\\")
 assert(leef_literal['srcip'] == '203.0.113.7' && !leef_literal.key?('parser_err_msg'),
        'LEEF value text ending in a backslash must be kept')
+leef_parser_path = File.join(folder, 'customized_sample_leef')
+leef_parser_class = Class.new
+leef_parser_class.class_eval(SyntheticFixtureGuard.read_source(leef_parser_path), leef_parser_path, 1)
+leef_extracted = leef_parser_class.new.parserstudio_extract("LEEF:1.0|Synthetic|FW|1|500|src=203.0.113.7\tpath=C:\\Temp\\")
+assert(leef_extracted['path'] == "C:\\Temp\\" && leef_extracted['src'] == '203.0.113.7',
+       'LEEF value text ending in a backslash must be extracted exactly as written')
 puts "Delimited header escape safety: 3 malformed cases REJECTED, 1 literal LEEF value kept (synthetic only)"
