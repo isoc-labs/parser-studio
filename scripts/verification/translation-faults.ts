@@ -16,6 +16,9 @@ const RUNTIME_PATH = 'backend/templates/grammar-runtime.rb.tpl';
 export const RUNTIME_FAULTS: ReadonlyArray<{ id: string; find: string; replace: string }> = [
   { id: 'runtime-undefined-exported-as-null', find: 'record[key] = psg_export(item) unless item.nil? }', replace: 'record[key] = psg_export(item) }' },
   { id: 'runtime-json-null-is-absent', find: '  when nil then :psg_null\n  when Hash then value.each_with_object({}) { |(key, item), record| record[key] = psg_json_import(item) }', replace: '  when nil then nil\n  when Hash then value.each_with_object({}) { |(key, item), record| record[key] = psg_json_import(item) }' },
+  { id: 'runtime-unit-offset-read-as-character-offset', find: '  char = chars[unit]\n', replace: '  char = unit\n' },
+  { id: 'runtime-character-offset-read-as-unit-offset', find: '        starts << index\n', replace: '        starts << starts.length\n' },
+  { id: 'runtime-short-piece-cut-by-character-offset', find: '    return units[from, to - from].join\n', replace: '    return value[from, to - from]\n' },
   { id: 'runtime-length-in-characters', find: '  value.ascii_only? ? value.length : psg_units(value).length', replace: '  value.length' },
   { id: 'runtime-large-number-not-an-integer', find: '  value.is_a?(Integer) || (value.is_a?(Float) && value.finite? && value == value.floor)', replace: '  value.is_a?(Integer)' },
   { id: 'runtime-split-drops-trailing-fields', find: "      text.empty? ? [''] : text.split(separator, -1)", replace: "      text.empty? ? [''] : text.split(separator)" },

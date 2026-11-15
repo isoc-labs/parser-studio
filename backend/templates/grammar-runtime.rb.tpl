@@ -32,14 +32,55 @@ def psg_units(text)
     units << char
     units << '' if char.ord > 0xffff
   end
-  cache.clear if cache.length >= 256
   cache[text] = units
+  @psg_unit_cache_units = @psg_unit_cache_units.to_i + units.length
+  # The kept arrays are bounded by their total size, not only by their number: every entry is a String of its
+  # own, so 256 arrays of 60 KB events held several hundred megabytes. The oldest go first and the eight newest
+  # always stay: one event is read through a few texts of its own size (the line, its body, a value), and a
+  # text dropped while it was in use was built again on every read (delta audit of 2026-11-16).
+  while cache.length > 8 && (cache.length > 64 || @psg_unit_cache_units > 131_072)
+    dropped, dropped_units = cache.shift
+    @psg_unit_cache_units -= dropped_units.length
+    @psg_offset_cache.delete(dropped) unless @psg_offset_cache.nil?
+  end
   units
+end
+
+# The two offset tables of a text with a character beyond the BMP, or false for a text in which a character
+# offset and a code unit offset are the same thing. The first table holds the character offset of every code
+# unit (-1 for the second unit of a character), the second the code unit offset of every character; each has
+# one more entry, for the end of the text. They are kept beside the units and dropped with them. Without them
+# every conversion counted the units before the offset, so the cost of one read grew with its distance from
+# the start of the text: a CSV row with one such character and 15,000 doubled quotes took 26 s (delta audit
+# of 2026-11-16).
+def psg_offsets(text)
+  cache = (@psg_offset_cache ||= {}.compare_by_identity)
+  offsets = cache[text]
+  return offsets unless offsets.nil?
+  units = psg_units(text)
+  if units.length == text.length
+    offsets = false
+  else
+    chars = []
+    starts = []
+    units.each_with_index do |unit, index|
+      if unit == ''
+        chars << -1
+      else
+        chars << starts.length
+        starts << index
+      end
+    end
+    chars << starts.length
+    starts << units.length
+    offsets = [chars, starts]
+  end
+  cache[text] = offsets
 end
 
 # True when a character offset and a code unit offset are the same thing in this text.
 def psg_plain?(text)
-  text.ascii_only? || psg_units(text).length == text.length
+  text.ascii_only? || !psg_offsets(text)
 end
 
 def psg_len(value)
@@ -50,16 +91,22 @@ end
 # UTF-16 code unit offset -> character offset. An offset between the two units of one character has no
 # counterpart in a UTF-8 string: the event is declined instead of being cut inside a character.
 def psg_unit_to_char(text, unit)
-  return unit if unit <= 0 || psg_plain?(text)
-  units = psg_units(text)
-  return text.length if unit >= units.length
-  raise ArgumentError, 'String offset inside a surrogate pair' if units[unit] == ''
-  unit - units[0, unit].count('')
+  return unit if unit <= 0 || text.ascii_only?
+  offsets = psg_offsets(text)
+  return unit unless offsets
+  chars = offsets[0]
+  return chars[-1] if unit >= chars.length - 1
+  char = chars[unit]
+  raise ArgumentError, 'String offset inside a surrogate pair' if char < 0
+  char
 end
 
 def psg_char_to_unit(text, char)
-  return char if char <= 0 || psg_plain?(text)
-  char + text[0, char].scan(/[\u{10000}-\u{10ffff}]/).length
+  return char if char <= 0 || text.ascii_only?
+  offsets = psg_offsets(text)
+  return char unless offsets
+  starts = offsets[1]
+  char < starts.length ? starts[char] : char + starts[-1] - (starts.length - 1)
 end
 
 def psg_int(value)
@@ -80,7 +127,16 @@ def psg_slice(value, from = nil, to = nil)
   from = from < 0 ? [size + from, 0].max : [from, size].min
   to = to < 0 ? [size + to, 0].max : [to, size].min
   return (value.is_a?(String) ? '' : []) if to <= from
-  return value[from, to - from] unless value.is_a?(String) && !psg_plain?(value)
+  return value[from, to - from] unless value.is_a?(String) && !value.ascii_only?
+  # A short piece is put together from the units. Reading it out of the text costs a walk from the start of
+  # the text to the piece (a UTF-8 string has no index of its characters), so a text read in many short
+  # pieces cost the square of its length (delta audit of 2026-11-16).
+  if to - from <= 32
+    units = psg_units(value)
+    raise ArgumentError, 'String offset inside a surrogate pair' if units[from] == '' || units[to] == ''
+    return units[from, to - from].join
+  end
+  return value[from, to - from] if psg_plain?(value)
   first = psg_unit_to_char(value, from)
   value[first, psg_unit_to_char(value, to) - first]
 end
@@ -190,14 +246,23 @@ def psg_match_all(text, pattern)
   text.to_enum(:scan, pattern).map { Regexp.last_match }
 end
 
+# A match of a text beyond ASCII carries the text it was made on: MatchData#string is a copy of a text that is
+# not frozen, a new one for every match, and the units of that copy were built again for every match of a
+# scan (an RFC 3164 event of 60 KB with key=value pairs took 1.9 s, 73% of it there; profile on Ruby 2.4.9,
+# 2026-11-16).
 def psg_match_at(pattern, text, position)
   position = psg_int(position)
-  pattern.match(text, text.ascii_only? ? position : psg_unit_to_char(text, position)) || :psg_null
+  return pattern.match(text, position) || :psg_null if text.ascii_only?
+  match = pattern.match(text, psg_unit_to_char(text, position))
+  return :psg_null if match.nil?
+  match.instance_variable_set(:@psg_text, text)
+  match
 end
 
 def psg_match_end(match)
   text = match.string
-  text.ascii_only? ? match.end(0) : psg_char_to_unit(text, match.end(0))
+  return match.end(0) if text.ascii_only?
+  psg_char_to_unit(match.instance_variable_get(:@psg_text) || text, match.end(0))
 end
 
 def psg_match_index(match)
@@ -210,6 +275,8 @@ end
 
 def psg_group(match, name)
   return nil if match.nil? || match.equal?(:psg_null)
+  raise NoMethodError, 'psg_group reads a match' unless match.is_a?(MatchData)
+  return nil unless name.is_a?(String)
   begin
     match[name]
   rescue IndexError
@@ -460,20 +527,21 @@ end
 # A callback of the browser receives (item, index); a Ruby lambda is strict about its argument count. Whether
 # the callback takes the index is asked once per list: Proc#parameters builds an array on every call, and
 # asking per item was a measurable part of the cost of an event (Ruby 2.4.9, 2026-11-15).
-def psg_with_index?(function)
-  function.parameters.length >= 2
+# A list without items does not ask: its callback is never looked at, as it never was.
+def psg_with_index?(list, function)
+  !list.empty? && function.parameters.length >= 2
 end
 
 def psg_map(list, function)
   out = []
-  with_index = psg_with_index?(function)
+  with_index = psg_with_index?(list, function)
   list.each_with_index { |item, index| out << (with_index ? function.call(item, index) : function.call(item)) }
   out
 end
 
 def psg_flat_map(list, function)
   out = []
-  with_index = psg_with_index?(function)
+  with_index = psg_with_index?(list, function)
   list.each_with_index do |item, index|
     result = (with_index ? function.call(item, index) : function.call(item))
     result.is_a?(Array) ? out.concat(result) : out << result
@@ -483,37 +551,37 @@ end
 
 def psg_filter(list, function)
   out = []
-  with_index = psg_with_index?(function)
+  with_index = psg_with_index?(list, function)
   list.each_with_index { |item, index| out << item if psg_t((with_index ? function.call(item, index) : function.call(item))) }
   out
 end
 
 def psg_some(list, function)
-  with_index = psg_with_index?(function)
+  with_index = psg_with_index?(list, function)
   list.each_with_index { |item, index| return true if psg_t((with_index ? function.call(item, index) : function.call(item))) }
   false
 end
 
 def psg_every(list, function)
-  with_index = psg_with_index?(function)
+  with_index = psg_with_index?(list, function)
   list.each_with_index { |item, index| return false unless psg_t((with_index ? function.call(item, index) : function.call(item))) }
   true
 end
 
 def psg_for_each(list, function)
-  with_index = psg_with_index?(function)
+  with_index = psg_with_index?(list, function)
   list.each_with_index { |item, index| (with_index ? function.call(item, index) : function.call(item)) }
   nil
 end
 
 def psg_find(list, function)
-  with_index = psg_with_index?(function)
+  with_index = psg_with_index?(list, function)
   list.each_with_index { |item, index| return item if psg_t((with_index ? function.call(item, index) : function.call(item))) }
   nil
 end
 
 def psg_find_index(list, function)
-  with_index = psg_with_index?(function)
+  with_index = psg_with_index?(list, function)
   list.each_with_index { |item, index| return index if psg_t((with_index ? function.call(item, index) : function.call(item))) }
   -1
 end
