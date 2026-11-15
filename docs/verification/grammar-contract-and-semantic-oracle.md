@@ -690,7 +690,11 @@ sample project. A change to the Generic Structural grammar, the Regex helper, th
 variant does not move it. `contracts/ruby-template-set.v1.json` records what decides the text of every
 generated parser: the SHA-256 of every file in `backend/templates`, the normalized Ruby and the CONF of every
 compiler variant (`backend/test/compiler-variants.ts`), the case-fold table as inflated, and one digest over
-all of it (`templateSetSha256`). `backend/test/template-set-approval.test.ts` recomputes the manifest, fails
+all of it (`templateSetSha256`). Since 2026-11-16 the set also holds the artifact of one project that no
+compiler variant produces (a Regex without a static cost proof, `supplementalProjects()` in
+`backend/test/template-set.ts`), found by block coverage of the compiler. Since 2026-11-16 the set also holds the artifact of one project that no
+compiler variant produces (a Regex without a static cost proof, `supplementalProjects()` in
+`backend/test/template-set.ts`), found by block coverage of the compiler. `backend/test/template-set-approval.test.ts` recomputes the manifest, fails
 when the committed file is stale, and holds the digest to `APPROVED_TEMPLATE_SET_SHA256`, which only an owner
 review sets. The existing constants are unchanged and still gate the disposable POC upload.
 
@@ -710,7 +714,7 @@ agreed on about 600 end-to-end lines. What it found, and what was done:
 | key=value: a backslash before a space carried the space into an unquoted value, so `path=C:\Temp\ user=bob` lost the `user` pair and was FULL; the run-time check shared the rule and did not see it (same on `main`) | fixed: an unquoted value ends at white space, also after a backslash (contract token `KV_BARE`, golden, model, fault `contract-kv-backslash-carries-space`); the independent reader has no backslash rule any more |
 | classification: a field mapped only to the manufacturer namespace classified in the generated parser and fell back to the default category in the browser | fixed: the browser hint uses the destination the export uses (`src/guided/classify.ts`) |
 | Regex: `X{n}?` is "exactly n" in ECMAScript and "n or none" in Ruby 2.4 | fixed: the spelling is refused in both (`REGEX_LAZY_EXACT_COUNT`); `X{n}` says the same |
-| key=value: `\\` is read as an escaped backslash and `\=` as `=`, in quoted and unquoted values (a UNC path `\\server\share` loses a backslash); identical in the browser, Ruby and Python, and identical on `main` | **not changed, owner decision**: this is the shipped escape convention; keeping unquoted values exactly as written would be lossless but changes the output of existing parsers |
+| key=value: `\\` is read as an escaped backslash and `\=` as `=`, in quoted and unquoted values (a UNC path `\\server\share` loses a backslash); identical in the browser, Ruby and Python, and identical on `main` | unquoted values: **fixed on 2026-11-16**, the text as written (see "Final audit and verification" below); quoted values: owner decision |
 | text that is not valid UTF-8 declines the event on Ruby | by design: the grammar reads text; the alternative is to emit replacement characters, which alters data. Owner decision if another policy is wanted |
 | declined, not mis-parsed (both engines agree): an empty unquoted key=value value, a quoted value ending in a backslash, a JSON number a double does not hold or nesting beyond eight levels, a backslash other than `\"` `\\` `\]` in an RFC 5424 SD-PARAM, several RFC 3164 shapes (TAG with `/`, ISO timestamp, no host, Cisco ASA forms), Java frames such as `<init>`, Generic Structural thresholds (five pairs) | scope: honest refusals of input outside the supported grammar; listed for the owner, not changed |
 | `java_stacktrace` reports FULL with the exception class, frame count and cause only | by design of that format (a summary); the message and the frames are in no field. Listed for the owner |
@@ -753,6 +757,97 @@ they pass, with two notes: a Chromium expectation of the mixed Generic Structura
 policy D-2 (the exported project of a new parser carries `genericStructuralFamilyGrammar: dedicated`) and is
 corrected; two cases of `grammar-conformance.ts` use a Regex without a static cost proof, which runs on Ruby 3.2
 and fails closed on Ruby 2.4.9 by design, so they need the CI runner.
+
+## Final audit and verification before the owner review (2026-11-16)
+
+Work order of 2026-11-15 22:29 KST. A third reviewer that had not seen the work audited a frozen copy of
+`f54ef8c` (W4, W7, the last classification-hint fix, the four P3 notes, loss and mapping), while the escape
+convention of key=value, the Regex dialect on Ruby 2.4.9 and 3.2.11, the template set and the per-event cost
+were examined separately. Ruby 3.2.11 (the pinned slim image) and Fluentd 1.7.4 on Ruby 2.4.9 (the steps of
+`backend/native_isolation/Dockerfile.ruby24-fluentd`) were available locally as digest-verified root file
+systems, without docker.
+
+### Defects found, each fixed at the cause
+
+| Finding | Decision |
+|---|---|
+| key=value: `\\` and `\=` were decoded in an UNQUOTED value. `ShareName=\\*\IPC$` (Windows 5140) became `\*\IPC$`, `path=\\fileserver\share` lost a backslash, and the event was FULL in the browser and on Ruby 2.4.9; the run-time check compared values with backslashes removed, so it could not see it (same on `main`) | fixed: an unquoted value has no quoting syntax to escape from, it is the text as written (`src/grammar/kvBody.ts`, Python `source_kv.py`, contract revision 7). The run-time check requires an unquoted value to equal its text exactly, so a reader that decodes one is PARTIAL (faults `ts-kv-unquoted-value-decoded`, `py-kv-unquoted-value-decoded`). A quoted value keeps the contract escapes (see "Not changed") |
+| CEF: a value that ends in a backslash the sender did not double took the separator with it: `filePath=C:\Users\bob\ suser=bob src=10.1.1.1` was one value, `suser` (or the official `srcip`) was missing, the event was FULL and classified differently (same on `main`; independent audit A1) | fixed: a backslash never takes SP or TAB with it (contract `CEF_ESCAPE`, `CEF_BACKSLASH`; the three engines compile the fragment). The run-time check now also reports a pair that starts inside the text of a value, whatever the extractor returned (fault `contract-cef-backslash-carries-space`, model variant `unescaped-backslash-before-next-pair`) |
+| Regex, browser: `$` was written as a look-ahead for "no character"; V8 also tries a match between the two halves of an astral character, where that holds, so `(?<tail>[a-z]*)$` on `id=7 <U+1F600> deny` captured nothing while Ruby captured `deny` (same on `main`) | fixed: `$` is the end of the input (`backend/src/portable-regex.ts`) |
+| Regex: an optional part that can be empty and holds a capture (`-(?<sep>={0,2})?`): ECMAScript leaves the capture unset, Ruby 2.4.9 and 3.2.11 set it to the empty string; the browser showed no field where the parser emits an empty one (same on `main`) | refused in both (`REGEX_OPTIONAL_EMPTY_CAPTURE`); the same meaning is written without the outer `?` |
+| CSV: the edges of an unquoted cell were stripped with `^[ \t]+|[ \t]+$`, tried at every blank of a long run inside a cell: one 8 KB event (`a=1`, 8,000 spaces, `b=2`) held the generated parser for 0.55 s, 30 s at 60 KB (introduced by this PR; independent audit A2) | fixed: two scans from the ends; a cell is cut out of the row in one piece instead of one character at a time. The same event: 40 ms before the second change, measured again below |
+| Per-event cost of the generated parser (introduced by this PR; A2) | reduced, not removed: the independent key=value reader takes runs instead of characters, callbacks are asked for their parameter count once per list, named groups are read without building the list of names, offsets of ASCII text are not converted. Measured below; the remaining difference to `main` is listed under "Not changed" |
+| Browser preview: an enrichment constant for `timestamp` with white space around it was a field error for every event (and, since `f54ef8c`, no classification) while the generated parser emitted and classified every event (independent audit A4) | fixed: the destination check sets ASCII white space at the edges aside, as the typed-value reader of the parser does |
+| Template set: block coverage of the compiler over the 101 variants showed one Ruby text that no variant contains, the `false` of `parserstudio_regex_cost_proven?` (a Regex without a static cost proof; the variants are run on Ruby 2.4.9, where that parser fails closed) | `supplement:regex-without-static-cost-proof` is recorded in the manifest; `compilerVariants()` stays at 101 |
+| `grammar-runtime.rb.tpl` named a test file that does not exist (A6) | names `translation-conformance.ts` |
+
+### Evaluated and not changed
+
+| Subject | Result |
+|---|---|
+| F3, F4, F5 (earlier P3) | harmless, confirmed by the third reviewer: only an internal issue code differs (the UI sentence is the same for all refusals), `X{n,n}?` is refused where `X{n}` is accepted with the same meaning, deep JSON and lone surrogate escapes are declined by both engines |
+| F7, a product name beyond ASCII in a `.conf` comment | Fluentd 1.7.4 on Ruby 2.4.9 with `LANG=C` loads such a file as the main configuration and through `@include` (run by two parties); it fails only when a loader hands Fluentd the text tagged US-ASCII. How the Stellar sensor installs the file is not verified. Not changed |
+| key=value QUOTED values: `\\`, `\"`, `\'`, `\=` are decoded | owner decision. A quoted syntax needs an escape for its quote, and the scanner already relies on `\\` being a pair to find the closing quote. Two sender populations exist: one doubles backslashes (logfmt, NXLog), for which decoding is right, and one does not, for which `path="\\server\share"` loses a backslash. Keeping the text as written except `\"` would be lossless for both and would show doubled backslashes for the first |
+| W7 accounting (A3) | executed in the artifact and independent of the extractor for a dropped, cut, extended, changed or renamed field (112 of 112 injected corruptions). Not seen: JSON values attached to the wrong names (the JSON check counts name and value tokens), a key=value field that is not in the event (pairs of the text are looked up in the fields, not the reverse). A merged CEF pair is seen since this change |
+| Python preview (A5) | verdicts differ from browser and Ruby on inputs outside the three-way gate: a CEF escape that is not in the contract (PARTIAL, browser and Ruby FULL with the pair kept as written), a NUL in the event (declined), a JSON integer beyond 2^53 (parsed), `-1.5e2` (-150.0). The preview never decides what the parser emits. Not changed |
+| A declined event on stock Fluentd (A7) | `in_udp` / `in_tcp` of Fluentd 1.7.4 do not emit a record whose time is nil: the diagnostic record is not emitted, the text is in the Fluentd log line "pattern not matched". Observed with real Fluentd below. What the Stellar receiver does is not verified |
+| Wide but honest refusals (A8) | a JSON number that a double does not hold declines the whole event; this includes the epoch seconds with microseconds of Zeek-style logs (`"ts":1714557600.123456`). JSON nested eight levels or more declines. Owner decision |
+| Per-event cost that remains (A2) | about twice `main` in the median on Ruby 2.4.9, more for JSON (figures below). The cost is the second reading of the event (the run-time accounting) and scanners that read character by character (JSON, CEF, LEEF, RFC 5424 structured data). Taking runs there, as now done for key=value and CSV, is the next step and is not part of this change. Whether the cost matters depends on the event rate of a sensor, which is not measured |
+| What W4 covers | the extraction grammar of the Ruby parser is generated from the TypeScript the browser runs (`--verify` in CI, before the unit tests). The primitives (`grammar-runtime.rb.tpl`), mapping, coercion, enrichment and classification (`canonical-operators.rb.tpl`) and the whole Python preview are written by hand and held by conformance gates, not by generation |
+
+### What the two approval values cover
+
+Both values are identities of generated text, not statements about behaviour; the gates below are what speaks
+for behaviour.
+
+| Value | Covers | Does not cover |
+|---|---|---|
+| POC reviewed-template hash (`KNOWN_TEMPLATES`, `pocTemplateSha256`) | every byte of the Ruby that the compiler generates for the JSON sample project of the disposable POC path, the project literal replaced by a token; the deflated case-fold table is part of the text (so the value depends on the zlib of the Node that compiled it). It is the production guard of the POC upload: a Ruby whose hash is not listed is refused, and the project inside must compile to exactly that text | Ruby that this artifact does not contain (block coverage of the compiler for the sample: the Generic Structural grammar, the Regex helper, the delimiter and framing variants of the CONF are not executed), every CONF of a real parser (the POC path writes its own closed CONF), the browser and Python engines, any other project |
+| Template-set digest (`contracts/ruby-template-set.v1.json`) | the bytes of the five files in `backend/templates`; the normalized Ruby and the CONF of the 101 compiler variants and of one supplement; the case-fold table as inflated. Block coverage of the compiler over these projects leaves only error paths and warning texts unexecuted. The 102 artifacts are 5 distinct Ruby texts and 27 distinct CONF texts | it is a test-level gate (the production guard is still `KNOWN_TEMPLATES`); the project literal of an artifact; the browser TypeScript, the Python preview and the canonical TypeScript evaluators; values a project puts into the CONF beyond the 27 shapes (names, ports, a delimiter) |
+
+An independent recalculation (Python, no project code, from the dumped artifacts) reproduces the values that
+CI printed for `f54ef8c` and gives the values of this tree; the commit message of the documentation commit and
+the pull request name them.
+
+### Verification of the final tree
+
+- Local battery on Ruby 2.4.9: generators and template set in sync, duplication ratchet 45 = baseline;
+  `tsc` 0; vitest 231 files, 1,955 tests; Python unit 178; translation conformance 10,014 calls, 0
+  differences, 16/16 faults; Semantic Oracle TypeScript 6,288 cases, 30/30 mutants, 18/18 family mutants;
+  native 1,582 cases, 9/9 mutants; differential 21,052 + 27,000 Generic Structural cases, 44,858 lines of 29
+  configurations and 25,380 CSV rows, 0 differences, 17/17 and 15/15 faults; Python oracle 1,154 envelope, 776 key=value, 1,221 CEF/LEEF, 430 CSV and 534 JSON cases, 38/38 mutants, and 2,885 lines three ways (browser, Ruby, Python preview) with 0 differences; backend 768 tests, 752 pass, and the 16 that fail are the set that failed before this work (11 tests of the disposable POC path that wait for the reviewed-template hash, 4 that need the local environment, the template-set approval).
+- The same Ruby-side gates on Ruby 3.2.11 (pinned slim image): canonical cross-engine, MCV2 vendor parity,
+  operator matrix, `grammar-conformance.ts` with all 12 cases (24 projects, 48 records; the two Regex cases
+  without a static cost proof run only here), translation conformance, Semantic Oracle native and the
+  differential: all pass with the same counts.
+- Regex, three ways (browser lowering, `Regexp.new` on Ruby 2.4.9 and on 3.2.11): 24,000 patterns the product
+  accepts x 12 inputs with text beyond ASCII, 0 differences between the two Ruby versions and, after the two
+  fixes above, 0 differences to the browser. Before: 12 of 3,600 (`$`) and 129 of 288,000 (optional capture).
+- Real Fluentd: `fluentd --dry-run` with `LANG=C` loads the CONF and the Ruby of all 102 artifacts on Fluentd
+  1.7.4 / Ruby 2.4.9 and on Fluentd 1.17.1 / Ruby 3.2.11. Reception with the generated CONF used verbatim, in
+  a network namespace of its own: the 39 downloaded pairs of the E2E run, each with its own log (92 lines), over
+  UDP, TCP with LF and TCP with CRLF: every line is one record, equal field for field to what the parser yields
+  when called directly, routed to the tag of its `stellar_log_index` (Fluentd 1.7.4 / Ruby 2.4.9: 39 of 39;
+  Fluentd 1.17.1 / Ruby 3.2.11: 39 of 39). Two declined events sent the same way produce no record and "pattern not matched" log lines.
+  Harness-owned: the class that registers the fragment as a Fluentd parser, an empty
+  `/etc/td-agent/transport_settings.conf`, a final `<match **>`. Stock Fluentd reports `message_length_limit`
+  of the TCP source as an unused parameter.
+- E2E, Chromium -> download -> Ruby 2.4.9, on this tree: 53 samples (the 52 of the earlier runs and Windows
+  share events as key=value with UNC paths). 39 downloaded, 14 stop in the UI (the same 14). Against the
+  artifacts downloaded from `main`: 24 identical, the 2 intended differences, 13 without a counterpart. Own
+  logs 92/92 parsed, the same line as a CRLF frame identical 92/92, with a bare CR never parsed 92/92. Python
+  Test Sender, UDP and TCP, 39 artifacts: 3 received, 3 parsed each. The UNC sample keeps `\\*\IPC$` and
+  `\\fileserver\finance$` in the emitted record.
+- The steps of the CI job `web-quality` that CI skips while the approval tests fail (26 to 45), run locally on the code commit `3fb766a`: cross-consumer mapping, lineage, generated native evidence, the Python inventory and the twelve Chromium suites (133 tests) pass. Step 29 (canonical native conformance) passes on Ruby 3.2.11; on Ruby 2.4.9 it stops, as designed, at the Regex case without a static cost proof.
+- `backend/scripts/qualify.sh` on the pinned profile (Ruby 3.2.11, Fluentd 1.17.1; `npm test` run separately): source integrity, fragment (9), formats (45), RFC 5424 SD (2 + 9), enrichment, the Fluentd Parser Plugin API (10 profiles and the failure path), the Fluentd CONF parser (10 profiles), the per-project native proof and both Regex proofs pass. Two smokes that had not been run on Fluentd since `main` gained the receive-time fallback stop on their fixtures: `recipe_v02_native_smoke.rb` (16 events whose fixture expects no event time and that now carry the receive time; no record differs) and `golden_events_smoke.rb` (13 of 23 cases pass; 7 differ in the same way, 2 diagnostic records also carry the fields that were mapped, 1 is the LEEF value ending in a backslash that is read since this PR). The fixtures are called immutable and were not changed; the three steps after them were not reached. Two repairs to the smokes themselves: the event time is read through `Time.at` (`Fluent::EventTime` has no `#utc`), and one parser file is bounded by the product limit of 512,000 bytes.
+- Per-event cost, whole `parse`, CPU time on Ruby 2.4.9 on the development server (not a sensor), the 26
+  downloaded parsers that have a counterpart from `main`, each on its own log: `f54ef8c` took 2.4 times the
+  time of `main` in the median (1.2 to 7.5), this tree 2.0 times (1.3 to 4.5; 1.9 in a run on a less loaded
+  machine). JSON events are the upper end (three scans of the text, character by character), CEF with many
+  pairs next. One 8 KB event of the worst shapes: CSV `a=1`, 8,000 spaces, `b=2` 555 ms -> 11 ms,
+  key=value with an 8 KB value of astral characters 77 ms -> 3.6 ms; a JSON event that is one 8 KB string
+  still takes 68 ms (`main` 2.4 ms) and a CEF event with an 8 KB message 51 ms (`main` 12 ms). Events per
+  second on a sensor are not measured.
 
 ## Rules for adding or changing a grammar or a mapping
 
