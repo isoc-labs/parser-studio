@@ -1,7 +1,7 @@
 {
   "schema": "parserstudio.grammar-contract.v1",
   "id": "syslog-header",
-  "revision": 6,
+  "revision": 7,
   "purpose": "Single declarative definition of the Syslog header grammar and of the strict key=value body grammar (fragments.kv_pair). The browser TypeScript and the generated Ruby Fragment take their structured-path header regular expressions, capture names and semantic limits from the code generated from this file (scripts/grammar/generate-grammar.mjs). Not migrated yet (Issue #249 W4, W5): the Generic Structural sites and the Python Multi-Pass engine, which still carry hand-written copies; those copies are counted and ratcheted down by scripts/verification/grammar-duplication-ratchet.mjs.",
   "authority": [
     "RFC 3164 section 4.1 (PRI, HEADER = TIMESTAMP HOSTNAME, MSG = TAG CONTENT)",
@@ -72,14 +72,14 @@
     },
     "KV_DQ": {
       "pattern": "(?:\\\\[^\\r\\n]|[^\"\\\\])*",
-      "semantic": "Double-quoted value: a backslash takes the next character with it"
+      "semantic": "Double-quoted value: a backslash takes the next character with it. Only a quoted value is decoded, with the escapes of semantics.kvUnescapedAfterBackslash; every other backslash stays as written"
     },
     "KV_SQ": {
       "pattern": "(?:\\\\[^\\r\\n]|[^'\\\\])*"
     },
     "KV_BARE": {
       "pattern": "(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+",
-      "semantic": "Unquoted value: ends at ASCII white space or a quote, also after a backslash (a backslash takes the next character with it unless that character is white space, and a backslash at the end of the value is a character of the value: a directory path); the information separators U+001C..U+001F are never value data (issue #214)"
+      "semantic": "Unquoted value: ends at ASCII white space or a quote, also after a backslash (a backslash takes the next character with it unless that character is white space, and a backslash at the end of the value is a character of the value: a directory path). The value is the text as written: nothing is decoded in an unquoted value, so a UNC path keeps both leading backslashes; the information separators U+001C..U+001F are never value data (issue #214)"
     },
     "KV_TRAILING": {
       "pattern": "[ \\t\\n\\r\\f\\v]*",
@@ -118,12 +118,16 @@
       "semantic": "Any character that is not CEF extension white space (a line feed and a backslash included)"
     },
     "CEF_ESCAPE": {
-      "pattern": "\\\\(?:[^\\\\]|\\\\)",
-      "semantic": "A backslash and the character after it. semantics.cefExtensionEscapes says what the pair means; a pair that is not listed there is kept as written."
+      "pattern": "\\\\[^ \\t]",
+      "semantic": "A backslash and the character after it, unless that character is CEF white space. semantics.cefExtensionEscapes says what the pair means; a pair that is not listed there is kept as written. A backslash never takes SP or TAB with it: a sender that does not double the backslash of a path (C:\\Users\\bob\\ suser=bob) would otherwise lose the pair that follows"
     },
     "CEF_PLAIN": {
       "pattern": "[^\\\\ \\t]",
       "semantic": "One character of a CEF extension value that is neither a backslash nor white space"
+    },
+    "CEF_BACKSLASH": {
+      "pattern": "\\\\",
+      "semantic": "A backslash that stands directly before CEF white space: one character of the value, as written"
     },
     "LEEF_DELIMITER_LITERAL": {
       "pattern": "[\\t!-<>-\\[\\]-~]",
@@ -579,7 +583,7 @@
       ]
     },
     "cef_pair": {
-      "description": "One CEF extension pair at the current position: KEY=value. A value is made of escape pairs, plain characters and white space. White space is value data unless it ends the text or its last character stands directly before the next KEY=; that last character is the separator. Every engine reads CEF extensions with this one expression and decodes the value with semantics.cefExtensionEscapes.",
+      "description": "One CEF extension pair at the current position: KEY=value. A value is made of escape pairs, plain characters, white space and a backslash that stands before white space. White space is value data unless it ends the text or its last character stands directly before the next KEY=; that last character is the separator. Every engine reads CEF extensions with this one expression and decodes the value with semantics.cefExtensionEscapes.",
       "sequence": [
         {
           "repeat": [
@@ -647,6 +651,18 @@
                           },
                           {
                             "lit": "="
+                          }
+                        ]
+                      }
+                    ],
+                    [
+                      {
+                        "token": "CEF_BACKSLASH"
+                      },
+                      {
+                        "followedBy": [
+                          {
+                            "token": "CEF_WS"
                           }
                         ]
                       }

@@ -4,7 +4,7 @@
 # This file is the only hand written part: each psg_* method gives one ECMAScript operation the meaning it has
 # in the browser, on Ruby values. Strings are valid UTF-8; every string length and offset is counted in UTF-16
 # code units, as in the browser, so a bound or an index means the same in both. The primitive conformance test
-# (scripts/verification/primitive-conformance.ts) runs both sides on the same inputs.
+# (scripts/verification/translation-conformance.ts, probes in translation-probes.ts) runs both sides on the same inputs.
 #
 # Values: undefined is nil and null is :psg_null, always, so the two stay as distinct as they are in the
 # browser; a record is a Hash with String keys; a Set or Map is a Hash; a match is a MatchData.
@@ -19,18 +19,21 @@ end
 
 # The UTF-16 code units of a text that is not ASCII, as an array: a character of the BMP is one entry, a
 # character beyond it is two (the character itself, then ''), so that an offset of the browser addresses the
-# same place here, in constant time. The array is kept for the few texts in use (compared by identity; the
-# grammar never changes a string in place).
+# same place here, in constant time. The array is kept for the texts in use, found by identity (the grammar
+# never changes a string in place). The texts were kept in a list of eight that was searched one by one; that
+# search was the largest single cost of a JSON event with text beyond ASCII (39% of its CPU time in a profile
+# on Ruby 2.4.9, 2026-11-16).
 def psg_units(text)
-  cache = (@psg_unit_cache ||= [])
-  cache.each { |entry| return entry[1] if entry[0].equal?(text) }
+  cache = (@psg_unit_cache ||= {}.compare_by_identity)
+  units = cache[text]
+  return units unless units.nil?
   units = []
   text.each_char do |char|
     units << char
     units << '' if char.ord > 0xffff
   end
-  cache.shift if cache.length >= 8
-  cache << [text, units]
+  cache.clear if cache.length >= 256
+  cache[text] = units
   units
 end
 
@@ -93,7 +96,7 @@ end
 # value[index]. A string yields the code unit at the offset; for a character outside the BMP the first unit
 # yields the character and the second the empty string, so that unit by unit copying rebuilds the text.
 def psg_at(value, index)
-  return nil if psg_null?(value) || !index.is_a?(Integer) || index < 0
+  return nil if value.nil? || value.equal?(:psg_null) || !index.is_a?(Integer) || index < 0
   return value[index] unless value.is_a?(String) && !value.ascii_only?
   psg_units(value)[index]
 end
@@ -188,11 +191,13 @@ def psg_match_all(text, pattern)
 end
 
 def psg_match_at(pattern, text, position)
-  pattern.match(text, psg_unit_to_char(text, psg_int(position))) || :psg_null
+  position = psg_int(position)
+  pattern.match(text, text.ascii_only? ? position : psg_unit_to_char(text, position)) || :psg_null
 end
 
 def psg_match_end(match)
-  psg_char_to_unit(match.string, match.end(0))
+  text = match.string
+  text.ascii_only? ? match.end(0) : psg_char_to_unit(text, match.end(0))
 end
 
 def psg_match_index(match)
@@ -204,7 +209,12 @@ def psg_starts_with(text, prefix, position)
 end
 
 def psg_group(match, name)
-  psg_null?(match) || !match.names.include?(name) ? nil : match[name]
+  return nil if match.nil? || match.equal?(:psg_null)
+  begin
+    match[name]
+  rescue IndexError
+    nil
+  end
 end
 
 def psg_named_groups(match)
@@ -447,21 +457,25 @@ def psg_assign(target, *sources)
   target
 end
 
-# Array callbacks receive (item, index), as far as the function declares them.
-def psg_call(function, item, index)
-  function.parameters.length >= 2 ? function.call(item, index) : function.call(item)
+# A callback of the browser receives (item, index); a Ruby lambda is strict about its argument count. Whether
+# the callback takes the index is asked once per list: Proc#parameters builds an array on every call, and
+# asking per item was a measurable part of the cost of an event (Ruby 2.4.9, 2026-11-15).
+def psg_with_index?(function)
+  function.parameters.length >= 2
 end
 
 def psg_map(list, function)
   out = []
-  list.each_with_index { |item, index| out << psg_call(function, item, index) }
+  with_index = psg_with_index?(function)
+  list.each_with_index { |item, index| out << (with_index ? function.call(item, index) : function.call(item)) }
   out
 end
 
 def psg_flat_map(list, function)
   out = []
+  with_index = psg_with_index?(function)
   list.each_with_index do |item, index|
-    result = psg_call(function, item, index)
+    result = (with_index ? function.call(item, index) : function.call(item))
     result.is_a?(Array) ? out.concat(result) : out << result
   end
   out
@@ -469,32 +483,38 @@ end
 
 def psg_filter(list, function)
   out = []
-  list.each_with_index { |item, index| out << item if psg_t(psg_call(function, item, index)) }
+  with_index = psg_with_index?(function)
+  list.each_with_index { |item, index| out << item if psg_t((with_index ? function.call(item, index) : function.call(item))) }
   out
 end
 
 def psg_some(list, function)
-  list.each_with_index { |item, index| return true if psg_t(psg_call(function, item, index)) }
+  with_index = psg_with_index?(function)
+  list.each_with_index { |item, index| return true if psg_t((with_index ? function.call(item, index) : function.call(item))) }
   false
 end
 
 def psg_every(list, function)
-  list.each_with_index { |item, index| return false unless psg_t(psg_call(function, item, index)) }
+  with_index = psg_with_index?(function)
+  list.each_with_index { |item, index| return false unless psg_t((with_index ? function.call(item, index) : function.call(item))) }
   true
 end
 
 def psg_for_each(list, function)
-  list.each_with_index { |item, index| psg_call(function, item, index) }
+  with_index = psg_with_index?(function)
+  list.each_with_index { |item, index| (with_index ? function.call(item, index) : function.call(item)) }
   nil
 end
 
 def psg_find(list, function)
-  list.each_with_index { |item, index| return item if psg_t(psg_call(function, item, index)) }
+  with_index = psg_with_index?(function)
+  list.each_with_index { |item, index| return item if psg_t((with_index ? function.call(item, index) : function.call(item))) }
   nil
 end
 
 def psg_find_index(list, function)
-  list.each_with_index { |item, index| return index if psg_t(psg_call(function, item, index)) }
+  with_index = psg_with_index?(function)
+  list.each_with_index { |item, index| return index if psg_t((with_index ? function.call(item, index) : function.call(item))) }
   -1
 end
 

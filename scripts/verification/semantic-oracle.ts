@@ -217,6 +217,7 @@ const TS_MUTANTS: Mutant[] = [
   { id: 'ts-calendar-widened', file: 'src/grammar/syslogHeader.ts', find: 'day < 1 || day > days ||', replace: 'day < 1 || day > 31 ||' },
   { id: 'ts-rfc5424-any-version', file: 'src/grammar/syslogHeader.ts', find: 'if (!isSupportedRfc5424Version(captures.version!)) return', replace: 'if (false) return' },
   { id: 'ts-kv-every-backslash-decoded', file: 'src/grammar/kvBody.ts', find: "out += UNESCAPED.includes(next) ? next : '\\\\' + next;", replace: 'out += next;' },
+  { id: 'ts-kv-unquoted-value-decoded', file: 'src/grammar/kvBody.ts', find: "quoted === undefined ? (match.groups!.bare ?? '') : unescapeKvValue(quoted)", replace: "unescapeKvValue(quoted ?? match.groups!.bare ?? '')" },
   { id: 'ts-kv-duplicate-key-overwrites', file: 'src/grammar/kvBody.ts', find: "if (seen.has(key)) return { ok: false, reason: 'DUPLICATE_KEY', key };", replace: '' },
   // Owner policy D-1: the rejection must say which field is repeated.
   { id: 'ts-kv-duplicate-key-not-named', file: 'src/structuredFamilies.ts', find: 'DUPLICATE_KEY: duplicateFieldMessage(String(body.key)),', replace: "DUPLICATE_KEY: 'Unsafe or duplicate extension field'," },
@@ -647,6 +648,8 @@ const FAMILY_CONTRACT_MUTANTS: Mutant[] = [
   // White space before the next KEY= is value data: a value swallows the pairs after it.
   contractMutant('contract-cef-next-key-swallowed', ['fragments', 'cef_pair', 'sequence', '3', 'group', '0', 'repeat', '0', 'alt', '2'],
     [CEF_WS_RUN, { followedBy: [{ token: 'CEF_NOT_WS' }] }]),
+  // A backslash takes the following SP or TAB with it: the pair after a path that ends in a backslash is lost.
+  contractMutant('contract-cef-backslash-carries-space', ['tokens', 'CEF_ESCAPE', 'pattern'], '\\\\(?:[^\\\\]|\\\\)'),
   // A TAB no longer separates pairs.
   contractMutant('contract-cef-tab-is-value-data', ['tokens', 'CEF_WS', 'pattern'], '[ ]'),
   // SP becomes an acceptable LEEF attribute delimiter.
@@ -813,7 +816,7 @@ function csvTsFailures(extract: CsvExtract, cases: CsvCase[]): string[] {
   return failures;
 }
 const TS_CSV_MUTANTS: Mutant[] = [
-  { id: 'ts-csv-doubled-quote-kept', file: 'src/grammar/extractEvent.ts', find: "if (raw[i + 1] === '\"') { token += '\"'; i++; }", replace: "if (raw[i + 1] === '\"') { token += '\"\"'; i++; }" },
+  { id: 'ts-csv-doubled-quote-kept', file: 'src/grammar/extractEvent.ts', find: "if (raw[i + 1] === '\"') { token += '\"'; i++; from = i + 1; }", replace: "if (raw[i + 1] === '\"') { token += '\"\"'; i++; from = i + 1; }" },
   { id: 'ts-csv-quote-inside-bare-field-accepted', file: 'src/grammar/extractEvent.ts', find: "if (state !== 'start') return null;", replace: "if (state !== 'start') { token += c; continue; }" },
   { id: 'ts-csv-column-count-unchecked', file: 'src/grammar/extractEvent.ts', find: "  if (values.length !== columns.length)\n", replace: "  if (false)\n" },
 ];
@@ -1073,7 +1076,8 @@ const PYTHON_MUTANTS: Mutant[] = [
   ...CONTRACT_MUTANTS.filter(mutant => mutant.id.startsWith('contract-hostname') || mutant.id.startsWith('contract-kv')),
   contractMutant('contract-version-2-supported', ['semantics', 'rfc5424SupportedVersions'], ['1', '2']),
   { id: 'py-kv-unicode-white-space-separates', file: 'source_kv.py', find: "PAIR=re.compile(FRAGMENTS['kv_pair']['source'])", replace: "PAIR=re.compile(FRAGMENTS['kv_pair']['source'].replace('[^ ','[^\\u00a0\\u2028 '))" },
-  { id: 'py-kv-escapes-not-decoded', file: 'source_kv.py', find: 'value=unescape_kv_value(match[group])', replace: 'value=match[group]' },
+  { id: 'py-kv-escapes-not-decoded', file: 'source_kv.py', find: "value=match[group] if group=='bare' else unescape_kv_value(match[group])", replace: 'value=match[group]' },
+  { id: 'py-kv-unquoted-value-decoded', file: 'source_kv.py', find: "value=match[group] if group=='bare' else unescape_kv_value(match[group])", replace: 'value=unescape_kv_value(match[group])' },
   { id: 'py-kv-repeated-key-overwrites', file: 'source_kv.py', find: 'else:out.fields[key]=[previous,value]', replace: 'else:out.fields[key]=value' },
   // Owner policy D-1: a repeated field is never a complete parse, in the key=value preview as in CEF and LEEF.
   { id: 'py-kv-repeated-key-reported-as-parsed', file: 'source_kv.py', find: "if 'DUPLICATE_SOURCE_FIELD' not in out.issues:out.issues.append('DUPLICATE_SOURCE_FIELD')", replace: 'pass' },
@@ -1737,7 +1741,7 @@ function csvRows(separator: string, seed: number, count: number): string[] {
 }
 const FORMAT_TS_FAULTS: Mutant[] = [
   // The browser strips form feed and vertical tab at the edge of an unquoted CSV field again; the generated parser keeps them.
-  { id: 'ts-format-csv-form-feed-stripped', file: 'src/grammar/extractEvent.ts', find: "const CSV_FIELD_EDGE = /^[ \\t]+|[ \\t]+$/gu;", replace: "const CSV_FIELD_EDGE = /^[ \\t\\f\\v]+|[ \\t\\f\\v]+$/gu;" },
+  { id: 'ts-format-csv-form-feed-stripped', file: 'src/grammar/extractEvent.ts', find: "while (end > start && (token[end - 1] === ' ' || token[end - 1] === '\\t')) end -= 1;", replace: "while (end > start && (token[end - 1] === ' ' || token[end - 1] === '\\t' || token[end - 1] === '\\f')) end -= 1;" },
   // The browser returns one empty field for a row of spaces again.
   { id: 'ts-format-csv-empty-row-parsed', file: 'src/grammar/extractEvent.ts', find: "  if (out.length === 1 && out[0] === null) return null;\n", replace: "" },
   // The JSON format drops its source contract (8 levels, paired surrogates) in the browser.
@@ -1747,7 +1751,7 @@ const FORMAT_TS_FAULTS: Mutant[] = [
   { id: 'ts-format-mixed-bsd-envelope-needs-pri', file: 'src/grammar/extractEvent.ts', find: "const BSD_ENVELOPE = new RegExp('^(?:<\\\\d{1,3}>)?' + SYSLOG_HEADER_TOKENS.BSD_MONTH", replace: "const BSD_ENVELOPE = new RegExp('^<\\\\d{1,3}>' + SYSLOG_HEADER_TOKENS.BSD_MONTH" },
   // The browser's mixed router takes a key=value message that starts with white space again (it tried every body parser).
   { id: 'ts-format-mixed-message-prefix-not-exact', file: 'src/grammar/extractEvent.ts', find: "      KEY_VALUE_START.test(message) ? 'kv' as const : null;", replace: "      /^[ \\t]*[A-Za-z_][A-Za-z0-9_.-]*=/u.test(message) ? 'kv' as const : null;" },
-  { id: 'ts-format-guard-form-feed-in-value', file: 'src/grammar/parseStatus.ts', find: "ch === ' ' || ch === '\\t' || ch === '\\n' || ch === '\\v' || ch === '\\f' || ch === '\\r';", replace: "ch === ' ' || ch === '\\t';" },
+  { id: 'ts-format-guard-form-feed-in-value', file: 'src/grammar/parseStatus.ts', find: "const GAP_RUN = /[ \\t\\n\\x0b\\f\\r]*/uy;\nconst TOKEN_RUN = /[^ \\t\\n\\x0b\\f\\r]*/uy;", replace: "const GAP_RUN = /[ \\t]*/uy;\nconst TOKEN_RUN = /[^ \\t]*/uy;" },
 ];
 // The translation and runtime faults that change what an artifact of these formats returns for a generated line.
 // regex-line-anchors, runtime-undefined-exported-as-null, runtime-large-number-not-an-integer and

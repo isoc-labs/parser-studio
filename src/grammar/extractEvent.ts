@@ -55,7 +55,18 @@ export function extractJsonObject(raw: string): StructuredExtraction {
 }
 
 const CSV_DELIMITERS: readonly string[] = [',', ';', '\t'];
-const CSV_FIELD_EDGE = /^[ \t]+|[ \t]+$/gu;
+/**
+ * An unquoted cell without the SP and TAB at its edges. Written as two scans from the ends: the expression
+ * `^[ \t]+|[ \t]+$` was tried at every blank of a long run inside a cell (a=1, eight thousand spaces, b=2)
+ * and held the generated parser for half a second on one event of the default size (audit of 2026-11-15).
+ */
+function withoutEdgeBlanks(token: string): string {
+  let start = 0;
+  let end = token.length;
+  while (start < end && (token[start] === ' ' || token[start] === '\t')) start += 1;
+  while (end > start && (token[end - 1] === ' ' || token[end - 1] === '\t')) end -= 1;
+  return start === 0 && end === token.length ? token : token.slice(start, end);
+}
 const CSV_COLUMN_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/u;
 
 /**
@@ -67,36 +78,41 @@ export function tokenizeCsvRow(raw: string, delimiter: string): (string | null)[
   if (!CSV_DELIMITERS.includes(delimiter)) return null;
   const out: (string | null)[] = [];
   const stripUnquoted = delimiter !== '\t';
+  // A cell is cut out of the row in one piece (a quoted cell in the pieces between its doubled marks): adding
+  // one character at a time copied the cell once per character in the generated parser.
   let token = '';
+  let from = 0;
   let state: 'start' | 'plain' | 'quoted' | 'afterQuote' = 'start';
   for (let i = 0; i < raw.length; i++) {
     const c = raw[i]!;
     if (state === 'quoted') {
       if (c === '"') {
-        if (raw[i + 1] === '"') { token += '"'; i++; }
+        token += raw.slice(from, i);
+        if (raw[i + 1] === '"') { token += '"'; i++; from = i + 1; }
         else state = 'afterQuote';
-      } else token += c;
+      }
     } else if (state === 'afterQuote') {
       if (c === delimiter) { out.push(token); token = ''; state = 'start'; }
       else if (stripUnquoted && (c === ' ' || c === '\t')) continue;
       else return null;
     } else if (c === delimiter) {
-      out.push(state === 'start' ? null : stripUnquoted ? token.replace(CSV_FIELD_EDGE, '') : token);
+      out.push(state === 'start' ? null : stripUnquoted ? withoutEdgeBlanks(raw.slice(from, i)) : raw.slice(from, i));
       token = ''; state = 'start';
     } else if (c === '"') {
       if (state !== 'start') return null;
       state = 'quoted';
+      from = i + 1;
     } else if (state === 'start' && stripUnquoted && (c === ' ' || c === '\t')) {
       // White space next to a field is not data, but a quotation mark inside a started unquoted value is
       // still not a field.
       continue;
     } else {
-      token += c;
+      if (state === 'start') from = i;
       state = 'plain';
     }
   }
   if (state === 'quoted') return null;
-  out.push(state === 'start' ? null : state === 'afterQuote' ? token : stripUnquoted ? token.replace(CSV_FIELD_EDGE, '') : token);
+  out.push(state === 'start' ? null : state === 'afterQuote' ? token : stripUnquoted ? withoutEdgeBlanks(raw.slice(from)) : raw.slice(from));
   // A row that is empty (or, where field edges are stripped, only spaces and TABs) is no row.
   if (out.length === 1 && out[0] === null) return null;
   return out;

@@ -22,8 +22,12 @@ const TRAILING = new RegExp('^(?:' + SYSLOG_HEADER_TOKENS.KV_TRAILING + ')$','u'
 const UNESCAPED: readonly string[] = SYSLOG_HEADER_SEMANTICS.kvUnescapedAfterBackslash;
 const FORBIDDEN: readonly string[] = SYSLOG_HEADER_SEMANTICS.kvForbiddenKeys;
 
-/** Only the escapes the contract lists are decoded; every other backslash (a Windows path) stays as written. */
+/**
+ * Decodes a QUOTED value: only the escapes the contract lists; every other backslash (a Windows path) stays
+ * as written. An unquoted value is never passed here (see parseStrictKeyValues).
+ */
 export function unescapeKvValue(raw: string): string {
+  if (!raw.includes('\\')) return raw;
   let out = '';
   for (let index = 0; index < raw.length; index += 1) {
     const next = raw[index + 1];
@@ -49,7 +53,11 @@ export function parseStrictKeyValues(input: string): KvBody {
     if (seen.has(key)) return { ok: false, reason: 'DUPLICATE_KEY', key };
     if (pairs.length >= SYSLOG_HEADER_SEMANTICS.kvMaxPairs) return { ok: false, reason: 'TOO_MANY_PAIRS' };
     seen.add(key);
-    pairs.push([key, unescapeKvValue(match.groups!.dq ?? match.groups!.sq ?? match.groups!.bare ?? '')]);
+    // A quoted value needs an escape for its own quote, so it is decoded. An unquoted value has no quoting
+    // syntax to escape from: it is the text as written, every backslash included. Decoding it turned the
+    // share \\*\IPC$ of a Windows event into \*\IPC$ and reported the event as completely read.
+    const quoted = match.groups!.dq ?? match.groups!.sq;
+    pairs.push([key, quoted === undefined ? (match.groups!.bare ?? '') : unescapeKvValue(quoted)]);
     cursor = matchEnd(match);
   }
   return pairs.length > 0 ? { ok: true, pairs } : { ok: false, reason: 'NO_PAIRS' };

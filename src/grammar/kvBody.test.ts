@@ -19,6 +19,23 @@ describe('contract-driven key=value body', () => {
     expect(unescapeKvValue('a\\\\b \\= \\n')).toBe('a\\b = \\n');
   });
 
+  it('keeps an unquoted value exactly as written and decodes only a quoted one', () => {
+    const B = '\\';
+    expect(pairs('ShareName=' + B + B + '*' + B + 'IPC$ path=' + B + B + 'srv' + B + 'share f=a' + B + '=b u=O' + B + "'Brien d=C:" + B + 'Users' + B + B)).toEqual([
+      ['ShareName', B + B + '*' + B + 'IPC$'], ['path', B + B + 'srv' + B + 'share'], ['f', 'a' + B + '=b'], ['u', 'O' + B + "'Brien"], ['d', 'C:' + B + 'Users' + B + B]]);
+    expect(pairs('path="' + B + B + B + B + 'srv' + B + B + 'share" f="a' + B + '=b"')).toEqual([['path', B + B + 'srv' + B + 'share'], ['f', 'a=b']]);
+  });
+
+  it('reports an unquoted value that was changed on the way as PARTIAL, never FULL', () => {
+    const B = '\\';
+    const raw = 'ShareName=' + B + B + '*' + B + 'IPC$ action=deny';
+    // A reader that decodes the unquoted value loses a backslash; the run-time check must see it.
+    expect(classifyStructuredParse(raw, { fields: { ShareName: B + '*' + B + 'IPC$', action: 'deny' }, errors: [] }, 'kv').status).toBe('PARTIAL');
+    expect(classifyStructuredParse(raw, { fields: { ShareName: B + B + '*' + B + 'IPC$', action: 'deny' }, errors: [] }, 'kv').status).toBe('FULL');
+    const line = '<134>Nov 13 10:00:00 fw01 ' + raw;
+    expect(classifyStructuredParse(line, extractStructuredFamily(line, 'syslog_rfc3164', 'kv'), 'kv').status).toBe('FULL');
+  });
+
   it.each([
     ['a=1 a=2', 'DUPLICATE_KEY'], ['__proto__=1', 'FORBIDDEN_KEY'], ['a=1 junk b=2', 'MALFORMED_PAIR'],
     ['a="open', 'MALFORMED_PAIR'], ['', 'NO_PAIRS'], ['   ', 'NO_PAIRS'],

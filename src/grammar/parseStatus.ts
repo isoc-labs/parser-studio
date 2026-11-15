@@ -15,14 +15,22 @@
  */
 export type ParseStatus = 'FULL' | 'PARTIAL' | 'UNKNOWN' | 'ERROR';
 
-import { getTag, matchAt } from './primitives';
+import { getTag, matchAt, matchEnd } from './primitives';
 
 export interface StructuredOutcome { fields: Record<string, unknown>; errors: string[] }
-export interface RawPair { key: string; value: string; rawValue: string }
+export interface RawPair { key: string; value: string; rawValue: string; quoted: boolean }
 export interface ParseVerdict { status: ParseStatus; lostPairs: RawPair[]; reasons: string[] }
 
 // Sticky: tried exactly where a token starts, without cutting a window out of the text.
 const KEY_AT_TOKEN_START = /[A-Za-z_][A-Za-z0-9_.-]{0,95}=/uy;
+// Tokens are separated by ASCII white space (SP, TAB, LF, VT, FF, CR): the key=value grammar never puts one of
+// these into an unquoted value and allows them after the last pair (contract KV_BARE, KV_TRAILING), so a form
+// feed at the end of the line is not part of the last value. Each run is taken in one step: reading the line
+// character by character cost the generated parser more than the key=value grammar itself (measured on Ruby
+// 2.4.9, 2026-11-15).
+const GAP_RUN = /[ \t\n\x0b\f\r]*/uy;
+const TOKEN_RUN = /[^ \t\n\x0b\f\r]*/uy;
+const BACKSLASH_PAIR = /\\./gsu;
 
 /**
  * RFC 5424 section 6: after "<PRI>VERSION" come five header fields, each separated by exactly one SP and
@@ -70,6 +78,22 @@ function structuredDataEnd(raw: string, start: number): number {
 }
 
 /**
+ * Offset of the quote that closes a quoted value whose body starts at `from`, or -1. A backslash takes the
+ * next character with it, so a quote after an odd run of backslashes belongs to the value. Stated on the
+ * positions of the quote character, not as a pattern of the body: this reader is not the product grammar.
+ */
+function closingQuote(raw: string, quote: string, from: number): number {
+  let at = raw.indexOf(quote, from);
+  while (at >= 0) {
+    let run = 0;
+    while (at - 1 - run >= from && raw[at - 1 - run] === '\\') run += 1;
+    if (run % 2 === 0) return at;
+    at = raw.indexOf(quote, at + 1);
+  }
+  return -1;
+}
+
+/**
  * Independent evidence: key=value pairs that start a whitespace-separated token
  * of the raw line. Values in double or single quotes are consumed whole, so a
  * '=' inside a quoted value is never reported as a pair of its own. This is intentionally not the
@@ -78,45 +102,36 @@ function structuredDataEnd(raw: string, start: number): number {
 export function independentKeyValuePairs(raw: string): RawPair[] {
   const pairs: RawPair[] = [];
   const length = raw.length;
-  // Tokens are separated by ASCII white space (SP, TAB, LF, VT, FF, CR): the key=value grammar never puts one
-  // of these into an unquoted value and allows them after the last pair (contract KV_BARE, KV_TRAILING), so a
-  // form feed at the end of the line is not part of the last value.
-  const gap = (ch: string | undefined): boolean => ch === ' ' || ch === '\t' || ch === '\n' || ch === '\v' || ch === '\f' || ch === '\r';
   let index = positionalHeaderEnd(raw);
   while (index < length) {
-    while (index < length && gap(raw[index])) index += 1;
-    const start = index;
+    index = matchEnd(matchAt(GAP_RUN, raw, index)!);
+    if (index >= length) break;
     const key = matchAt(KEY_AT_TOKEN_START, raw, index);
     if (key) {
       index += key[0].length;
       const quote = raw[index];
       if (quote === '"' || quote === "'") {
-        let cursor = index + 1;
-        let value = '';
-        let closed = false;
-        while (cursor < length) {
-          if (raw[cursor] === '\\' && cursor + 1 < length) { value += raw[cursor + 1]; cursor += 2; continue; }
-          if (raw[cursor] === quote) { closed = true; break; }
-          value += raw[cursor]; cursor += 1;
-        }
-        if (closed) {
-          pairs.push({ key: key[0].slice(0, -1), value, rawValue: raw.slice(index + 1, cursor) });
+        // Without a closing quote (the text ends, or ends in a backslash) the token is read as an unquoted
+        // value below.
+        const cursor = closingQuote(raw, quote, index + 1);
+        if (cursor >= 0) {
+          const rawValue = raw.slice(index + 1, cursor);
+          const value = rawValue.includes('\\') ? rawValue.replace(BACKSLASH_PAIR, pair => pair.slice(1)) : rawValue;
+          pairs.push({ key: key[0].slice(0, -1), value, rawValue, quoted: true });
           index = cursor + 1;
           continue;
         }
       }
-      let end = index;
       // An unquoted value ends at white space. No backslash rule here: this reader must not share the
       // grammar's idea of an escape (a backslash that carried the next SP made the grammar swallow the
       // following pair, and a reader with the same rule could not see it).
-      while (end < length && !gap(raw[end])) end += 1;
+      const end = matchEnd(matchAt(TOKEN_RUN, raw, index)!);
       const value = raw.slice(index, end);
-      pairs.push({ key: key[0].slice(0, -1), value, rawValue: value });
+      pairs.push({ key: key[0].slice(0, -1), value, rawValue: value, quoted: false });
       index = end;
       continue;
     }
-    while (index < length && !gap(raw[index])) index += 1;
-    if (index === start) index += 1;
+    index = matchEnd(matchAt(TOKEN_RUN, raw, index)!);
   }
   return pairs;
 }
@@ -166,13 +181,13 @@ export function classifyStructuredParse(
   // once is a lost occurrence (owner policy D-1), so a matched value is consumed.
   const taken = new Map<string, Set<number>>();
   const lostPairs = independentKeyValuePairs(raw).filter(pair => {
-    // Which backslashes a grammar decodes is the grammar's business; presence of the value is what is
-    // accounted here, so both sides are compared with backslashes removed.
-    const written = pair.rawValue.split('\\').join('');
+    // An unquoted value has no escapes: the field holds the text as written, or the value was changed on the
+    // way (a decoded backslash is a lost character). Which backslashes a grammar decodes in a QUOTED value is
+    // the grammar's business; there presence of the value is accounted, compared with backslashes removed.
     const values = leaves.get(pair.key) ?? [];
     const consumed = taken.get(pair.key) ?? new Set<number>();
     const at = values.findIndex((value, index) => !consumed.has(index) &&
-      (value === pair.value || value === pair.rawValue || value.split('\\').join('') === written));
+      (pair.quoted ? value === pair.value || value === pair.rawValue || value.split('\\').join('') === pair.rawValue.split('\\').join('') : value === pair.rawValue));
     if (at < 0) return true;
     consumed.add(at);
     taken.set(pair.key, consumed);

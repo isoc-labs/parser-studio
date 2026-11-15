@@ -36,6 +36,9 @@ test('the set holds every template file and every compiler-owned helper', () => 
     ['canonical operators', 'def parserstudio_normalize(original)'],
     ['grammar runtime', 'def psg_units('],
     ['shared reader', 'def psg_read_event('],
+    // Both texts of the one compiler branch that writes a value into the Regex helper.
+    ['Regex with a static cost proof', 'def parserstudio_regex_cost_proven?\n  true\n'],
+    ['Regex without a static cost proof', 'def parserstudio_regex_cost_proven?\n  false\n'],
   ];
   const texts = Object.values(current.ruby);
   for (const [name, marker] of helpers) assert.ok(texts.some(text => text.includes(marker)), name + ' is in no compiler variant');

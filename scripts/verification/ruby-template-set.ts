@@ -8,7 +8,8 @@ import {currentTemplateSet, serializeManifest, TEMPLATE_SET_MANIFEST_PATH} from 
 const mode = process.argv[2];
 const {manifest} = currentTemplateSet();
 const text = serializeManifest(manifest);
-const summary = `templates=${Object.keys(manifest.templates).length} variants=${Object.keys(manifest.artifacts).length} sha256=${manifest.templateSetSha256}`;
+const supplements = Object.keys(manifest.artifacts).filter(id => id.startsWith('supplement:')).length;
+const summary = `templates=${Object.keys(manifest.templates).length} variants=${Object.keys(manifest.artifacts).length - supplements} supplements=${supplements} sha256=${manifest.templateSetSha256}`;
 if (mode === '--write') {
   writeFileSync(TEMPLATE_SET_MANIFEST_PATH, text);
   process.stdout.write(`RUBY_TEMPLATE_SET_WRITE ${summary}\n`);

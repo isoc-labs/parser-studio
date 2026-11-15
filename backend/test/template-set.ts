@@ -10,6 +10,8 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {inflateSync} from 'node:zlib';
 import {compilePair} from '../src/compiler.js';
 import {compilerVariants} from './compiler-variants.js';
+import {analyzeRuby24RegexCost} from '../src/ruby24-regex-cost.js';
+import type {ParserProject} from '../src/types.js';
 
 export interface TemplateSetManifest {
   schema: 'parser-studio/ruby-template-set/v1';
@@ -57,6 +59,21 @@ export function templateSetDigest(parts: Pick<TemplateSetManifest, 'templates' |
 
 export interface TemplateSet { manifest: TemplateSetManifest; ruby: Record<string, string> }
 
+/**
+ * Artifacts that no compiler variant produces. The variants are also run by the Ruby 2.4.9 gates, so they hold
+ * no Regex without a static cost proof (that parser fails closed on Ruby 2.4.9 by design). The compiler emits a
+ * different text for it (`parserstudio_regex_cost_proven?` is `false`), and block coverage of the compiler over
+ * the 101 variants showed this as the only Ruby text no variant contains (2026-11-15).
+ */
+const REGEX_WITHOUT_COST_PROOF = String.raw`(?<user>[a-z]+) (?<code>\d+)`;
+export function supplementalProjects(): Array<{ id: string; project: ParserProject }> {
+  const base = compilerVariants().find(variant => variant.id === 'format:regex');
+  if (!base || analyzeRuby24RegexCost(REGEX_WITHOUT_COST_PROOF).ok) throw new Error('TEMPLATE_SET_SHAPE: the Regex supplement no longer lacks a cost proof');
+  const project = structuredClone(base.project);
+  project.extraction = { format: 'regex', pattern: REGEX_WITHOUT_COST_PROOF };
+  return [{ id: 'supplement:regex-without-static-cost-proof', project }];
+}
+
 /** The manifest of the current templates and compiler, with the normalized Ruby of every variant. */
 export function currentTemplateSet(): TemplateSet {
   const templates: Record<string, string> = {};
@@ -64,7 +81,7 @@ export function currentTemplateSet(): TemplateSet {
   const artifacts: Record<string, { ruby: string; conf: string }> = {};
   const ruby: Record<string, string> = {};
   const tables = new Set<string>();
-  for (const variant of compilerVariants()) {
+  for (const variant of [...compilerVariants(), ...supplementalProjects()]) {
     if (artifacts[variant.id]) throw new Error('TEMPLATE_SET_SHAPE: duplicate compiler variant ' + variant.id);
     const files = compilePair(variant.project).files;
     const conf = files.find(file => file.name.endsWith('.conf'));
@@ -87,6 +104,7 @@ export function currentTemplateSet(): TemplateSet {
         'templates: SHA-256 of the bytes of every file in backend/templates',
         'artifacts.<variant>.ruby: SHA-256 of the UTF-8 Ruby of the variant with the project IR literal replaced by __PARSER_PROJECT_B64__ and the deflated case-fold literal replaced by __PARSERSTUDIO_UNICODE_CASE_B64__',
         'artifacts.<variant>.conf: SHA-256 of the UTF-8 CONF of the variant',
+        'artifacts.supplement:*: the same two hashes for the projects of supplementalProjects() in backend/test/template-set.ts (Ruby text that no compiler variant produces)',
         'unicodeCaseMapSha256: SHA-256 of the inflated case-fold table (JSON text)',
         'templateSetSha256: SHA-256 of the canonical JSON (object keys sorted, no white space) of {artifacts, templates, unicodeCaseMapSha256}',
       ],

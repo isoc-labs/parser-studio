@@ -30,7 +30,7 @@ MAX_BYTES=131072
 
 
 def unescape_kv_value(text:str)->str:
-    """Decode only the escapes the contract lists; any other backslash stays as written."""
+    """Decode a quoted value: only the escapes the contract lists; any other backslash stays as written."""
     out=[];index=0
     while index<len(text):
         if text[index]=='\\' and index+1<len(text):
@@ -73,7 +73,8 @@ def decode_source_kv(raw:str,begin:int=0,*,max_fields:int=MAX_FIELDS)->Fragment:
         if out.primitive_fields>=max_fields:
             out.issues.append('KV_SOURCE_FIELD_LIMIT');break
         group=next(name for name in ('dq','sq','bare') if match[name] is not None)
-        value=unescape_kv_value(match[group])
+        # An unquoted value has no quoting syntax to escape from: it is the text as written.
+        value=match[group] if group=='bare' else unescape_kv_value(match[group])
         if key in out.fields:
             # Source preview keeps every occurrence of a repeated key, in order (release gate H3).
             previous=out.fields[key]

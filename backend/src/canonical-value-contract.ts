@@ -95,7 +95,10 @@ export function canonicalOfficialScalarValid(target:string,value:unknown):boolea
   if(kind==='port')return typeof value==='number'&&Number.isSafeInteger(value)&&value>=0&&value<=65535;
   if(kind==='number')return typeof value==='number'&&Number.isFinite(value);
   if(kind==='boolean')return typeof value==='boolean';
-  if(kind==='timestamp')return typeof value==='string'&&validIsoTimestamp(value);
+  // The generated parser reads a timestamp text with the typed-value reader, which sets ASCII white space at
+  // its edges aside (parserstudio_coerce). The same here: a constant written with a space around it was a
+  // field error for every event in the preview while the parser emitted every event (audit of 2026-11-15).
+  if(kind==='timestamp')return typeof value==='string'&&validIsoTimestamp(trimCanonicalAscii(value));
   if(kind==='ip')return typeof value==='string'&&asIP(value);
   return false;
 }

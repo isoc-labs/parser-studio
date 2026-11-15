@@ -1,9 +1,9 @@
 # GENERATED FILE - DO NOT EDIT.
-# Source: contracts/syslog-header-grammar.v1.json (revision 6); regenerate with
+# Source: contracts/syslog-header-grammar.v1.json (revision 7); regenerate with
 #   node scripts/grammar/generate-grammar.mjs --write
 # CI runs the generator with --verify, so a hand edit of this file fails the gate.
 # Syslog header grammar for the Multi-Pass engine, generated from the shared grammar contract.
-GRAMMAR_CONTRACT_SHA256 = "e3069396fba578c3e1499d34318eead6356813f8478f19d0619858eaf822cb99"
+GRAMMAR_CONTRACT_SHA256 = "b2516fb96d8c605faae09db9cbafeb96fb21a63ac8f821b3479349bf0a99f4d8"
 TOKENS = {
   "PRI": "[0-9]{1,3}",
   "BSD_MONTH": "[A-Z][a-z]{2}",
@@ -34,8 +34,9 @@ TOKENS = {
   "CEF_WS": "[ \\t]",
   "CEF_WS_RUN": "[ \\t]+",
   "CEF_NOT_WS": "[^ \\t]",
-  "CEF_ESCAPE": "\\\\(?:[^\\\\]|\\\\)",
+  "CEF_ESCAPE": "\\\\[^ \\t]",
   "CEF_PLAIN": "[^\\\\ \\t]",
+  "CEF_BACKSLASH": "\\\\",
   "LEEF_DELIMITER_LITERAL": "[\\t!-<>-\\[\\]-~]",
   "LEEF_HEX_DIGITS": "[0-9A-Fa-f]{1,4}"
 }
@@ -118,7 +119,7 @@ FRAGMENTS = {
     ]
   },
   "cef_pair": {
-    "source": "(?:(?:[ \\t]))*(?P<key>[A-Za-z_][A-Za-z0-9_.-]{0,127})=(?P<value>(?:(?:(?:\\\\(?:[^\\\\]|\\\\))|(?:[^\\\\ \\t])|(?:[ \\t]+)(?=(?:[^ \\t]))(?!(?:[A-Za-z_][A-Za-z0-9_.-]{0,127})=)|(?:[ \\t]+)(?=(?:[ \\t])(?:[A-Za-z_][A-Za-z0-9_.-]{0,127})=)))*)(?:(?:(?:[ \\t]))*\\Z|(?:[ \\t])(?=(?:[A-Za-z_][A-Za-z0-9_.-]{0,127})=))",
+    "source": "(?:(?:[ \\t]))*(?P<key>[A-Za-z_][A-Za-z0-9_.-]{0,127})=(?P<value>(?:(?:(?:\\\\[^ \\t])|(?:[^\\\\ \\t])|(?:[ \\t]+)(?=(?:[^ \\t]))(?!(?:[A-Za-z_][A-Za-z0-9_.-]{0,127})=)|(?:[ \\t]+)(?=(?:[ \\t])(?:[A-Za-z_][A-Za-z0-9_.-]{0,127})=)|(?:\\\\)(?=(?:[ \\t]))))*)(?:(?:(?:[ \\t]))*\\Z|(?:[ \\t])(?=(?:[A-Za-z_][A-Za-z0-9_.-]{0,127})=))",
     "captures": [
       "key",
       "value"

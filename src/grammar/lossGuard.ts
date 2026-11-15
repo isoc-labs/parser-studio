@@ -12,7 +12,7 @@
  * The functions are part of the shared grammar: the browser preview and the generated Ruby parser execute
  * the same code (scripts/grammar/ts2rb), so an event is graded identically in both.
  */
-import { SYSLOG_HEADER_SEMANTICS } from './syslogHeaderGrammar.generated';
+import { SYSLOG_HEADER_SEMANTICS, SYSLOG_HEADER_TOKENS } from './syslogHeaderGrammar.generated';
 
 /**
  * CSV by reconstruction: the cells, written back in the only ways RFC 4180 writes them, must spell the row.
@@ -169,6 +169,9 @@ const CEF_HEADER_FIELDS: readonly string[] = ['cef_version', 'cef_device_vendor'
 const LEEF_HEADER_FIELDS: readonly string[] = ['leef_version', 'leef_vendor', 'leef_product', 'leef_product_version', 'leef_event_id'];
 const CEF_ESCAPES: Readonly<Record<string, string>> = SYSLOG_HEADER_SEMANTICS.cefExtensionEscapes;
 const CEF_BLANK = ' \t\n\v\f\r\0';
+// Where a pair starts inside extension text: white space, a key, `=`. What a key looks like is the one thing
+// taken from the contract; where the extractor decided that a value ends is not used.
+const CEF_PAIR_START = new RegExp('[ \\t]' + SYSLOG_HEADER_TOKENS.CEF_KEY + '=', 'u');
 const LEEF_DELIMITER_VERSIONS: readonly string[] = SYSLOG_HEADER_SEMANTICS.leefDelimiterFieldVersions;
 
 /**
@@ -193,6 +196,7 @@ export function cefEventUnaccounted(text: string, fields: Record<string, unknown
     const value = CEF_HEADER_FIELDS.includes(key) ? undefined : fields[key];
     if (typeof value !== 'string') return 'a key=value pair of the CEF extension is missing from the extracted fields';
     let index = 0;
+    const valueStart = cursor;
     while (index < value.length) {
       const unit = text[cursor];
       if (unit === undefined) return 'an extracted CEF value is not the text of its key=value pair';
@@ -204,6 +208,13 @@ export function cefEventUnaccounted(text: string, fields: Record<string, unknown
       }
       const escaped = text[cursor + 1];
       if (escaped === undefined) return 'an extracted CEF value is not the text of its key=value pair';
+      // A backslash before SP or TAB takes nothing with it: it is one character of the value.
+      if (escaped === ' ' || escaped === '\t') {
+        if (value[index] !== '\\') return 'an extracted CEF value is not the text of its key=value pair';
+        index++;
+        cursor++;
+        continue;
+      }
       if (Object.prototype.hasOwnProperty.call(CEF_ESCAPES, escaped)) {
         if (value[index] !== CEF_ESCAPES[escaped]) return 'an extracted CEF value is not the text of its key=value pair';
         index++;
@@ -215,6 +226,9 @@ export function cefEventUnaccounted(text: string, fields: Record<string, unknown
     }
     seen++;
     if (cursor < length && text[cursor] !== ' ' && text[cursor] !== '\t') return 'an extracted CEF value ends before the text of its value does';
+    // The walk above follows the extracted value, so it cannot see a value that ran into the next pair. A pair
+    // that starts inside the text of a value is one (`filePath=C:\\Users\\bob\\ suser=bob` read as one value).
+    if (CEF_PAIR_START.test(text.slice(valueStart, cursor))) return 'a key=value pair of the CEF extension is inside an extracted value';
   }
   return Object.keys(fields).length === CEF_HEADER_FIELDS.length + seen ? null : 'an extracted field is not in the CEF extension';
 }

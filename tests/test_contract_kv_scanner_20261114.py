@@ -45,7 +45,12 @@ class ContractKeyValueScanner(unittest.TestCase):
             'path="C:\\Users\\x"': "C:\\Users\\x",
             "path=C:\\Windows\\System32": "C:\\Windows\\System32",
             'path="a\\\\b"': "a\\b",
-            "user=k\\=v": "k=v",
+            # An unquoted value is the text as written: nothing is decoded in it.
+            "user=k\\=v": "k\\=v",
+            "path=\\\\srv\\share": "\\\\srv\\share",
+            "path=\\\\*\\IPC$": "\\\\*\\IPC$",
+            'path="\\\\\\\\srv\\\\share"': "\\\\srv\\share",
+            'user="k\\=v"': "k=v",
             "path=C:\\Temp\\": "C:\\Temp\\",
             'note="a=b c"': "a=b c",
         }

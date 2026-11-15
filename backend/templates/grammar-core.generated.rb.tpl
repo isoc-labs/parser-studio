@@ -136,7 +136,7 @@ end
 
 # src/grammar/lossGuard.ts: cefEventUnaccounted
 def psg_cef_event_unaccounted(text, fields)
-  cursor = length = blank = seen = key = value = index = unit = escaped = nil
+  cursor = length = blank = seen = key = value = index = valueStart = unit = escaped = nil
   cursor = psg_header_end(text, 'CEF:', psg_k_cef_header_fields, fields)
   if (cursor < 0)
     return 'a CEF header field is not the text of the event'
@@ -168,6 +168,7 @@ def psg_cef_event_unaccounted(text, fields)
       return 'a key=value pair of the CEF extension is missing from the extracted fields'
     end
     index = 0
+    valueStart = cursor
     while (index < psg_len(value))
       unit = psg_at(text, cursor)
       if unit.nil?
@@ -184,6 +185,14 @@ def psg_cef_event_unaccounted(text, fields)
       escaped = psg_at(text, (cursor + 1))
       if escaped.nil?
         return 'an extracted CEF value is not the text of its key=value pair'
+      end
+      if ((escaped == ' ') || (escaped == "\u{9}"))
+        if (psg_at(value, index) != '\\')
+          return 'an extracted CEF value is not the text of its key=value pair'
+        end
+        index += 1
+        cursor += 1
+        next
       end
       if psg_k_cef_escapes.key?(escaped)
         if (psg_at(value, index) != psg_k_cef_escapes[escaped])
@@ -202,6 +211,9 @@ def psg_cef_event_unaccounted(text, fields)
     if (((cursor < length) && (psg_at(text, cursor) != ' ')) && (psg_at(text, cursor) != "\u{9}"))
       return 'an extracted CEF value ends before the text of its value does'
     end
+    if /[ \t][A-Za-z_][A-Za-z0-9_.\-]{0,127}=/.match?(psg_slice(text, valueStart, cursor))
+      return 'a key=value pair of the CEF extension is inside an extracted value'
+    end
   end
   return ((fields.keys.length == (7 + seen)) ? :psg_null : 'an extracted field is not in the CEF extension')
 end
@@ -213,7 +225,7 @@ def psg_cef_extension_values(input)
   cursor = 0
   count = 0
   while true
-    match = psg_match_at(/\G(?:(?:(?:[ \t]))*(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,127})=(?<value>(?:(?:(?:\\(?:[^\\]|\\))|(?:[^\\ \t])|(?:[ \t]+)(?=(?:[^ \t]))(?!(?:[A-Za-z_][A-Za-z0-9_.\-]{0,127})=)|(?:[ \t]+)(?=(?:[ \t])(?:[A-Za-z_][A-Za-z0-9_.\-]{0,127})=)))*)(?:(?:(?:[ \t]))*\z|(?:[ \t])(?=(?:[A-Za-z_][A-Za-z0-9_.\-]{0,127})=)))/, input, cursor)
+    match = psg_match_at(/\G(?:(?:(?:[ \t]))*(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,127})=(?<value>(?:(?:(?:\\[^ \t])|(?:[^\\ \t])|(?:[ \t]+)(?=(?:[^ \t]))(?!(?:[A-Za-z_][A-Za-z0-9_.\-]{0,127})=)|(?:[ \t]+)(?=(?:[ \t])(?:[A-Za-z_][A-Za-z0-9_.\-]{0,127})=)|(?:\\)(?=(?:[ \t]))))*)(?:(?:(?:[ \t]))*\z|(?:[ \t])(?=(?:[A-Za-z_][A-Za-z0-9_.\-]{0,127})=)))/, input, cursor)
     if !psg_t(match)
       break
     end
@@ -262,11 +274,10 @@ def psg_classify_structured_parse(raw, outcome, bodyFormat)
   psg_collect_leaves(scope, '', leaves)
   taken = {}
   lostPairs = psg_filter(psg_independent_key_value_pairs(raw), lambda { |pair|
-  written = values = consumed = at = nil
-  written = psg_join(psg_split(pair['rawValue'], '\\'), '')
+  values = consumed = at = nil
   values = (psg_null?(psg_t1 = leaves[pair['key']]) ? [] : psg_t1)
   consumed = (psg_null?(psg_t2 = taken[pair['key']]) ? {} : psg_t2)
-  at = psg_find_index(values, lambda { |value, index| (!consumed.key?(index) && (((value == pair['value']) || (value == pair['rawValue'])) || (psg_join(psg_split(value, '\\'), '') == written))) })
+  at = psg_find_index(values, lambda { |value, index| (!consumed.key?(index) && (pair['quoted'] ? (((value == pair['value']) || (value == pair['rawValue'])) || (psg_join(psg_split(value, '\\'), '') == psg_join(psg_split(pair['rawValue'], '\\'), ''))) : (value == pair['rawValue']))) })
   if (at < 0)
     return true
   end
@@ -278,6 +289,23 @@ def psg_classify_structured_parse(raw, outcome, bodyFormat)
     return {'status' => 'PARTIAL', 'lostPairs' => lostPairs, 'reasons' => [*headerReasons, *psg_map(psg_slice(lostPairs, 0, 4), lambda { |pair_2| ('raw pair ' + pair_2['key'] + '= is not present with its value in the extracted fields') })]}
   end
   return {'status' => 'FULL', 'lostPairs' => [], 'reasons' => []}
+end
+
+# src/grammar/parseStatus.ts: closingQuote
+def psg_closing_quote(raw, quote, from)
+  at = run = nil
+  at = psg_index(raw, quote, from)
+  while (at >= 0)
+    run = 0
+    while ((((at - 1) - run) >= from) && (psg_at(raw, ((at - 1) - run)) == '\\'))
+      run += 1
+    end
+    if (psg_mod(run, 2) == 0)
+      return at
+    end
+    at = psg_index(raw, quote, (at + 1))
+  end
+  return (-1)
 end
 
 # src/grammar/parseStatus.ts: collectLeaves
@@ -409,7 +437,7 @@ end
 
 # src/structuredFamilies.ts: decodeCefValue
 def psg_decode_cef_value(raw)
-  psg_replace(raw, /\\(?:[^\\]|\\)/, true, lambda { |pair| (psg_k_cef_escapes_2.key?(psg_at(pair, 1)) ? psg_k_cef_escapes_2[psg_at(pair, 1)] : pair) })
+  psg_replace(raw, /\\[^ \t]/, true, lambda { |pair| (psg_k_cef_escapes_2.key?(psg_at(pair, 1)) ? psg_k_cef_escapes_2[psg_at(pair, 1)] : pair) })
 end
 
 # src/structuredFamilies.ts: deterministicBody
@@ -846,58 +874,36 @@ end
 
 # src/grammar/parseStatus.ts: independentKeyValuePairs
 def psg_independent_key_value_pairs(raw)
-  pairs = length = gap = index = start = key = quote = cursor = value = closed = v_end = value_2 = nil
+  pairs = length = index = key = quote = cursor = rawValue = value = v_end = value_2 = nil
   pairs = []
   length = psg_len(raw)
-  gap = lambda { |ch| ((((((ch == ' ') || (ch == "\u{9}")) || (ch == "\u{a}")) || (ch == "\u{b}")) || (ch == "\u{c}")) || (ch == "\u{d}")) }
   index = psg_positional_header_end(raw)
   while (index < length)
-    while ((index < length) && gap.call(psg_at(raw, index)))
-      index += 1
+    index = psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, index))
+    if (index >= length)
+      break
     end
-    start = index
     key = psg_match_at(/\G(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)/, raw, index)
     if psg_t(key)
       index += psg_len(key[0])
       quote = psg_at(raw, index)
       if ((quote == '"') || (quote == '\''))
-        cursor = (index + 1)
-        value = ''
-        closed = false
-        while (cursor < length)
-          if ((psg_at(raw, cursor) == '\\') && ((cursor + 1) < length))
-            value += psg_at(raw, (cursor + 1))
-            cursor += 2
-            next
-          end
-          if (psg_at(raw, cursor) == quote)
-            closed = true
-            break
-          end
-          value += psg_at(raw, cursor)
-          cursor += 1
-        end
-        if closed
-          pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value, 'rawValue' => psg_slice(raw, (index + 1), cursor)})
+        cursor = psg_closing_quote(raw, quote, (index + 1))
+        if (cursor >= 0)
+          rawValue = psg_slice(raw, (index + 1), cursor)
+          value = (rawValue.include?('\\') ? psg_replace(rawValue, /\\(?m:.)/, true, lambda { |pair| psg_slice(pair, 1) }) : rawValue)
+          pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value, 'rawValue' => rawValue, 'quoted' => true})
           index = (cursor + 1)
           next
         end
       end
-      v_end = index
-      while ((v_end < length) && !gap.call(psg_at(raw, v_end)))
-        v_end += 1
-      end
+      v_end = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
       value_2 = psg_slice(raw, index, v_end)
-      pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value_2, 'rawValue' => value_2})
+      pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value_2, 'rawValue' => value_2, 'quoted' => false})
       index = v_end
       next
     end
-    while ((index < length) && !gap.call(psg_at(raw, index)))
-      index += 1
-    end
-    if (index == start)
-      index += 1
-    end
+    index = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
   end
   return pairs
 end
@@ -1235,7 +1241,7 @@ end
 
 # src/grammar/kvBody.ts: parseStrictKeyValues
 def psg_parse_strict_key_values(input)
-  pairs = seen = cursor = match = key = nil
+  pairs = seen = cursor = match = key = quoted = nil
   pairs = []
   seen = {}
   cursor = 0
@@ -1258,7 +1264,8 @@ def psg_parse_strict_key_values(input)
       return {'ok' => false, 'reason' => 'TOO_MANY_PAIRS'}
     end
     seen[key] = true
-    pairs.push([key, psg_unescape_kv_value((psg_null?(psg_t1 = (psg_null?(psg_t2 = (psg_null?(psg_t3 = psg_group(match, 'dq')) ? psg_group(match, 'sq') : psg_t3)) ? psg_group(match, 'bare') : psg_t2)) ? '' : psg_t1))])
+    quoted = (psg_null?(psg_t1 = psg_group(match, 'dq')) ? psg_group(match, 'sq') : psg_t1)
+    pairs.push([key, (quoted.nil? ? (psg_null?(psg_t2 = psg_group(match, 'bare')) ? '' : psg_t2) : psg_unescape_kv_value(quoted))])
     cursor = psg_match_end(match)
   end
   return ((pairs.length > 0) ? {'ok' => true, 'pairs' => pairs} : {'ok' => false, 'reason' => 'NO_PAIRS'})
@@ -1598,13 +1605,14 @@ end
 
 # src/grammar/extractEvent.ts: tokenizeCsvRow
 def psg_tokenize_csv_row(raw, delimiter)
-  out = stripUnquoted = token = state = i = c = nil
+  out = stripUnquoted = token = from = state = i = c = nil
   if !psg_k_csv_delimiters.include?(delimiter)
     return :psg_null
   end
   out = []
   stripUnquoted = (delimiter != "\u{9}")
   token = ''
+  from = 0
   state = 'start'
   i = 0
   psg_t1 = true
@@ -1614,14 +1622,14 @@ def psg_tokenize_csv_row(raw, delimiter)
     c = psg_at(raw, i)
     if (state == 'quoted')
       if (c == '"')
+        token += psg_slice(raw, from, i)
         if (psg_at(raw, (i + 1)) == '"')
           token += '"'
           i += 1
+          from = (i + 1)
         else
           state = 'afterQuote'
         end
-      else
-        token += c
       end
     elsif (state == 'afterQuote')
       if (c == delimiter)
@@ -1634,7 +1642,7 @@ def psg_tokenize_csv_row(raw, delimiter)
         return :psg_null
       end
     elsif (c == delimiter)
-      out.push(((state == 'start') ? :psg_null : (stripUnquoted ? psg_replace(token, /\A[ \t]+|[ \t]+\z/, true, '') : token)))
+      out.push(((state == 'start') ? :psg_null : (stripUnquoted ? psg_without_edge_blanks(psg_slice(raw, from, i)) : psg_slice(raw, from, i))))
       token = ''
       state = 'start'
     elsif (c == '"')
@@ -1642,17 +1650,20 @@ def psg_tokenize_csv_row(raw, delimiter)
         return :psg_null
       end
       state = 'quoted'
+      from = (i + 1)
     elsif (((state == 'start') && stripUnquoted) && ((c == ' ') || (c == "\u{9}")))
       next
     else
-      token += c
+      if (state == 'start')
+        from = i
+      end
       state = 'plain'
     end
   end
   if (state == 'quoted')
     return :psg_null
   end
-  out.push(((state == 'start') ? :psg_null : ((state == 'afterQuote') ? token : (stripUnquoted ? psg_replace(token, /\A[ \t]+|[ \t]+\z/, true, '') : token))))
+  out.push(((state == 'start') ? :psg_null : ((state == 'afterQuote') ? token : (stripUnquoted ? psg_without_edge_blanks(psg_slice(raw, from)) : psg_slice(raw, from)))))
   if ((out.length == 1) && out[0].equal?(:psg_null))
     return :psg_null
   end
@@ -1689,6 +1700,9 @@ end
 # src/grammar/kvBody.ts: unescapeKvValue
 def psg_unescape_kv_value(raw)
   out = index = v_next = nil
+  if !raw.include?('\\')
+    return raw
+  end
   out = ''
   index = 0
   while (index < psg_len(raw))
@@ -1715,4 +1729,18 @@ def psg_with_body_kind(extraction, kind = nil)
     psg_set_tag(extraction, 'bodyKind', kind)
   end
   return extraction
+end
+
+# src/grammar/extractEvent.ts: withoutEdgeBlanks
+def psg_without_edge_blanks(token)
+  start = v_end = nil
+  start = 0
+  v_end = psg_len(token)
+  while ((start < v_end) && ((psg_at(token, start) == ' ') || (psg_at(token, start) == "\u{9}")))
+    start += 1
+  end
+  while ((v_end > start) && ((psg_at(token, (v_end - 1)) == ' ') || (psg_at(token, (v_end - 1)) == "\u{9}")))
+    v_end -= 1
+  end
+  return (((start == 0) && (v_end == psg_len(token))) ? token : psg_slice(token, start, v_end))
 end

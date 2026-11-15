@@ -94,6 +94,11 @@ export function generateCefLeefCases(count: number, seed: number): FamilyCase[] 
     cef('white-space-around', headerText + ' \t' + extensionText(pairs) + ' \t ', cefFull(pairs));
     // Six "|" after "CEF:0": the seventh header field is not terminated, so this is not a CEF event.
     cef('severity-field-missing', 'CEF:0|' + header.slice(0, 5).map(([, meant]) => cefHeaderText(meant)).join('|') + '|' + extensionText(pairs), UNKNOWN);
+    // A sender that does not double the backslash of a path: the backslash before the separator takes nothing
+    // with it, so the pair that follows is a pair of its own. An engine may decline such an event; it must
+    // never report the two pairs as one value.
+    cef('unescaped-backslash-before-next-pair', headerText + 'cs6=C:\\dir\\ ' + extensionText(pairs),
+      { ...cefFull([['cs6', 'C:\\dir\\'], ...pairs]), neverWrong: true });
     // A backslash at the very end escapes nothing.
     cef('escape-truncated', headerText + extensionText(pairs) + ' cs2=tail\\', UNKNOWN);
     // Owner policy D-1: the first field is written again at the end with another value.

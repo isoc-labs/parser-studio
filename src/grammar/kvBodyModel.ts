@@ -40,7 +40,15 @@ const WRITTEN: ReadonlyArray<readonly [string, string]> = [
   ['C:\\Users\\x', '"C:\\Users\\x"'],
   ['C:\\Windows\\System32', 'C:\\Windows\\System32'],
   ['a\\b', '"a\\\\b"'],
-  ['k=v', 'k\\=v'],
+  // An unquoted value is the text as written: no escape is decoded in it (a UNC path keeps both backslashes).
+  ['k\\=v', 'k\\=v'],
+  ['\\\\fileserver\\share\\doc.xlsx', '\\\\fileserver\\share\\doc.xlsx'],
+  ['\\\\*\\IPC$', '\\\\*\\IPC$'],
+  ['C:\\Users\\\\', 'C:\\Users\\\\'],
+  ["O\\'Brien", "O\\'Brien"],
+  // In a quoted value the contract escapes are decoded.
+  ['k=v', '"k\\=v"'],
+  ['\\\\fileserver\\share', '"\\\\\\\\fileserver\\\\share"'],
   // A bare value ends at white space; a backslash at its end is a character of the value (a directory path).
   ['C:\\Temp\\', 'C:\\Temp\\'],
   ['a\u2028b', 'a\u2028b'],
