@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
@@ -14,7 +15,7 @@ const method=(s:string)=>{
   return match[0];
 };
 const canonicalMethod=method(source('canonical-operators.rb.tpl'));
-const templates=['ruby-fragment.rb.tpl','ruby-forwarder-family.rb.tpl'].map(name=>{
+const templates=['ruby-fragment.rb.tpl'].map(name=>{
   assert.ok(source(name).includes('# __PARSERSTUDIO_CANONICAL_OPERATORS__'));
   assert.ok(!source(name).includes('def parserstudio_lookup('),'operators must have one source');
   return canonicalMethod;
@@ -50,7 +51,7 @@ test('generated native parser yields MessagePack-compatible Fluent EventTime whe
     "raise 'wrong type' unless values.all?{|v| v.is_a?(Fluent::EventTime)}",
     "puts JSON.generate(values.map{|v|[v.sec,v.nsec]})",
   ].join('\n');
-  const out=spawnSync('ruby',['-e',runner],{encoding:'utf8',timeout:15000});
+  const out=spawnSync('ruby',rubyE(runner),{encoding:'utf8',timeout:15000});
   assert.equal(out.status,0,out.stderr||String(out.error));
   assert.deepEqual(JSON.parse(out.stdout),[
     [1794195784,482000000],[-1,999000000],[0,0],
@@ -84,7 +85,7 @@ test('generated native parser falls back to the receive time when no timestamp i
     "raise 'not the receive time' unless values.all?{|v| (v.sec - Time.now.to_i).abs <= 5}",
     "puts 'EVENT_TIME_FALLBACK_OK'",
   ].join('\n');
-  const a=spawnSync('ruby',['-e',withFluent],{encoding:'utf8',timeout:15000});
+  const a=spawnSync('ruby',rubyE(withFluent),{encoding:'utf8',timeout:15000});
   assert.equal(a.status,0,a.stderr||String(a.error));
   assert.match(a.stdout,/EVENT_TIME_FALLBACK_OK/);
   const standalone=[
@@ -94,7 +95,7 @@ test('generated native parser falls back to the receive time when no timestamp i
     "raise 'wrong type' unless values.all?{|v| v.is_a?(Time) && (v.to_i - Time.now.to_i).abs <= 5}",
     "puts 'EVENT_TIME_FALLBACK_STANDALONE_OK'",
   ].join('\n');
-  const b=spawnSync('ruby',['-e',standalone],{encoding:'utf8',timeout:15000});
+  const b=spawnSync('ruby',rubyE(standalone),{encoding:'utf8',timeout:15000});
   assert.equal(b.status,0,b.stderr||String(b.error));
   assert.match(b.stdout,/EVENT_TIME_FALLBACK_STANDALONE_OK/);
 });
@@ -127,7 +128,7 @@ const cases:Case[]=[
 test('H1 canonical source-path contract pins strict ambiguous partitions and native template parity',()=>{
   assert.equal(CANONICAL_OPERATOR_CONTRACT_V1.sourcePaths.lookup,'all-partitions-own-keys');
   assert.equal(CANONICAL_OPERATOR_CONTRACT_V1.sourcePaths.ambiguous,'reject');
-  assert.equal(templates[0],templates[1],'native variants must not diverge');
+  assert.equal(templates.length,1,'there is one native template');
   assert.equal(generatedMethod,templates[0],'generated Ruby must retain exact reviewed lookup method');
   for(const c of cases){
     const result=resolveCanonicalSourcePath(c.record,c.path,c.kind);
@@ -153,7 +154,7 @@ test('H1 actual Ruby path selection agrees with independently authored truth',
       "end",
       "STDOUT.write(JSON.generate(rows))",
     ].join('\n');
-    const result=spawnSync('ruby',['-e',runner],{
+    const result=spawnSync('ruby',rubyE(runner),{
       encoding:'utf8',timeout:15000,maxBuffer:512*1024,
       input:JSON.stringify(cases.map(({record,path,kind})=>({record,path,kind}))),
     });

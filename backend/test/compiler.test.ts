@@ -83,17 +83,13 @@ test("fragment includes only one set of markers, safe literal payload, and Ruby 
  assert.equal(JSON.parse(Buffer.from(payload!,"base64").toString("utf8")).vendor,p.vendor);
  assert.equal(ruby.includes("Kernel.exit"),false);
 });
-test("generated CSV parser strips field-edge whitespace without enabling liberal parsing",()=>{
- const ruby=compilePair(sampleProject()).files[1]!.content;
- assert.match(ruby,/CSV\.parse_line\(text, col_sep: separator, liberal_parsing: false, strip: true\)/);
+test("generated CSV parser reads a row with the generated tokenizer, never with the csv library",()=>{
  const csv=sampleProject();
  csv.extraction={format:"csv",csvColumns:["one","two","three"],csvDelimiter:","};
  const generated=compilePair(csv).files.find(file=>!file.name.endsWith(".conf"))!.content;
- assert.ok(generated.includes("row = parserstudio_csv_parse_line(text, separator, separator != "), "CSV must use target-compatible parser adapter");
- assert.match(generated,/def parserstudio_csv_strip_field_edges\(text, separator\)/);
- assert.match(generated,/def parserstudio_csv_parse_line\(text, separator, strip_edges\)/);
- assert.doesNotMatch(generated,/row = CSV\.parse_line\(text, col_sep: separator/);
- assert.equal(ruby.includes("liberal_parsing: true"),false);
+ assert.match(generated,/def psg_tokenize_csv_row\(raw, delimiter\)/);
+ assert.doesNotMatch(generated,/CSV\.parse_line|require 'csv'/);
+ assert.equal(generated.includes("liberal_parsing: true"),false);
 });
 
 test("compiler refuses invalid project; canonical map key order doesn't change artifacts", () => {
@@ -145,19 +141,18 @@ test("Generic Structural compiler is opt-in, bounded and keeps legacy artifact b
  assert.equal(validation.ok,true,JSON.stringify(validation));
  const pair=compilePair(p);
  const ruby=pair.files[1]!.content;
- assert.match(ruby,/when 'generic_structural'/);
- assert.match(ruby,/def parserstudio_generic_structural\(text\)/);
- assert.match(ruby,/def parserstudio_generic_short_rfc5424_structured\(text\)/);
- assert.match(ruby,/def parserstudio_generic_prefixed_json\(text\)/);
- assert.match(ruby,/def parserstudio_generic_iso_pri_mixed\(text\)/);
- assert.match(ruby,/def parserstudio_generic_junos_rfc5424_sd\(text\)/);
- assert.match(ruby,/def parserstudio_generic_space_kv\(text\)/);
- assert.match(ruby,/pieces\.each_with_index/);
- assert.match(ruby,/def parserstudio_generic_watchguard\(text\)/);
- assert.match(ruby,/def parserstudio_generic_juniper_legacy\(text\)/);
- assert.match(ruby,/def parserstudio_generic_delimited_comma_kv\(text\)/);
- assert.match(ruby,/def parserstudio_generic_bracket_colon_kv\(text\)/);
- assert.match(ruby,/def parserstudio_generic_rfc3164_delimited_comma_kv\(text\)/);
+ assert.match(ruby,/reading = psg_read_event\(psg_text\(text\), settings\)/);
+ assert.match(ruby,/def psg_extract_generic_structural\(raw, profile = nil, familyGrammar = nil\)/);
+ assert.match(ruby,/def psg_short_rfc5424_structured\(raw\)/);
+ assert.match(ruby,/def psg_prefixed_json\(raw\)/);
+ assert.match(ruby,/def psg_iso_pri_mixed\(raw\)/);
+ assert.match(ruby,/def psg_junos_rfc5424_sd\(raw\)/);
+ assert.match(ruby,/def psg_space_kv\(raw\)/);
+ assert.match(ruby,/def psg_watchguard_profile\(raw\)/);
+ assert.match(ruby,/def psg_juniper_legacy_profile\(raw\)/);
+ assert.match(ruby,/def psg_delimited_comma_kv\(raw\)/);
+ assert.match(ruby,/def psg_bracket_colon_kv\(raw\)/);
+ assert.match(ruby,/def psg_rfc3164_delimited_comma_kv\(raw\)/);
  assert.match(ruby,/normalized = \{'parserstudio_source' => original\}/);
  assert.match(ruby,/GENERIC STRUCTURAL|Generic Structural|generic structural/i);
  const low=structuredClone(p);low.receiver.port=6799;
@@ -165,7 +160,7 @@ test("Generic Structural compiler is opt-in, bounded and keeps legacy artifact b
  assert.ok(validateProject(low).issues.some(x=>x.code==="syslog_port_minimum"));
 });
 
-test("CSV Ruby 2.4 compatibility helper is emitted inside the Stellar marker region, nothing after PARSE_END", () => {
+test("the generated grammar is emitted inside the Stellar marker region, nothing after PARSE_END", () => {
   const csv=sampleProject();
   csv.extraction={format:"csv",csvColumns:["one","two","three"],csvDelimiter:","};
   const generated=compilePair(csv).files.find(file=>!file.name.endsWith(".conf"))!.content;
@@ -173,5 +168,5 @@ test("CSV Ruby 2.4 compatibility helper is emitted inside the Stellar marker reg
   assert.ok(end>0,"PARSE_END marker present");
   assert.equal(generated.slice(end+"# STELLAR_PARSE_END".length).trim(),"",
     "reference fragments end at STELLAR_PARSE_END; no code may follow it");
-  assert.ok(generated.indexOf("def parserstudio_csv_parse_line")<end,"helper belongs to the marker region");
+  assert.ok(generated.indexOf("def psg_tokenize_csv_row")>0&&generated.indexOf("def psg_tokenize_csv_row")<end,"the grammar belongs to the marker region");
 });

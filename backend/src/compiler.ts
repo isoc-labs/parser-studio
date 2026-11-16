@@ -7,63 +7,31 @@ import unicodeCaseMap from './unicode-case-map.v1.json' with {type:'json'};
 import officialEnrichmentTypes from "./stellar7-enrichment-types.json" with { type: "json" };
 import { canonicalJson, validateProject } from "./validate.js";
 import { analyzeRuby24RegexCost, RUBY24_REGEX_MAX_INPUT_BYTES } from "./ruby24-regex-cost.js";
+import { RUBY_GRAMMAR_PLACEHOLDERS } from "./syslog-header-grammar.generated.js";
+
+/**
+ * The Ruby templates carry no hand-written Syslog header grammar. Their
+ * __PS_GRAMMAR_*__ placeholders are filled from the code generated out of
+ * contracts/syslog-header-grammar.v1.json, the same contract the browser uses.
+ */
+export function injectHeaderGrammar(fragment: string, placeholders: Readonly<Record<string, string>> = RUBY_GRAMMAR_PLACEHOLDERS): string {
+  let out = fragment;
+  for (const [placeholder, rubySource] of Object.entries(placeholders)) out = out.split(placeholder).join(rubySource);
+  const unresolved = /__PS_GR[A-Za-z0-9_]*__/i.exec(out);
+  if (unresolved) throw new Error("Grammar contract placeholder is not generated: " + unresolved[0]);
+  return out;
+}
 
 const CANONICAL_OPERATORS=readFileSync(new URL('../templates/canonical-operators.rb.tpl',import.meta.url),'utf8');
 const INDEX_ORDER = ["threat", "session", "winlogevent", "syslog"] as const;
 const RUBY_TEMPLATE = readFileSync(new URL("../templates/ruby-fragment.rb.tpl", import.meta.url), "utf8");
-const RUBY_FORWARDER_FAMILY_TEMPLATE = readFileSync(new URL("../templates/ruby-forwarder-family.rb.tpl", import.meta.url), "utf8");
-// Only actual CSV projects receive this Ruby 2.4 compatibility helper;
-// unrelated JSON/KV parser bytes and approved artifact hashes stay stable.
-const CSV_RUBY_COMPAT_HELPER = String.raw`
-def parserstudio_csv_strip_field_edges(text, separator)
-  chars=text.each_char.to_a
-  output=''.dup.force_encoding(text.encoding)
-  outside_space=''.dup.force_encoding(text.encoding)
-  within_quotes=false
-  at_field_start=true
-  index=0
-  while index<chars.length
-    char=chars[index]
-    if within_quotes
-      output << char
-      if char == '"'
-        if chars[index+1] == '"'
-          index+=1
-          output << '"'
-        else
-          within_quotes=false
-        end
-      end
-    elsif char == separator
-      outside_space.clear
-      output << char
-      at_field_start=true
-    elsif char == '"' && at_field_start
-      outside_space.clear
-      output << char
-      within_quotes=true
-      at_field_start=false
-    elsif char == ' ' || char == "\t"
-      outside_space << char unless at_field_start
-    else
-      output << outside_space << char
-      outside_space.clear
-      at_field_start=false
-    end
-    index+=1
-  end
-  output
-end
-
-def parserstudio_csv_parse_line(text, separator, strip_edges)
-  if defined?(CSV::DEFAULT_OPTIONS) && CSV::DEFAULT_OPTIONS.key?(:strip)
-    CSV.parse_line(text, col_sep: separator, liberal_parsing: false, strip: strip_edges)
-  else
-    input=strip_edges ? parserstudio_csv_strip_field_edges(text,separator) : text
-    CSV.parse_line(input, col_sep: separator, liberal_parsing: false)
-  end
-end
-`;
+// The grammar the generated parser executes is generated from the grammar the browser executes
+// (scripts/grammar/ts2rb): GRAMMAR_CORE reads every format, GRAMMAR_GENERIC adds the Generic Structural routes,
+// GRAMMAR_RUNTIME holds the hand written primitives both use.
+const GRAMMAR_RUNTIME = readFileSync(new URL("../templates/grammar-runtime.rb.tpl", import.meta.url), "utf8");
+const GRAMMAR_CORE = readFileSync(new URL("../templates/grammar-core.generated.rb.tpl", import.meta.url), "utf8");
+const GRAMMAR_GENERIC = readFileSync(new URL("../templates/grammar-generic.generated.rb.tpl", import.meta.url), "utf8");
+const GRAMMAR_MARKER = "# __PARSERSTUDIO_GRAMMAR__";
 const PARSE_END_MARKER = "# STELLAR_PARSE_END";
 // Installed Stellar Cyber customized fragments (455/455 observed) end at the
 // PARSE_END marker. Runtime helpers are therefore inserted before it, never
@@ -73,13 +41,11 @@ function insertBeforeParseEnd(fragment: string, helper: string): string {
     throw new Error("Fragment must contain exactly one STELLAR_PARSE_END marker");
   return fragment.replace(PARSE_END_MARKER, () => helper.replace(/\n*$/, "\n") + PARSE_END_MARKER);
 }
-const GENERIC_STRUCTURAL_HELPER = readFileSync(new URL("../templates/generic-structural-helper.rb.tpl", import.meta.url), "utf8");
-const REGEX_EXTRACTOR_NEEDLE = "  when 'leef'\n    parserstudio_leef(text)\n  else";
-const REGEX_EXTRACTOR_BRANCH = "  when 'leef'\n    parserstudio_leef(text)\n  when 'regex'\n    parserstudio_regex(text, settings)\n  else";
-const GENERIC_STRUCTURAL_EXTRACTOR_BRANCH = "  when 'leef'\n    parserstudio_leef(text)\n  when 'generic_structural'\n    parserstudio_generic_structural(text)\n  else";
 const GENERIC_STRUCTURAL_NORMALIZE_NEEDLE = "def parserstudio_normalize(original)\n  normalized = {}";
 const GENERIC_STRUCTURAL_NORMALIZE_BRANCH = "def parserstudio_normalize(original)\n  normalized = {'parserstudio_source' => original}";
-const GENERIC_STRUCTURAL_NORMALIZE_NO_RAW_BRANCH = "def parserstudio_normalize(original)\n  normalized = {'parserstudio_source' => parserstudio_without_source_raw(original)}";
+// The source copies are omitted from a FULL event only: what a PARTIAL event does not hold in a field exists
+// nowhere else than in the copy of its original line.
+const GENERIC_STRUCTURAL_NORMALIZE_NO_RAW_BRANCH = "def parserstudio_normalize(original)\n  normalized = {'parserstudio_source' => (psg_get_tag(original, 'readingStatus') == 'FULL' ? parserstudio_without_source_raw(original) : original)}";
 // Only emitted when extraction.omitSourceRaw is true; default artifacts are byte-identical.
 const SOURCE_RAW_STRIP_HELPER = String.raw`
 # Parser Studio: omit generated full-line copies only from known grammar-owned nodes.
@@ -244,8 +210,7 @@ function emitConfiguration(project: ParserProject): string {
 
 function emitRubyFragment(project: ParserProject): string {
   const base64 = Buffer.from(canonicalJson(project), "utf8").toString("base64");
-  const template=(project.extraction.forwarder||project.normalization.eventProfiles)
-    ?RUBY_FORWARDER_FAMILY_TEMPLATE:RUBY_TEMPLATE;
+  const template=RUBY_TEMPLATE;
   if (!template.includes("__PARSER_PROJECT_B64__")) throw new Error("Template marker missing");
   let fragment=template.replace("__PARSER_PROJECT_B64__", base64);
   const marker='# __PARSERSTUDIO_CANONICAL_OPERATORS__';
@@ -260,30 +225,18 @@ function emitRubyFragment(project: ParserProject): string {
   // The source is a bundled static catalog, never user-controlled data.
   if(/[\\'\r\n]/.test(officialJson))throw new Error("Unsafe official type literal");
   fragment=fragment.replace("__STELLAR7_ENRICH_TYPES_JSON__",officialJson);
-  const nativeCsv=project.extraction.format==="csv"||
-    (project.extraction.format==="mixed"&&project.extraction.mixedFormats?.includes("csv"));
-  if(nativeCsv){
-    const csvNeedle='row = CSV.parse_line(text, col_sep: separator, liberal_parsing: false, strip: true)';
-    if(fragment.split(csvNeedle).length!==2)
-      throw new Error("Native CSV parser template mismatch");
-    fragment=fragment.replace(csvNeedle,
-      'row = parserstudio_csv_parse_line(text, separator, separator != "\\t")');
-    fragment=insertBeforeParseEnd(fragment,CSV_RUBY_COMPAT_HELPER);
-  }
   const regexBody=(project.extraction.format==="syslog_rfc3164"||
     project.extraction.format==="syslog_rfc5424")&&
     project.extraction.syslogBodyFormat==="regex";
-  if(project.extraction.format==="regex"){
-    if(!fragment.includes(REGEX_EXTRACTOR_NEEDLE))throw new Error("Regex template marker missing");
-    fragment=fragment.replace(REGEX_EXTRACTOR_NEEDLE,REGEX_EXTRACTOR_BRANCH);
-  }else if(project.extraction.format==="generic_structural"){
-    if(!fragment.includes(REGEX_EXTRACTOR_NEEDLE))throw new Error("Generic structural template marker missing");
-    fragment=fragment.replace(REGEX_EXTRACTOR_NEEDLE,GENERIC_STRUCTURAL_EXTRACTOR_BRANCH);
+  if(fragment.split(GRAMMAR_MARKER).length!==2)throw new Error("Grammar marker missing or duplicated");
+  const genericStructural=project.extraction.format==="generic_structural";
+  fragment=fragment.replace(GRAMMAR_MARKER,()=>(GRAMMAR_RUNTIME+"\n"+GRAMMAR_CORE+
+    (genericStructural?"\n"+GRAMMAR_GENERIC:"")).replace(/\n*$/,""));
+  if(genericStructural){
     if(!fragment.includes(GENERIC_STRUCTURAL_NORMALIZE_NEEDLE))throw new Error("Generic structural normalization marker missing");
     const omitRaw=project.extraction.omitSourceRaw===true;
     fragment=fragment.replace(GENERIC_STRUCTURAL_NORMALIZE_NEEDLE,
       omitRaw?GENERIC_STRUCTURAL_NORMALIZE_NO_RAW_BRANCH:GENERIC_STRUCTURAL_NORMALIZE_BRANCH);
-    fragment=insertBeforeParseEnd(fragment,GENERIC_STRUCTURAL_HELPER);
     if(omitRaw)fragment=insertBeforeParseEnd(fragment,SOURCE_RAW_STRIP_HELPER);
   }
   if(project.extraction.format==="regex"||regexBody){
@@ -293,7 +246,7 @@ function emitRubyFragment(project: ParserProject): string {
       .replace("__PARSERSTUDIO_REGEX_COST_PROVEN__",proven?"true":"false")
       .replace("__PARSERSTUDIO_REGEX_MAX_INPUT_BYTES__",String(RUBY24_REGEX_MAX_INPUT_BYTES)));
   }
-  return fragment;
+  return injectHeaderGrammar(fragment);
 }
 
 function exportFile(name: string, content: string): ExportFile {

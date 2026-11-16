@@ -29,7 +29,9 @@ describe('canonical v1 classification is based on normalized typed values',()=>{
     for(const [source,index] of [
       [{status:'0006'},'Threat'],
       [{status:'6'},'Syslog'],
-      [{status:6},'Syslog'],
+      // A number in a string field is a mapped-field error: the generated parser reports the event as a
+      // diagnostic record and classifies nothing, so the hint names no category either.
+      [{status:6},null],
       [{status:null},'Syslog'],
     ] as const){
       const result=preview(JSON.stringify(source),draft);

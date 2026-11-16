@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -81,7 +82,7 @@ function replay(file:ExportFile,events:string[]):Array<{time:number|null;record:
     "end",
     "STDOUT.write(JSON.generate(events))",
   ].join('\n');
-  const out=spawnSync(ruby,['-e',program],{input:JSON.stringify({source:file.content,
+  const out=spawnSync(ruby,rubyE(program),{input:JSON.stringify({source:file.content,
     sha256:file.sha256,name:file.name,events}),encoding:'utf8',timeout:10000,maxBuffer:1024*1024});
   assert.equal(out.status,0,out.stderr||String(out.error));
   const results=JSON.parse(out.stdout) as Array<{rawSha256:string;callbacks:Array<{time:number|null;record:Source|null}>}>;

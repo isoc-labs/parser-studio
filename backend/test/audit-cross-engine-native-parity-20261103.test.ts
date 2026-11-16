@@ -1,4 +1,5 @@
 import {resolvedTemplate} from './template-fixture.js';
+import {rubyE} from './ruby-argv.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
@@ -33,7 +34,7 @@ function execute(source:string,raw:string,extractor:'kv'|'syslog_rfc5424'|'syslo
     "STDOUT.write(JSON.generate({'ok'=>false,'error'=>error.class.name}))",
     'end'
   ].join('\n');
-  const result=spawnSync(rubyBin,['-e',runner],{
+  const result=spawnSync(rubyBin,rubyE(runner),{
     input:JSON.stringify({source:Buffer.from(source).toString('base64'),raw,extractor}),
     encoding:'utf8',timeout:12000,maxBuffer:1024*1024});
   assert.equal(result.status,0,result.stderr||String(result.error));
@@ -121,7 +122,7 @@ test('both Ruby template scalar conversions agree on whitespace, sign and IPv6',
       const ruby=[
         "require 'json'","require 'base64'","require 'ipaddr'","require 'csv'","require 'time'",
         "klass=Class.new",
-        "klass.class_eval(Base64.strict_decode64(ARGV.fetch(0)))",
+        "klass.class_eval(Base64.strict_decode64('"+Buffer.from(template).toString('base64')+"'))",
         "p=klass.allocate",
         "cases=[['port',' 443 '],['port','+443'],['integer',' 42 '],['integer','+42'],['boolean',' true '],['ip',' 192.0.2.10 '],['ip','2001:0db8::0001'],['date',' 2026-11-03T11:11:11Z ']]",
         "cases.each do |type,value|",
@@ -129,7 +130,7 @@ test('both Ruby template scalar conversions agree on whitespace, sign and IPv6',
         "rescue;puts JSON.generate({'ok'=>false})",
         "end;end"
       ].join('\n');
-      const result=spawnSync(rubyBin,['-e',ruby,Buffer.from(template).toString('base64')],{
+      const result=spawnSync(rubyBin,rubyE(ruby),{
         encoding:'utf8',timeout:12000,maxBuffer:1024*1024});
       assert.equal(result.status,0,result.stderr||String(result.error));
       const cases=result.stdout.trim().split('\n').map(line=>JSON.parse(line) as {ok:boolean;converted?:unknown});

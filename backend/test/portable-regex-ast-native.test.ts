@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {
@@ -86,7 +87,7 @@ test('H1 Ruby regex engine matches independent UTF-8 named capture golden result
       "STDOUT.write(JSON.generate(rows))",
     ].join('\n');
     const input=goldens.map(({pattern,cases})=>({pattern,cases:cases.map(c=>c.input)}));
-    const result=spawnSync('ruby',['-e',runner],{
+    const result=spawnSync('ruby',rubyE(runner),{
       input:JSON.stringify(input),encoding:'utf8',timeout:15000,maxBuffer:512*1024,
     });
     assert.equal(result.status,0,result.stderr||String(result.error));

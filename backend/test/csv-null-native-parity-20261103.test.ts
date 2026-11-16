@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {sampleProject} from './fixture.js';
@@ -34,7 +35,9 @@ test('strict generated Ruby parser preserves exact reviewed CSV null, empty and 
     "settings={'csvColumns'=>input.fetch('columns'),'csvDelimiter'=>input.fetch('delimiter')}",
     'rows=input.fetch("samples").map do |sample|',
     '  begin',
-    '    parser.parserstudio_csv(sample,settings)',
+    "    read=parser.send(:psg_extract_csv_row,sample,settings['csvColumns'],settings['csvDelimiter'])",
+    "    raise ArgumentError, read['errors'][0] unless read['errors'].empty?",
+    "    parser.send(:psg_export,read['fields'])",
     '  rescue => error',
     "    {'error'=>error.class.name}",
     '  end',
@@ -66,7 +69,7 @@ test('strict generated Ruby parser preserves exact reviewed CSV null, empty and 
     assert.ok(ruby);
     const samples=cases.filter(item=>item.delimiter===delimiter);
     const smoke=['192.0.2.10','','443'].join(delimiter);
-    const child=spawnSync(process.env.PARSER_RUBY_BIN||'ruby',['-e',runner],{
+    const child=spawnSync(process.env.PARSER_RUBY_BIN||'ruby',rubyE(runner),{
       input:JSON.stringify({source:ruby.content,columns,delimiter,
         samples:samples.map(item=>item.raw),smoke}),
       encoding:'utf8',timeout:15000,maxBuffer:1024*1024,

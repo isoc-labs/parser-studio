@@ -1,17 +1,20 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {sampleProject} from './fixture.js';
 import {validateProject} from '../src/validate.js';
 import {compilePair} from '../src/compiler.js';
+import {grammarSource,PROBE_ENTRIES} from './template-fixture.js';
 import {BACKEND_CAPABILITIES} from '../src/capabilities.js';
 
 const fixture=JSON.parse(readFileSync(new URL('../../tests/fixtures/roadmap-syslog-prefix-kv-20261020.json',import.meta.url),'utf8')) as {
   positive:Array<{name:string;raw:string;prefix:string;kv:Record<string,string>}>;
   negative:Array<{name:string;raw:string}>;
 };
-const helper=readFileSync(new URL('../templates/generic-structural-helper.rb.tpl',import.meta.url),'utf8');
+// The generated grammar itself, with the test-only route aliases.
+const helper=grammarSource()+PROBE_ENTRIES;
 const ruby=process.env.PARSER_NATIVE_RUBY||'ruby';
 function runRuby(raw:string,profile?:string):{ok:boolean;fields?:Record<string,unknown>}{
   const source=["require 'json'","require 'csv'","require 'base64'","require 'ipaddr'","require 'time'",helper,
@@ -19,7 +22,7 @@ function runRuby(raw:string,profile?:string):{ok:boolean;fields?:Record<string,u
     "begin","  fields=parserstudio_generic_structural(input.fetch('raw'))",
     "  STDOUT.write(JSON.generate({'ok'=>true,'fields'=>fields}))",
     "rescue ArgumentError","  STDOUT.write(JSON.generate({'ok'=>false}))","end"].join('\n');
-  const out=spawnSync(ruby,['-e',source],{input:JSON.stringify({raw,profile}),encoding:'utf8',timeout:5000,maxBuffer:1024*1024});
+  const out=spawnSync(ruby,rubyE(source),{input:JSON.stringify({raw,profile}),encoding:'utf8',timeout:5000,maxBuffer:1024*1024});
   assert.equal(out.status,0,out.stderr||String(out.error));
   return JSON.parse(out.stdout);
 }

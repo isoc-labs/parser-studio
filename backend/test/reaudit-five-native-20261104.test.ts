@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {compilePair} from '../src/compiler.js';
@@ -42,7 +43,7 @@ function native(p:ParserProject,input:Record<string,unknown>){
  const inputText=JSON.stringify({
   ...input,...(p.normalization.eventProfiles?{event_type:'security'}:{}),
  });
- const response=spawnSync('ruby',['-e',code],{
+ const response=spawnSync('ruby',rubyE(code),{
   encoding:'utf8',input:inputText,timeout:9000,maxBuffer:1024*1024,
  });
  assert.equal(response.status,0,response.stderr||String(response.error));

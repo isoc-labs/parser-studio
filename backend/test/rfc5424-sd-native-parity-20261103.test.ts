@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {sampleProject} from './fixture.js';
@@ -49,7 +50,7 @@ test('generated RFC5424 Ruby preserves Juniper source/destination/policy fields'
     "parser.parse(input.fetch('raw')){|_time,event|record=event}",
     'STDOUT.write(JSON.generate(record))',
   ].join('\n');
-  const result=spawnSync(process.env.PARSER_RUBY_BIN||'ruby',['-e',runner],{
+  const result=spawnSync(process.env.PARSER_RUBY_BIN||'ruby',rubyE(runner),{
     input:JSON.stringify({source:ruby.content,raw}),encoding:'utf8',timeout:15000,
     maxBuffer:1024*1024,
   });

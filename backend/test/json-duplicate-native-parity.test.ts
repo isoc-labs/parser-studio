@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import {resolvedTemplate} from './template-fixture.js';
+import {rubyE} from './ruby-argv.js';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
@@ -8,9 +10,9 @@ const rubyAvailable=spawnSync('ruby',['-v'],{encoding:'utf8'}).status===0;
 
 test('both DRAFT native templates use the same strict JSON duplicate-key guard',()=>{
   for(const filename of templates){
-    const body=readFileSync(new URL('../templates/'+filename,import.meta.url),'utf8');
-    assert.match(body,/def parserstudio_json_duplicate_keys\?\(raw\)/);
-    assert.match(body,/raise ArgumentError, 'Duplicate JSON object key' if parserstudio_json_duplicate_keys\?\(text\)/);
+    const body=resolvedTemplate(filename);
+    assert.match(body,/def psg_has_duplicate_json_object_keys\(/);
+    assert.match(body,/if psg_has_duplicate_json_object_keys\(raw\)/);
   }
 });
 
@@ -26,7 +28,7 @@ test('native Ruby DRAFT parser refuses duplicate root/nested/escaped keys and pr
       '{"arr":[{"event":"one"},{"event":"two"}]}',
     ];
     for(const filename of templates){
-      const ruby=readFileSync(new URL('../templates/'+filename,import.meta.url),'utf8');
+      const ruby=resolvedTemplate(filename);
       for(const [source,shouldReject] of [
         ...invalid.map(raw=>[raw,true] as const),
         ...accepted.map(raw=>[raw,false] as const),
@@ -37,7 +39,7 @@ test('native Ruby DRAFT parser refuses duplicate root/nested/escaped keys and pr
           "@parser_rule_set={'extraction'=>{'maxDepth'=>8}}",
           "begin; parserstudio_json_object("+JSON.stringify(source)+"); STDOUT.write('OK'); rescue ArgumentError => e; STDOUT.write('REJECTED'); end",
         ].join('\n');
-        const result=spawnSync('ruby',['-e',script],{encoding:'utf8',timeout:6000,maxBuffer:512*1024});
+        const result=spawnSync('ruby',rubyE(script),{encoding:'utf8',timeout:6000,maxBuffer:512*1024});
         assert.equal(result.status,0,result.stderr||String(result.error));
         assert.equal(result.stdout,shouldReject?'REJECTED':'OK',filename+' '+(shouldReject?'invalid':'valid'));
       }

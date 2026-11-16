@@ -57,7 +57,9 @@ assert(csv['dstport'] == 443, 'native CSV field')
 syslog = "<34>1 2026-10-12T02:03:04Z edge fw 122 CONNECT - src_ip=198.51.100.14 action=deny"
 syslog_time, parsed = parse_once(drivers['sample_syslog'], syslog)
 assert(parsed['srcip'] == '198.51.100.14', 'native syslog structured body')
-assert(syslog_time && syslog_time.utc.strftime('%Y-%m-%dT%H:%M:%SZ') == '2026-10-12T02:03:04Z', 'native syslog event time')
+# The parser yields the event time as Fluentd carries it (Fluent::EventTime, or an Integer of seconds); neither
+# has #utc, so the instant is read through Time.at. (Found when the smoke ran on the pinned Fluentd 1.17.1.)
+assert(syslog_time && Time.at(syslog_time.to_i).utc.strftime('%Y-%m-%dT%H:%M:%SZ') == '2026-10-12T02:03:04Z', 'native syslog event time')
 sd_native = '<165>1 2026-10-12T02:03:04Z edge fw 122 CONNECT [meta@32473 note="alpha"][trace@32473 id="1"] src_ip=198.51.100.14 action=deny'
 _, valid_sd = parse_once(drivers['sample_syslog'], sd_native)
 assert(valid_sd['srcip'] == '198.51.100.14' &&

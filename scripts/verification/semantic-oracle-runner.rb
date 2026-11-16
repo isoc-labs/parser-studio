@@ -72,6 +72,47 @@ input['cases'].each do |item|
   abort "DUPLICATE_CASE #{id}" if results.key?(id)
   parser = parsers[item['fragment'].to_s]
   abort "UNKNOWN_FRAGMENT #{id}" unless parser
+  if item['call'] == 'generic_extract'
+    # The Generic Structural extraction tree itself (no mapping, no normalization), for the browser/Ruby
+    # differential. The first parse call loads the rule set of the artifact.
+    begin
+      parser.parse('') { |_time, _record| } unless parser.instance_variable_get(:@parser_rule_set)
+    rescue StandardError
+      nil
+    end
+    begin
+      results[id] = { 'value' => oracle_plain(parser.send(:parserstudio_extract, item['raw'].to_s)) }
+    rescue ArgumentError => e
+      results[id] = { 'declined' => e.message }
+    rescue StandardError => e
+      results[id] = { 'raised' => e.class.to_s }
+    end
+    next
+  end
+  if item['call'] == 'format_extract' || item['call'] == 'csv_tokens'
+    # The extraction result of any format (no mapping), or the fields of one CSV row, for the browser/Ruby
+    # differential. Declining is an ArgumentError or the parse error of the JSON or CSV library; any other
+    # exception is a defect and is reported as raised.
+    begin
+      parser.parse('') { |_time, _record| } unless parser.instance_variable_get(:@parser_rule_set)
+    rescue StandardError
+      nil
+    end
+    begin
+      value = if item['call'] == 'csv_tokens'
+        row = parser.send(:psg_tokenize_csv_row, parser.send(:psg_text, item['raw'].to_s), item['separator'].to_s)
+        raise ArgumentError, 'Not a CSV row' if row.equal?(:psg_null)
+        parser.send(:psg_export, row)
+      else
+        parser.send(:parserstudio_extract, item['raw'].to_s)
+      end
+      results[id] = { 'value' => oracle_plain(value) }
+    rescue StandardError => e
+      declined = e.is_a?(ArgumentError) || ['JSON::ParserError', 'CSV::MalformedCSVError'].include?(e.class.name)
+      results[id] = declined ? { 'declined' => e.message.to_s[0, 120] } : { 'raised' => e.class.to_s }
+    end
+    next
+  end
   calls = []
   begin
     parser.parse(item['raw'].to_s) { |time, record| calls << [oracle_plain(time), oracle_plain(record)] }
@@ -96,4 +137,13 @@ if input['grammar'].is_a?(Hash)
   end
 end
 
+# A result that JSON cannot carry (a non-finite number) is a defect of the artifact: it is reported for its
+# case, like an exception, and does not abort the run.
+results.each do |id, value|
+  begin
+    JSON.generate(value)
+  rescue JSON::GeneratorError
+    results[id] = { 'raised' => 'UnserializableResult' }
+  end
+end
 puts JSON.generate('ruby' => RUBY_VERSION, 'results' => results, 'grammar' => grammar)

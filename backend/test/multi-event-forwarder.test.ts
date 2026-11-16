@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import type {AddressInfo} from 'node:net';
 import {createMainlineAuthoringServer} from '../src/mainline-authoring-server.js';
@@ -40,7 +41,7 @@ test('single-artefact multi-event parser compiles with strict family and declare
  assert.equal(output.manifest.engineVerified,false);
  assert.equal(output.manifest.targetImportVerified,false);
  const ruby=output.files.find(f=>f.name==='customized_family_forwarder')?.content??'';
- assert.match(ruby,/def parserstudio_unwrap_declared_relays/);
+ assert.match(ruby,/def psg_inspect_declared_forwarders\(/);
  assert.match(ruby,/parserstudio_event_profile\(original\)/);
  assert.match(ruby,/def parserstudio_apply_field_maps/);
  assert.match(ruby,/parserstudio_transport/);
@@ -123,7 +124,7 @@ test('actual generated Ruby branches threat/user/asset and rejects unknown famil
   const foreign='<134>Jan 16 15:19:05 unknown-relay fw: '+threat;
   const unknown='{"event_type":"unreviewed","user":"DO_NOT_ECHO_PRIVATE"}';
   const input=[threat,user,asset,relayed,twice,foreign,unknown];
-  const result=spawnSync('ruby',['-e',script],{
+  const result=spawnSync('ruby',rubyE(script),{
     encoding:'utf8',input:JSON.stringify(input),timeout:12000,maxBuffer:2*1024*1024,
   });
   assert.equal(result.status,0,result.stderr||String(result.error));
@@ -173,7 +174,7 @@ test('offline HTTP accepts explicitly reviewed conditional parser and never enab
     assert.equal(pair.manifest.status,'DRAFT');
     assert.equal(pair.manifest.targetImportVerified,false);
     const ruby=pair.files.find((f:any)=>!f.name.endsWith('.conf')).content as string;
-    assert.match(ruby,/def parserstudio_unwrap_declared_relays/);
+    assert.match(ruby,/def psg_inspect_declared_forwarders\(/);
     assert.match(ruby,/def parserstudio_event_profile/);
     for(const route of ['/api/v1/test-lab/sessions/start','/api/v1/parser-pairs/target/apply']){
       const rejected=await post(route,p);

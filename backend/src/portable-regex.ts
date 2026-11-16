@@ -9,7 +9,8 @@
  */
 export type PortableRegexIssue =
   'REGEX_DIALECT_ESCAPE'|'REGEX_POSIX_CLASS'|'REGEX_OVERLAPPING_REPETITION'|
-  'REGEX_UNSUPPORTED_GROUP'|'REGEX_AST_SYNTAX'|'REGEX_BOUND_LIMIT';
+  'REGEX_UNSUPPORTED_GROUP'|'REGEX_AST_SYNTAX'|'REGEX_BOUND_LIMIT'|'REGEX_LAZY_EXACT_COUNT'|
+  'REGEX_OPTIONAL_EMPTY_CAPTURE';
 
 /** Versioned, inspection-only AST for the reviewed JS/Ruby regex subset.
  * This is not a regex evaluator or a promise of native execution. Runtime
@@ -105,6 +106,10 @@ export function parsePortableRegexAst(pattern:string):PortableRegexAstResult{
         return fail('REGEX_BOUND_LIMIT');
     }
     const lazy=pattern[pos]==='?';
+    // X{n}? is "exactly n" in ECMAScript and "n or none" in Ruby 2.4 (Onigmo reads the ? as a second
+    // quantifier). Laziness means nothing for an exact count, so the spelling is refused instead of meaning
+    // two things; X{n} says the same in both.
+    if(lazy&&c==='{'&&max!==null&&max===min)return fail('REGEX_LAZY_EXACT_COUNT');
     if(lazy)pos++;
     return {kind:'repeat',min,max,lazy,atom:base};
   };
@@ -187,6 +192,27 @@ export function portableRegexIssue(pattern:string):PortableRegexIssue|null{
     return true;
   };
   if(!check(grammar.ast))return 'REGEX_DIALECT_ESCAPE';
+  // An optional part that can match nothing and holds a named capture: ECMAScript does not take an
+  // iteration that consumes nothing and leaves the capture unset, Ruby (2.4.9 and 3.2.11) takes it and sets
+  // the capture to the empty string. The browser showed no field where the generated parser emits an empty
+  // one (`-(?<sep>={0,2})?` on `-x`). The same meaning is written without the outer `?`.
+  const canBeEmpty=(node:PortableRegexNode):boolean=>
+    node.kind==='sequence'?node.nodes.every(canBeEmpty):
+    node.kind==='alternation'?node.branches.some(canBeEmpty):
+    node.kind==='group'?canBeEmpty(node.body):
+    node.kind==='repeat'?node.min===0||canBeEmpty(node.atom):
+    node.kind==='anchor';
+  const hasCapture=(node:PortableRegexNode):boolean=>
+    node.kind==='sequence'?node.nodes.some(hasCapture):
+    node.kind==='alternation'?node.branches.some(hasCapture):
+    node.kind==='group'?node.captureName!==null||hasCapture(node.body):
+    node.kind==='repeat'?hasCapture(node.atom):false;
+  const optionalEmptyCapture=(node:PortableRegexNode):boolean=>
+    node.kind==='sequence'?node.nodes.some(optionalEmptyCapture):
+    node.kind==='alternation'?node.branches.some(optionalEmptyCapture):
+    node.kind==='group'?optionalEmptyCapture(node.body):
+    node.kind==='repeat'?(node.min===0&&hasCapture(node.atom)&&canBeEmpty(node.atom))||optionalEmptyCapture(node.atom):false;
+  if(optionalEmptyCapture(grammar.ast))return 'REGEX_OPTIONAL_EMPTY_CAPTURE';
   const frames:Array<{previous:Atom|null;wildcards:number}>=[{previous:null,wildcards:0}];
   let index=0;
   while(index<pattern.length){
@@ -304,7 +330,11 @@ export function portableRegexJavaScriptSource(pattern:string):string{
       }
       case 'literal':return quote(node.text);
       case 'wildcard':return '[^\\n]';
-      case 'anchor':return node.text==='$'?'(?![\\s\\S])':'^';
+      // `$` without the m flag is the end of the input in ECMAScript, which is what the single-line Ruby
+      // subset means. It was written as a negative look-ahead for any character; V8 also tries a match
+      // between the two halves of an astral character, where no character follows in u mode, so an
+      // expression that may be empty before `$` matched inside the first emoji of the event.
+      case 'anchor':return node.text==='$'?'$':'^';
       case 'class':{
         let result='[';
         for(let index=1;index<node.text.length-1;index++){

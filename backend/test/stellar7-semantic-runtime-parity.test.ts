@@ -1,4 +1,5 @@
 import {resolvedTemplate} from './template-fixture.js';
+import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
@@ -62,7 +63,7 @@ function execute(target:string,type:'integer'|'string',value:unknown,family=fals
     'parser.parse(STDIN.read){|_time,record| puts JSON.generate(record)}',
   ].join('\n');
   const source=JSON.stringify(family?{event_type:'threat',value}:{value});
-  const result=spawnSync('ruby',['-e',program],{
+  const result=spawnSync('ruby',rubyE(program),{
     encoding:'utf8',input:source,timeout:15000,maxBuffer:1024*1024,
   });
   assert.equal(result.status,0,result.stderr||String(result.error));

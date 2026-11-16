@@ -10,16 +10,15 @@ export type ForwarderInspection={
  payload:string;payloadStartByte:number;hops:ForwarderHop[];
  reason:string;
 };
-const enc=new TextEncoder();
 export function validForwarderConfig(config?:ForwarderConfig):boolean{
  return !config||(Number.isInteger(config.maxHops)&&config.maxHops>=1&&config.maxHops<=3&&
    config.relayHosts.length>=1&&config.relayHosts.length<=8&&
    new Set(config.relayHosts).size===config.relayHosts.length&&
-   config.relayHosts.every(host=>/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/.test(host)));
+   config.relayHosts.every(host=>/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/u.test(host)));
 }
 function singleEnvelope(raw:string):
  {host:string;timestamp:string;format:'rfc3164'|'rfc5424';payload:string}|null{
- if(/^<\d{1,3}>1 /.test(raw)){
+ if(/^<\d{1,3}>1 /u.test(raw)){
    const parsed=parseRfc5424Subset(raw);
    if(!parsed.ok||typeof parsed.message!=='string'||!parsed.message.length)return null;
    return {host:parsed.fields.syslog_hostname,timestamp:parsed.fields.syslog_timestamp,
@@ -39,7 +38,7 @@ export function inspectDeclaredForwarders(raw:string,config?:ForwarderConfig):Fo
  if(!config)return direct;
  const unsafe=(reason:string):ForwarderInspection=>({
    status:'ABSTAIN_UNSAFE',payload:raw,payloadStartByte:0,hops:[],reason});
- if(!validForwarderConfig(config)||enc.encode(raw).length>65536||raw.includes('\0')||
+ if(!validForwarderConfig(config)||new TextEncoder().encode(raw).length>65536||raw.includes('\0')||
    raw.includes('\n')||raw.includes('\r'))return unsafe('UNSAFE_RELAY_SOURCE_OR_PROFILE');
  let text=raw,startByte=0;
  const hops:ForwarderHop[]=[];
@@ -50,9 +49,9 @@ export function inspectDeclaredForwarders(raw:string,config?:ForwarderConfig):Fo
    if(!config.relayHosts.includes(envelope.host))break;
    if(i===config.maxHops)return unsafe('DECLARED_RELAY_HOP_LIMIT_EXCEEDED');
    if(!envelope.payload||!text.endsWith(envelope.payload)||
-     enc.encode(envelope.payload).length>=enc.encode(text).length)
+     new TextEncoder().encode(envelope.payload).length>=new TextEncoder().encode(text).length)
      return unsafe('UNREPLAYABLE_RELAY_BODY');
-   const offset=enc.encode(text).length-enc.encode(envelope.payload).length;
+   const offset=new TextEncoder().encode(text).length-new TextEncoder().encode(envelope.payload).length;
    hops.push({relayHost:envelope.host,relayTimestamp:envelope.timestamp,
      format:envelope.format,prefixStartByte:startByte,payloadStartByte:startByte+offset});
    startByte+=offset;

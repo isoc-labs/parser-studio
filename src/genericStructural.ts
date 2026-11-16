@@ -1,9 +1,49 @@
 import {extractStructuredFamily} from './structuredFamilies';
+import {unsupportedRfc5424Version} from './grammar/syslogHeader';
 import {envelopeToSyslogFields,parseSyslogEnvelope} from './syslogEnvelope';
 import {extractLeef2ImplicitTab} from './leef2ImplicitTab';
 import {GENERIC_STRUCTURAL_MIXED_PROFILE_V1,type GenericStructuralProfile} from './genericStructuralProfiles';
+import {GRAMMAR_FRAGMENTS,SYSLOG_HEADER_SEMANTICS,SYSLOG_HEADER_TOKENS as T} from './grammar/syslogHeaderGrammar.generated';
 import {hasDuplicateJsonObjectKeys} from './jsonDuplicateKeys';
+import {hasUnsafeJsonNumbers} from './jsonNumberSafety';
+import {jsonSourceValueValid} from './jsonSourceSafety';
+import {matchAt,namedGroups,setTag} from './grammar/primitives';
 export type {GenericStructuralProfile} from './genericStructuralProfiles';
+
+// The header tokens of the sub-profile expressions below are the grammar contract's (contracts/
+// syslog-header-grammar.v1.json): PRI, the BSD month, a printable-ASCII host token of up to 255 characters,
+// the TAG and the supported RFC 5424 VERSION. Each expression is compiled once, at module load.
+const RFC5424_VERSION=SYSLOG_HEADER_SEMANTICS.rfc5424SupportedVersions.join('|');
+
+// White space is ASCII white space, as in the generated Ruby (\s, strip): SP, TAB, LF, VT, FF, CR. NBSP,
+// U+2028, U+3000, U+FEFF and the like are data, never separators and never trimmed. Every expression in this
+// file therefore spells the class out instead of \s / \S, carries the dotAll flag (so '.' does not stop at
+// U+2028 / U+2029; LF never reaches these expressions) and trims with ASCII_EDGE_SPACE instead of trim().
+const ASCII_EDGE_SPACE=/^[ \t\n\v\f\r]+|[ \t\n\v\f\r]+$/gu;
+const ASCII_TRAIL_SPACE=/[ \t\n\v\f\r]+$/u;
+
+/**
+ * Marks a result whose body is JSON, CEF, LEEF or positional CSV with the dialect and the exact text the
+ * dialect read, for the loss accounting of the Parsing Success Contract (src/grammar/genericParseStatus.ts).
+ */
+function withBodyText(fields:Record<string,unknown>,kind:'json'|'cef'|'leef'|'positional_csv',text:string):Record<string,unknown>{
+  setTag(fields,'bodyKind',kind);
+  setTag(fields,'bodyText',text);
+  return fields;
+}
+
+/**
+ * Every JSON body inside Generic Structural is read here: a repeated member name or an integer that the
+ * browser cannot represent exactly (beyond 2^53) declines the event, as in the JSON format itself and in
+ * the generated Ruby. undefined means declined.
+ */
+function parseJsonBody(text:string):unknown{
+  let value:unknown;
+  try{value=JSON.parse(text);}catch{return undefined;}
+  // The JSON source contract of the JSON format applies here too (jsonSourceValueValid): at most 8 nested
+  // levels and no lone surrogate, which is what parserstudio_json_object enforces in the generated Ruby.
+  return hasDuplicateJsonObjectKeys(text)||hasUnsafeJsonNumbers(text)||!jsonSourceValueValid(value)?undefined:value;
+}
 
 /**
  * Browser twin of the backend's bounded Generic Structural compiler subset.
@@ -15,41 +55,56 @@ export interface GenericStructuralExtraction {
 }
 
 function validRfc3339(value:string):boolean{
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
-    Number.isFinite(Date.parse(value));
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/u.test(value) &&
+    isoTimestampOk(value);
 }
 
+/**
+ * One timestamp rule for every sub-profile, the same as parserstudio_generic_iso_timestamp! in the generated
+ * Ruby: the lexical form YYYY-MM-DDTHH:MM:SS[.fraction][Z or +HH:MM] and a calendar checked by arithmetic.
+ * Date.parse is not used for validation: it rolls 30 February over to 2 March, and Ruby's Time.iso8601
+ * disagrees with it on hour 24 and second 60.
+ */
+function isoTimestampOk(value:string):boolean{
+  const match=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))?$/u.exec(value);
+  if(!match)return false;
+  const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]);
+  if(year<1||year>9999||month<1||month>12||day<1)return false;
+  const leap=year%4===0&&(year%100!==0||year%400===0);
+  if(day>[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][month-1]!)return false;
+  if(Number(match[4])>23||Number(match[5])>59||Number(match[6])>59)return false;
+  return match[7]===undefined||(Number(match[7])<=23&&Number(match[8])<=59);
+}
+
+const RX_SHORT_RFC5424_JSON=new RegExp(String.raw`^<(${T.PRI})>(${RFC5424_VERSION}) ([^ \t\n\r\f\v]{1,64}) (${T.RFC5424_HOSTNAME}) (\{.*\})$`,'su');
 function shortRfc5424Json(raw:string):Record<string,unknown>|null{
-  const match=raw.match(/^<(\d{1,3})>(1) (\S{1,64}) ([!-~]{1,255}) (\{.*\})$/);
+  const match=raw.match(RX_SHORT_RFC5424_JSON);
   if(!match)return null;
   const pri=Number(match[1]);
   if(!Number.isInteger(pri)||pri<0||pri>191||!validRfc3339(match[3]!))return null;
-  let body:unknown;
-  try{body=JSON.parse(match[5]!);}catch{return null;}
-  if(hasDuplicateJsonObjectKeys(match[5]!))return null;
+  const body=parseJsonBody(match[5]!);
   if(!body||Array.isArray(body)||typeof body!=='object')return null;
-  return {
+  return withBodyText({
     syslog:{pri:match[1],version:match[2],timestamp:match[3],hostname:match[4]},
     body:body as Record<string,unknown>,
-  };
+  },'json',match[5]!);
 }
 
 function prefixedJson(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const match=/^([A-Za-z0-9_.:/-]{1,64})[ \t]+(\{.*\})$/.exec(raw);
+  const match=/^([A-Za-z0-9_.:/-]{1,64})[ \t]+(\{.*\})$/su.exec(raw);
   if(!match)return null;
-  let body:unknown;
-  try{body=JSON.parse(match[2]!);}catch{return null;}
-  if(hasDuplicateJsonObjectKeys(match[2]!))return null;
+  const body=parseJsonBody(match[2]!);
   if(!body||Array.isArray(body)||typeof body!=='object')return null;
-  return {
+  return withBodyText({
     generic:{mode:'prefixed_json',prefix:match[1],source_raw:raw},
     body:body as Record<string,unknown>,
-  };
+  },'json',match[2]!);
 }
 
+const RX_SHORT_RFC5424_STRUCTURED=new RegExp(String.raw`^<(${T.PRI})>(${RFC5424_VERSION}) ([^ \t\n\r\f\v]{1,64}) (${T.RFC5424_HOSTNAME}) ((?:CEF:0\|.*|LEEF:(?:1\.0|2\.0)\|.*))$`,'su');
 function shortRfc5424Structured(raw:string):Record<string,unknown>|null{
-  const match=raw.match(/^<(\d{1,3})>(1) (\S{1,64}) ([!-~]{1,255}) ((?:CEF:0\|.*|LEEF:(?:1\.0|2\.0)\|.*))$/);
+  const match=raw.match(RX_SHORT_RFC5424_STRUCTURED);
   if(!match)return null;
   const pri=Number(match[1]);
   if(!Number.isInteger(pri)||pri<0||pri>191||!validRfc3339(match[3]!))return null;
@@ -84,16 +139,12 @@ function splitEscaped(value:string,delimiter:string):string[]|null{
 }
 
 function validUnzonedTimestamp(value:string):boolean{
-  const match=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?$/.exec(value);
-  if(!match)return false;
-  const month=Number(match[2]),day=Number(match[3]),hour=Number(match[4]),minute=Number(match[5]),second=Number(match[6]);
-  const monthDays=[31,29,31,30,31,30,31,31,30,31,30,31];
-  return month>=1&&month<=12&&day>=1&&day<=monthDays[month-1]!&&
-    hour<=23&&minute<=59&&second<=59;
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/u.test(value)&&isoTimestampOk(value);
 }
 
+const RX_BRACKET_COLON_KV=new RegExp(String.raw`^<(${T.PRI})>(${RFC5424_VERSION}) ([^ \t\n\r\f\v]+) (${T.RFC5424_HOSTNAME}) ([!-~]{1,48}) ([!-~]{1,128}) ([!-~]{1,32}) (\[.*\])[ \t]*$`,'su');
 function bracketColonKv(raw:string):Record<string,unknown>|null{
-  const match=raw.match(/^<(\d{1,3})>(1) (\S+) ([!-~]{1,255}) ([!-~]{1,48}) ([!-~]{1,128}) ([!-~]{1,32}) (\[.*\])[ \t]*$/);
+  const match=raw.match(RX_BRACKET_COLON_KV);
   if(!match)return null;
   const pri=Number(match[1]);
   if(!Number.isInteger(pri)||pri<0||pri>191||
@@ -104,13 +155,13 @@ function bracketColonKv(raw:string):Record<string,unknown>|null{
   if(!segments)return null;
   const body:Record<string,unknown>={};
   for(const rawSegment of segments){
-    const segment=rawSegment.trim();
+    const segment=rawSegment.replace(ASCII_EDGE_SPACE,'');
     if(!segment)continue;
-    const delimiter=/:\s*"/.exec(segment);
+    const delimiter=/:[ \t\n\r\f\v]*"/u.exec(segment);
     if(!delimiter||delimiter.index<=0)return null;
-    const key=segment.slice(0,delimiter.index).trim();
-    if(!/^[A-Za-z_][A-Za-z0-9_.#:-]{0,127}$/.test(key)||!sourceKeySafe(key))return null;
-    const encoded=segment.slice(delimiter.index+1).trim();
+    const key=segment.slice(0,delimiter.index).replace(ASCII_EDGE_SPACE,'');
+    if(!/^[A-Za-z_][A-Za-z0-9_.#:-]{0,127}$/u.test(key)||!sourceKeySafe(key))return null;
+    const encoded=segment.slice(delimiter.index+1).replace(ASCII_EDGE_SPACE,'');
     if(encoded.length<2||!encoded.startsWith('"')||!encoded.endsWith('"'))return null;
     const value=encoded.slice(1,-1),previous=body[key];
     body[key]=previous===undefined?value:Array.isArray(previous)?[...previous,value]:[previous,value];
@@ -120,22 +171,23 @@ function bracketColonKv(raw:string):Record<string,unknown>|null{
   return {syslog:{pri:match[1],version:match[2],timestamp:match[3],hostname:match[4],appname:match[5],procid:match[6],msgid:match[7]},body};
 }
 
+const RX_JUNOS_RFC5424_SD=new RegExp(String.raw`^<(${T.PRI})>(${RFC5424_VERSION}) ([^ \t\n\r\f\v]+) (${T.RFC5424_HOSTNAME}) ([!-~]{1,48}) ([!-~]{1,128}) ([!-~]{1,32}) (\[junos@[A-Za-z0-9.:-]{1,64}(?: [^\]]*)?\])$`,'u');
 function junosRfc5424Sd(raw:string):Record<string,unknown>|null{
-  const match=raw.match(/^<(\d{1,3})>(1) (\S+) ([!-~]{1,255}) ([!-~]{1,48}) ([!-~]{1,128}) ([!-~]{1,32}) (\[junos@[A-Za-z0-9.:-]{1,64}(?: [^\]]*)?\])$/);
+  const match=raw.match(RX_JUNOS_RFC5424_SD);
   if(!match)return null;
   const pri=Number(match[1]);
   if(!Number.isInteger(pri)||pri<0||pri>191||!validRfc3339(match[3]!))return null;
   const structuredDataRaw=match[8]!;
   if(new TextEncoder().encode(structuredDataRaw).byteLength>8192)return null;
   const inner=structuredDataRaw.slice(1,-1);
-  const head=/^junos@[A-Za-z0-9.:-]{1,64}/.exec(inner);
+  const head=/^junos@[A-Za-z0-9.:-]{1,64}/u.exec(inner);
   if(!head)return null;
   let pos=head[0].length;
   const fields:Record<string,unknown>={};
   while(pos<inner.length){
     if(inner[pos]!==' ')return null;
     pos++;
-    const keyMatch=/^[A-Za-z_][A-Za-z0-9_-]{0,63}/.exec(inner.slice(pos));
+    const keyMatch=/^[A-Za-z_][A-Za-z0-9_-]{0,63}/u.exec(inner.slice(pos));
     if(!keyMatch)return null;
     const key=keyMatch[0]!;
     pos+=key.length;
@@ -166,31 +218,32 @@ function junosRfc5424Sd(raw:string):Record<string,unknown>|null{
     junos_sd:fields};
 }
 
+const RX_COMMA_KV_PRI=new RegExp(String.raw`^<(${T.PRI})>`,'u');
 function commaKv(raw:string):Record<string,unknown>|null{
   const parts=splitEscaped(raw,',');
   if(!parts||parts.length<3)return null;
-  let prefix=parts[0]!.trim();
+  let prefix=parts[0]!.replace(ASCII_EDGE_SPACE,'');
   const syslog:Record<string,unknown>={};
-  const pri=prefix.match(/^<(\d{1,3})>/);
+  const pri=prefix.match(RX_COMMA_KV_PRI);
   if(pri){
     const value=Number(pri[1]);
     if(!Number.isInteger(value)||value<0||value>191)return null;
-    syslog.pri=pri[1];prefix=prefix.slice(pri[0].length).trim();
+    syslog.pri=pri[1];prefix=prefix.slice(pri[0].length).replace(ASCII_EDGE_SPACE,'');
   }
-  if(!/(?:^|[ \t])\d{4}-\d{2}-\d{2}(?:[ \t]|$)/.test(prefix))return null;
-  const tokens=prefix.split(/[ \t]+/).map(value=>
+  if(!/(?:^|[ \t])\d{4}-\d{2}-\d{2}(?:[ \t]|$)/u.test(prefix))return null;
+  const tokens=prefix.split(/[ \t]+/u).map(value=>
     value.length>1&&[':',','].includes(value[value.length-1]!)?value.slice(0,-1):value);
   if(tokens.length<8||tokens.length>64||
      tokens.some(value=>value.length<1||new TextEncoder().encode(value).byteLength>256))return null;
   const fields:Record<string,unknown>={};
   for(const rawSegment of parts.slice(1)){
-    const segment=rawSegment.trim();
+    const segment=rawSegment.replace(ASCII_EDGE_SPACE,'');
     if(!segment)continue;
     const eq=segment.indexOf('=');
     if(eq<=0)return null;
-    const key=segment.slice(0,eq).trim();
-    if(!/^[A-Za-z_][A-Za-z0-9_.#\/-]{0,127}$/.test(key)||!sourceKeySafe(key))return null;
-    let value=segment.slice(eq+1).trim();
+    const key=segment.slice(0,eq).replace(ASCII_EDGE_SPACE,'');
+    if(!/^[A-Za-z_][A-Za-z0-9_.#\/-]{0,127}$/u.test(key)||!sourceKeySafe(key))return null;
+    let value=segment.slice(eq+1).replace(ASCII_EDGE_SPACE,'');
     if(value.length>=2&&((value.startsWith('"')&&value.endsWith('"'))||
        (value.startsWith("'")&&value.endsWith("'"))))value=value.slice(1,-1);
     else if(value.startsWith('"')||value.startsWith("'")||value.endsWith('"')||value.endsWith("'"))return null;
@@ -217,7 +270,7 @@ function spaceKvEntries(raw:string):Array<{key:string;start:number;valueStart:nu
     }
     const boundary=pos===0||raw[pos-1]===' '||raw[pos-1]==='\t';
     if(boundary){
-      const match=/^([A-Za-z_][A-Za-z0-9_.-]{0,63})=/.exec(raw.slice(pos));
+      const match=/^([A-Za-z_][A-Za-z0-9_.-]{0,63})=/u.exec(raw.slice(pos));
       if(match){
         entries.push({key:match[1]!,start:pos,valueStart:pos+match[0].length});
         if(entries.length>100)return null;
@@ -233,8 +286,8 @@ function spaceKv(raw:string):Record<string,unknown>|null{
   const entries=spaceKvEntries(raw);
   if(!entries)return null;
   if(entries.length<5)return null;
-  const prefix=raw.slice(0,entries[0]!.start).trim();
-  const tokens=prefix?prefix.split(/[ \t]+/).map(value=>
+  const prefix=raw.slice(0,entries[0]!.start).replace(ASCII_EDGE_SPACE,'');
+  const tokens=prefix?prefix.split(/[ \t]+/u).map(value=>
     value.length>1&&[':',','].includes(value[value.length-1]!)?value.slice(0,-1):value):[];
   if(prefix&&(tokens.length<2||tokens.length>16||
     tokens.some(value=>!value||new TextEncoder().encode(value).byteLength>256)))return null;
@@ -244,15 +297,15 @@ function spaceKv(raw:string):Record<string,unknown>|null{
     const entry=entries[index]!;
     if(!sourceKeySafe(entry.key)||Object.prototype.hasOwnProperty.call(fields,entry.key))return null;
     const end=index+1<entries.length?entries[index+1]!.start:raw.length;
-    let value=raw.slice(entry.valueStart,end).trim();
+    let value=raw.slice(entry.valueStart,end).replace(ASCII_EDGE_SPACE,'');
     const quoted=value.length>=2&&
       ((value.startsWith('"')&&value.endsWith('"'))||(value.startsWith("'")&&value.endsWith("'")));
     if(quoted)value=value.slice(1,-1);
     else if(value.startsWith('"')||value.startsWith("'")||value.endsWith('"')||value.endsWith("'"))return null;
-    if(/[\u0000-\u001f\u007f]/.test(value)||new TextEncoder().encode(value).byteLength>512)return null;
+    if(/[\u0000-\u001f\u007f]/u.test(value)||new TextEncoder().encode(value).byteLength>512)return null;
     fields[entry.key]=value;
-    if(!quoted&&/[ \t]/.test(value)){
-      const pieces=value.split(/[ \t]+/).filter(Boolean);
+    if(!quoted&&/[ \t]/u.test(value)){
+      const pieces=value.split(/[ \t]+/u).filter(piece=>piece!=='');
       if(pieces.length>32)return null;
       for(let pieceIndex=0;pieceIndex<pieces.length;pieceIndex++){
         const piece=pieces[pieceIndex]!;
@@ -270,9 +323,11 @@ function spaceKv(raw:string):Record<string,unknown>|null{
   return {generic};
 }
 
+// [^\n], not '.': in JavaScript '.' also stops at CR, U+2028 and U+2029, which the generated Ruby reads as text.
+const RX_PRI_SPACE_KV=new RegExp(String.raw`^<(${T.PRI})>([^\n]+)$`,'u');
 function priSpaceKv(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const match=/^<(\d{1,3})>(.+)$/.exec(raw);
+  const match=RX_PRI_SPACE_KV.exec(raw);
   if(!match)return null;
   const pri=Number(match[1]);
   if(!Number.isInteger(pri)||pri<0||pri>191)return null;
@@ -286,7 +341,7 @@ function priSpaceKv(raw:string):Record<string,unknown>|null{
 
 function validBsdClock(month:string,dayText:string,time:string):boolean{
   const monthDays:Record<string,number>={Jan:31,Feb:29,Mar:31,Apr:30,May:31,Jun:30,Jul:31,Aug:31,Sep:30,Oct:31,Nov:30,Dec:31};
-  const day=Number(dayText),clock=time.split(':').map(Number);
+  const day=Number(dayText),clock=time.split(':').map(part=>Number(part));
   return !!monthDays[month]&&Number.isInteger(day)&&day>=1&&day<=monthDays[month]!&&
     clock.length===3&&clock[0]!>=0&&clock[0]!<=23&&clock[1]!>=0&&clock[1]!<=59&&clock[2]!>=0&&clock[2]!<=59;
 }
@@ -295,7 +350,7 @@ function scanProfileTokens(raw:string,start:number):{tokens:string[];kv:Record<s
   if(start<0||start>raw.length||new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
   const tokens:string[]=[],groups:string[]=[];const kv:Record<string,unknown>={};let pos=start,count=0;
   while(pos<raw.length){
-    while(pos<raw.length&&/\s/.test(raw[pos]!))pos++;
+    while(pos<raw.length&&/[ \t\n\r\f\v]/u.test(raw[pos]!))pos++;
     if(pos===raw.length)break;
     if(++count>100)return null;
     if(raw[pos]==='"'||raw[pos]==="'"){
@@ -308,17 +363,17 @@ function scanProfileTokens(raw:string,start:number):{tokens:string[];kv:Record<s
       if(!closed)return null;
       tokens.push(raw.slice(begin,cursor));cursor++;
       if(cursor<raw.length&&'.,:!?'.includes(raw[cursor]!))cursor++;
-      if(cursor<raw.length&&!/\s/.test(raw[cursor]!)&&![';',','].includes(raw[cursor]!))return null;
+      if(cursor<raw.length&&!/[ \t\n\r\f\v]/u.test(raw[cursor]!)&&![';',','].includes(raw[cursor]!))return null;
       pos=cursor;
       if(pos<raw.length&&[';',','].includes(raw[pos]!))pos++;
       continue;
     }
     if(raw[pos]==='('){
       const end=raw.indexOf(')',pos+1);
-      if(end<0||(end+1<raw.length&&!/\s/.test(raw[end+1]!)))return null;
+      if(end<0||(end+1<raw.length&&!/[ \t\n\r\f\v]/u.test(raw[end+1]!)))return null;
       groups.push(raw.slice(pos+1,end));pos=end+1;continue;
     }
-    const keyMatch=/^([A-Za-z_][A-Za-z0-9_.-]{0,127})=/.exec(raw.slice(pos));
+    const keyMatch=/^([A-Za-z_][A-Za-z0-9_.-]{0,127})=/u.exec(raw.slice(pos));
     if(keyMatch){
       const key=keyMatch[1]!;
       if(!sourceKeySafe(key))return null;
@@ -331,9 +386,9 @@ function scanProfileTokens(raw:string,start:number):{tokens:string[];kv:Record<s
           if(raw[cursor]===quote){end=cursor;cursor++;closed=true;break;}
           cursor++;
         }
-        if(!closed||(cursor<raw.length&&!/\s/.test(raw[cursor]!)))return null;
+        if(!closed||(cursor<raw.length&&!/[ \t\n\r\f\v]/u.test(raw[cursor]!)))return null;
       }else{
-        while(cursor<raw.length&&!/\s/.test(raw[cursor]!))cursor++;
+        while(cursor<raw.length&&!/[ \t\n\r\f\v]/u.test(raw[cursor]!))cursor++;
         end=cursor;
       }
       const value=raw.slice(startValue,end),previous=kv[key];
@@ -341,21 +396,32 @@ function scanProfileTokens(raw:string,start:number):{tokens:string[];kv:Record<s
       pos=cursor;continue;
     }
     const begin=pos;
-    while(pos<raw.length&&!/\s/.test(raw[pos]!))pos++;
+    while(pos<raw.length&&!/[ \t\n\r\f\v]/u.test(raw[pos]!))pos++;
     tokens.push(raw.slice(begin,pos));
   }
   return {tokens,kv,groups};
 }
 
+/**
+ * One lexical rule for an IP address token, the same as parserstudio_generic_ip_token in the generated Ruby
+ * (which used IPAddr.new and so also took "[::1]", while this side took a clock time such as 12:34:56):
+ * dotted IPv4 with four octets up to 255, or IPv6 as hexadecimal groups of up to four digits, at most one
+ * "::", eight groups without it and at most seven with it. No brackets, zone id or embedded IPv4.
+ */
 function ipToken(value:string):boolean{
   const v4=value.split('.');
-  if(v4.length===4&&v4.every(part=>/^\d{1,3}$/.test(part)&&Number(part)<=255))return true;
-  return value.includes(':')&&/^[0-9A-Fa-f:]+$/.test(value)&&value.split(':').length>=3;
+  if(v4.length===4&&v4.every(part=>/^\d{1,3}$/u.test(part)&&Number(part)<=255))return true;
+  if(!/^[0-9A-Fa-f:]+$/u.test(value)||value.includes(':::'))return false;
+  const sides=value.split('::');
+  if(sides.length>2||sides.some(side=>side.startsWith(':')||side.endsWith(':')))return false;
+  const groups=value.split(':').filter(part=>part!=='');
+  if(groups.some(part=>part.length>4))return false;
+  return sides.length===2?groups.length<=7:groups.length===8;
 }
 
 function validIsoPriClock(date:string,time:string,timezone:string):boolean{
-  const d=/^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  const t=/^(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?$/.exec(time);
+  const d=/^(\d{4})-(\d{2})-(\d{2})$/u.exec(date);
+  const t=/^(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?$/u.exec(time);
   if(!d||!t)return false;
   const year=Number(d[1]),month=Number(d[2]),day=Number(d[3]);
   const hour=Number(t[1]),minute=Number(t[2]),second=Number(t[3]);
@@ -364,13 +430,14 @@ function validIsoPriClock(date:string,time:string,timezone:string):boolean{
   const days=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31];
   if(day<1||day>days[month-1]!)return false;
   if(timezone==='Z')return true;
-  const zone=/^([+-])(\d{2}):?(\d{2})$/.exec(timezone);
+  const zone=/^([+-])(\d{2}):?(\d{2})$/u.exec(timezone);
   return !!zone&&Number(zone[2])<=23&&Number(zone[3])<=59;
 }
 
+const RX_ISO_PRI_MIXED=new RegExp(String.raw`^<(${T.PRI})>(\d{4}-\d{2}-\d{2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +(Z|[+-]\d{4}|[+-]\d{2}:\d{2}) +`,'u');
 function isoPriMixed(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const head=/^<(\d{1,3})>(\d{4}-\d{2}-\d{2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +(Z|[+-]\d{4}|[+-]\d{2}:\d{2}) +/.exec(raw);
+  const head=RX_ISO_PRI_MIXED.exec(raw);
   if(!head)return null;
   const pri=Number(head[1]);
   if(!Number.isInteger(pri)||pri<0||pri>191||!validIsoPriClock(head[2]!,head[3]!,head[4]!))return null;
@@ -378,7 +445,7 @@ function isoPriMixed(raw:string):Record<string,unknown>|null{
   if(!body||body.tokens.length<16)return null;
   const values:string[]=[...body.tokens];
   for(const value of Object.values(body.kv)){
-    if(Array.isArray(value))values.push(...value.map(String));
+    if(Array.isArray(value))for(const item of value)values.push(String(item));
     else values.push(String(value));
   }
   if(values.filter(ipToken).length<2)return null;
@@ -388,18 +455,19 @@ function isoPriMixed(raw:string):Record<string,unknown>|null{
   };
 }
 
+const RX_ISO_PRI_POSITIONAL=new RegExp(String.raw`^<(${T.PRI})>(\d{4}-\d{2}-\d{2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +(Z|[+-]\d{4}|[+-]\d{2}:\d{2}) +`,'u');
 function isoPriPositional(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const head=/^<(\d{1,3})>(\d{4}-\d{2}-\d{2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?) +(Z|[+-]\d{4}|[+-]\d{2}:\d{2}) +/.exec(raw);
+  const head=RX_ISO_PRI_POSITIONAL.exec(raw);
   if(!head)return null;
   const pri=Number(head[1]);
   if(!Number.isInteger(pri)||pri<0||pri>191||!validIsoPriClock(head[2]!,head[3]!,head[4]!))return null;
   const body=scanProfileTokens(raw,head[0].length);
   if(!body||body.tokens.length<8||body.tokens.length>64)return null;
   const anchors=body.tokens.slice(0,5);
-  if(anchors.length<5||anchors.some(value=>!/^[A-Za-z0-9_.:/-]{1,128}$/.test(value))||
-     !/^[A-Z][A-Z0-9_]{1,15}$/.test(body.tokens[1]!))return null;
-  const portLike=(value:string|undefined)=>!!value&&/^\d{1,5}$/.test(value);
+  if(anchors.length<5||anchors.some(value=>!/^[A-Za-z0-9_.:/-]{1,128}$/u.test(value))||
+     !/^[A-Z][A-Z0-9_]{1,15}$/u.test(body.tokens[1]!))return null;
+  const portLike=(value:string|undefined)=>!!value&&/^\d{1,5}$/u.test(value);
   // Do not let this source-only positional fallback mask a failed strict
   // network tuple. Long records with IP/port/IP/port positions belong to the
   // stronger isoPriMixed grammar and must fail closed if either IP is invalid.
@@ -411,15 +479,16 @@ function isoPriPositional(raw:string):Record<string,unknown>|null{
   };
 }
 
+const RX_WATCHGUARD_PROFILE=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) (\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255})(?: +([A-Za-z0-9.-]{2,64}))?(?: +\(([0-9T:+-]{19,35})\))? +(firewall(?:\[\d{1,8}\])?): +`,'u');
 function watchguardProfile(raw:string):Record<string,unknown>|null{
-  const head=/^(?:<(\d{1,3})>)?([A-Z][a-z]{2}) +(\d{1,2}) (\d{2}:\d{2}:\d{2}) +([^\s]{1,255})(?: +([A-Za-z0-9.-]{2,64}))?(?: +\(([0-9T:+-]{19,35})\))? +(firewall(?:\[\d{1,8}\])?): +/.exec(raw);
+  const head=RX_WATCHGUARD_PROFILE.exec(raw);
   if(!head||!validBsdClock(head[2]!,head[3]!,head[4]!))return null;
   if(head[1]!==undefined&&(Number(head[1])<0||Number(head[1])>191))return null;
-  if(head[7]!==undefined&&Number.isNaN(Date.parse(head[7]!)))return null;
+  if(head[7]!==undefined&&!isoTimestampOk(head[7]!))return null;
   const body=scanProfileTokens(raw,head[0].length);
   if(!body||!body.tokens.length||!['Allow','Deny','Drop'].includes(body.tokens[0]!))return null;
   const msgId=body.kv.msg_id;
-  if(typeof msgId!=='string'||!/^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$/.test(msgId))return null;
+  if(typeof msgId!=='string'||!/^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$/u.test(msgId))return null;
   if(body.tokens.filter(ipToken).length<2)return null;
   const header:Record<string,unknown>={month:head[2],day:head[3],time:head[4],hostname:head[5],app_tag:head[8]};
   if(head[1]!==undefined)header.pri=head[1];
@@ -428,12 +497,13 @@ function watchguardProfile(raw:string):Record<string,unknown>|null{
   return {watchguard_header:header,watchguard:body};
 }
 
+const RX_WATCHGUARD_MESSAGE_PROFILE=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) (\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255})(?: +([A-Za-z0-9.-]{2,64}))? +\(([0-9T:+-]{19,35})\) +(firewall(?:\[\d{1,8}\])?): +msg_id="([0-9A-Fa-f]{4}-[0-9A-Fa-f]{4})" +(.+)$`,'su');
 function watchguardMessageProfile(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const head=/^(?:<(\d{1,3})>)?([A-Z][a-z]{2}) +(\d{1,2}) (\d{2}:\d{2}:\d{2}) +([^\s]{1,255})(?: +([A-Za-z0-9.-]{2,64}))? +\(([0-9T:+-]{19,35})\) +(firewall(?:\[\d{1,8}\])?): +msg_id="([0-9A-Fa-f]{4}-[0-9A-Fa-f]{4})" +(.+)$/.exec(raw);
+  const head=RX_WATCHGUARD_MESSAGE_PROFILE.exec(raw);
   if(!head||!validBsdClock(head[2]!,head[3]!,head[4]!))return null;
   if(head[1]!==undefined&&(Number(head[1])<0||Number(head[1])>191))return null;
-  if(Number.isNaN(Date.parse(head[7]!)))return null;
+  if(!isoTimestampOk(head[7]!))return null;
   const header:Record<string,unknown>={
     month:head[2],day:head[3],time:head[4],hostname:head[5],
     device_time:head[7],app_tag:head[8],
@@ -446,11 +516,12 @@ function watchguardMessageProfile(raw:string):Record<string,unknown>|null{
   };
 }
 
+const RX_DUAL_TIMESTAMP_SESSION_PROFILE=new RegExp(String.raw`^(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255}) +1 +(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})) +([^ \t\n\r\f\v]{1,255}) +([A-Za-z0-9_.-]{1,64}): +- +- +- +(\d{4}-\d{2}-\d{2}) +(\d{2}:\d{2}:\d{2}) +- +([^ \t\n\r\f\v]{1,255}) +- +\[([^\]\r\n]{1,255})\] +(.+?) +- +(.+)$`,'su');
 function dualTimestampSessionProfile(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const match=/^([A-Z][a-z]{2}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +(\S{1,255}) +1 +(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})) +(\S{1,255}) +([A-Za-z0-9_.-]{1,64}): +- +- +- +(\d{4}-\d{2}-\d{2}) +(\d{2}:\d{2}:\d{2}) +- +(\S{1,255}) +- +\[([^\]\r\n]{1,255})\] +(.+?) +- +(.+)$/.exec(raw);
+  const match=RX_DUAL_TIMESTAMP_SESSION_PROFILE.exec(raw);
   if(!match||!validBsdClock(match[1]!,match[2]!,match[3]!))return null;
-  if(Number.isNaN(Date.parse(match[5]!))||!validIsoPriClock(match[8]!,match[9]!,'Z'))return null;
+  if(!isoTimestampOk(match[5]!)||!validIsoPriClock(match[8]!,match[9]!,'Z'))return null;
   return {
     syslog:{month:match[1],day:match[2],time:match[3],hostname:match[4],
       version:'1',timestamp:match[5],source:match[6],app_tag:match[7]},
@@ -459,9 +530,10 @@ function dualTimestampSessionProfile(raw:string):Record<string,unknown>|null{
   };
 }
 
+const RX_BSD_BRACKET_PID_MESSAGE_PROFILE=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255}) +([A-Za-z0-9_.-]{1,128}): +\[(\d{1,8})\]: +(.+)$`,'su');
 function bsdBracketPidMessageProfile(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const match=/^(?:<(\d{1,3})>)?([A-Z][a-z]{2}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +(\S{1,255}) +([A-Za-z0-9_.-]{1,128}): +\[(\d{1,8})\]: +(.+)$/.exec(raw);
+  const match=RX_BSD_BRACKET_PID_MESSAGE_PROFILE.exec(raw);
   if(!match||!validBsdClock(match[2]!,match[3]!,match[4]!))return null;
   if(match[1]!==undefined&&(Number(match[1])<0||Number(match[1])>191))return null;
   return {
@@ -471,13 +543,17 @@ function bsdBracketPidMessageProfile(raw:string):Record<string,unknown>|null{
   };
 }
 
+const RX_BSD_CLASSIC_PID_MESSAGE_PROFILE=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([A-Za-z0-9_.-]{1,128})\[(\d{1,8})\]: +([A-Za-z0-9_.-]{1,128}): +([^\n]+)$`,'u');
+// The two BSD message profiles below spell out what '.' and \S mean in the Ruby export ([^\n] and ASCII
+// white space): JavaScript's '.' also stops at U+2028/U+2029 and its \S at NBSP, which made the browser
+// reject lines the generated Ruby parses.
 function bsdClassicPidMessageProfile(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
   // Bounded legacy shape seen in device logs:
   // "Mon DD HH:MM:SS app[pid]: TAG: message". There is no separate host token,
   // so preserve the app token as the source hostname instead of letting the
   // looser tagged-message grammar absorb "app[pid]:" as a hostname.
-  const match=/^(?:<(\d{1,3})>)?([A-Z][a-z]{2}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([A-Za-z0-9_.-]{1,128})\[(\d{1,8})\]: +([A-Za-z0-9_.-]{1,128}): +(.+)$/.exec(raw);
+  const match=RX_BSD_CLASSIC_PID_MESSAGE_PROFILE.exec(raw);
   if(!match||!validBsdClock(match[2]!,match[3]!,match[4]!))return null;
   if(match[1]!==undefined&&(Number(match[1])<0||Number(match[1])>191))return null;
   return {
@@ -487,15 +563,16 @@ function bsdClassicPidMessageProfile(raw:string):Record<string,unknown>|null{
   };
 }
 
+const RX_BSD_TAGGED_MESSAGE_PROFILE=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255}) +([A-Za-z0-9_.-]{1,128}): +([^\n]+)$`,'u');
 function bsdTaggedMessageProfile(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const match=/^(?:<(\d{1,3})>)?([A-Z][a-z]{2}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +(\S{1,255}) +([A-Za-z0-9_.-]{1,128}): +(.+)$/.exec(raw);
+  const match=RX_BSD_TAGGED_MESSAGE_PROFILE.exec(raw);
   if(!match||!validBsdClock(match[2]!,match[3]!,match[4]!))return null;
   if(match[1]!==undefined&&(Number(match[1])<0||Number(match[1])>191))return null;
   // Do not let malformed known structures bypass stricter parsers by
   // falling through to this generic tagged-message grammar.
-  if(/^\[\d+\]:/.test(match[7]!))return null;
-  if(match[6]==='RT_FLOW'&&/^RT_FLOW_SESSION_/.test(match[7]!))return null;
+  if(/^\[\d+\]:/u.test(match[7]!))return null;
+  if(match[6]==='RT_FLOW'&&/^RT_FLOW_SESSION_/u.test(match[7]!))return null;
   return {
     syslog:{...(match[1]!==undefined?{pri:match[1]}:{}),month:match[2],day:match[3],
       time:match[4],hostname:match[5],app_tag:match[6]},
@@ -503,14 +580,15 @@ function bsdTaggedMessageProfile(raw:string):Record<string,unknown>|null{
   };
 }
 
+const RX_JUNIPER_LEGACY_PROFILE=new RegExp(String.raw`^(${T.BSD_MONTH}) +(\d{1,2}) (\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]+) +([^: \t\n\r\f\v]{1,128}): +`,'u');
 function juniperLegacyProfile(raw:string):Record<string,unknown>|null{
-  const head=/^([A-Z][a-z]{2}) +(\d{1,2}) (\d{2}:\d{2}:\d{2}) +(\S+) +([^:\s]{1,128}): +/.exec(raw);
+  const head=RX_JUNIPER_LEGACY_PROFILE.exec(raw);
   if(!head||head[5]!=='RT_FLOW'||!validBsdClock(head[1]!,head[2]!,head[3]!))return null;
   const after=raw.slice(head[0].length);
-  const event=/^(RT_FLOW_SESSION_(?:CREATE|CLOSE|DENY)):[ \t]+/.exec(after);
+  const event=/^(RT_FLOW_SESSION_(?:CREATE|CLOSE|DENY)):[ \t]+/u.exec(after);
   if(!event)return null;
   const body=scanProfileTokens(raw,head[0].length+event[0].length);
-  if(!body||!body.tokens.some(value=>/^[^/\s]+\/[0-9]{1,5}->[^/\s]+\/[0-9]{1,5}$/.test(value)))return null;
+  if(!body||!body.tokens.some(value=>/^[^/ \t\n\r\f\v]+\/[0-9]{1,5}->[^/ \t\n\r\f\v]+\/[0-9]{1,5}$/u.test(value)))return null;
   return {
     syslog:{month:head[1],day:head[2],time:head[3],hostname:head[4],app_tag:head[5]},
     juniper:{event:event[1],...body},
@@ -522,23 +600,23 @@ function delimitedCommaKv(raw:string):Record<string,unknown>|null{
   const parts=splitEscaped(raw,',');
   if(!parts||parts.length<4)return null;
   const fields:Record<string,unknown>={};let prefix='';let parsed=0;
-  const safe=/^[A-Za-z0-9][A-Za-z0-9 ._:/()#-]{0,127}$/;
+  const safe=/^[A-Za-z0-9][A-Za-z0-9 ._:/()#-]{0,127}$/u;
   for(let index=0;index<parts.length;index++){
-    const segment=parts[index]!.trim();
+    const segment=parts[index]!.replace(ASCII_EDGE_SPACE,'');
     if(!segment)continue;
     const eq=segment.indexOf('=');
     if(eq<=0)return null;
-    const before=segment.slice(0,eq).trimEnd();
-    let key=before.trim();
+    const before=segment.slice(0,eq).replace(ASCII_TRAIL_SPACE,'');
+    let key=before.replace(ASCII_EDGE_SPACE,'');
     if(index===0){
       const cut=Math.max(before.lastIndexOf(': '),before.lastIndexOf('. '));
       if(cut>=0){
-        const suffix=before.slice(cut+2).trim();
-        if(safe.test(suffix)){key=suffix;prefix=before.slice(0,cut+2).trim();}
+        const suffix=before.slice(cut+2).replace(ASCII_EDGE_SPACE,'');
+        if(safe.test(suffix)){key=suffix;prefix=before.slice(0,cut+2).replace(ASCII_EDGE_SPACE,'');}
       }
     }
     if(!safe.test(key)||!sourceKeySafe(key))return null;
-    let value=segment.slice(eq+1).trim();
+    let value=segment.slice(eq+1).replace(ASCII_EDGE_SPACE,'');
     if(value.length>=2&&((value.startsWith('"')&&value.endsWith('"'))||(value.startsWith("'")&&value.endsWith("'"))))value=value.slice(1,-1);
     else if(value.startsWith('"')||value.startsWith("'")||value.endsWith('"')||value.endsWith("'"))return null;
     const previous=fields[key];
@@ -546,15 +624,16 @@ function delimitedCommaKv(raw:string):Record<string,unknown>|null{
     parsed++;
   }
   if(parsed<4)return null;
-  const prefixTokens=prefix?prefix.split(/[ \t]+/).map(value=>
+  const prefixTokens=prefix?prefix.split(/[ \t]+/u).map(value=>
     value.length>1&&[':',','].includes(value[value.length-1]!)?value.slice(0,-1):value):[];
   if(prefixTokens.length>64||prefixTokens.some(value=>!value||new TextEncoder().encode(value).byteLength>256))return null;
   return {generic:{mode:'delimited_kv',delimiter:',',prefix_tokens:prefixTokens,fields}};
 }
 
+const RX_RFC3164_DELIMITED_COMMA_KV=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255}) +([A-Za-z0-9_.-]{1,128}): +`,'u');
 function rfc3164DelimitedCommaKv(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192)return null;
-  const head=/^(?:<(\d{1,3})>)?([A-Z][a-z]{2}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +(\S{1,255}) +([A-Za-z0-9_.-]{1,128}): +/.exec(raw);
+  const head=RX_RFC3164_DELIMITED_COMMA_KV.exec(raw);
   if(!head||!validBsdClock(head[2]!,head[3]!,head[4]!))return null;
   if(head[1]!==undefined&&(Number(head[1])<0||Number(head[1])>191))return null;
   const body=delimitedCommaKv(raw.slice(head[0].length));
@@ -566,25 +645,41 @@ function rfc3164DelimitedCommaKv(raw:string):Record<string,unknown>|null{
   return {syslog,...body};
 }
 
+/**
+ * One comma-separated row, read like Ruby's CSV.parse_line(col_sep: ',', liberal_parsing: false) in the
+ * generated parser (RFC 4180): a field is either unquoted and holds no quotation mark at all, or it opens
+ * with a quotation mark at its first character, writes a quotation mark inside as two, and closes directly
+ * before the comma or the end of the row. Anything else is not a row: the event is declined instead of a
+ * quotation mark being dropped from a value.
+ */
 function positionalCsvValues(text:string):string[]|null{
   if(!text||text.includes('\0'))return null;
-  const values:string[]=[];let token='';let quoted=false;
-  for(let i=0;i<text.length;i++){
-    const ch=text[i]!;
-    if(quoted){
-      if(ch==='"'){
-        if(text[i+1]==='"'){token+='"';i++;continue;}
-        quoted=false;continue;
+  const values:string[]=[];
+  let index=0;
+  for(;;){
+    let token='';
+    if(text[index]==='"'){
+      index++;
+      for(;;){
+        if(index>=text.length)return null;
+        const ch=text[index]!;
+        if(ch==='"'){
+          if(text[index+1]==='"'){token+='"';index+=2;continue;}
+          index++;break;
+        }
+        token+=ch;index++;
       }
-      token+=ch;continue;
+      if(index<text.length&&text[index]!==',')return null;
+    }else{
+      while(index<text.length&&text[index]!==','){
+        if(text[index]==='"')return null;
+        token+=text[index]!;index++;
+      }
     }
-    if(ch==='"'){quoted=true;continue;}
-    if(ch===','){values.push(token);token='';continue;}
-    token+=ch;
+    values.push(token);
+    if(index>=text.length)return values;
+    index++;
   }
-  if(quoted)return null;
-  values.push(token);
-  return values;
 }
 
 const PANOS_TRAFFIC_53=[
@@ -603,8 +698,8 @@ const PANOS_TRAFFIC_54=[
 
 function panosTrafficFields(values:string[]):Record<string,string>|null{
   if(values.length<53||values[3]!=='TRAFFIC')return null;
-  const datetime=/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/;
-  const ip=/^(?:\d{1,3}\.){3}\d{1,3}$/;
+  const datetime=/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/u;
+  const ip=/^(?:\d{1,3}\.){3}\d{1,3}$/u;
   const validIp=(value:string)=>ip.test(value)&&value.split('.').every(part=>Number(part)<=255);
   if(!datetime.test(values[1]??'')||!datetime.test(values[6]??'')||
      !datetime.test(values[21]??'')||!datetime.test(values[35]??'')||
@@ -612,10 +707,10 @@ function panosTrafficFields(values:string[]):Record<string,string>|null{
      !validIp(values[9]??'')||!validIp(values[10]??''))return null;
   for(const index of [24,25,26,27]){
     const value=values[index]??'';
-    if(!/^\d{1,5}$/.test(value)||Number(value)>65535)return null;
+    if(!/^\d{1,5}$/u.test(value)||Number(value)>65535)return null;
   }
-  if(!/^[A-Za-z0-9_.-]{1,24}$/.test(values[29]??'')||
-     !/^[A-Za-z0-9_. -]{1,64}$/.test(values[30]??''))return null;
+  if(!/^[A-Za-z0-9_.-]{1,24}$/u.test(values[29]??'')||
+     !/^[A-Za-z0-9_. -]{1,64}$/u.test(values[30]??''))return null;
   const names=values.length>=54?PANOS_TRAFFIC_54:PANOS_TRAFFIC_53;
   const fields:Record<string,string>={};
   values.forEach((value,index)=>{
@@ -624,25 +719,26 @@ function panosTrafficFields(values:string[]):Record<string,string>|null{
   return fields;
 }
 
+const RX_RFC3164_POSITIONAL_CSV=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255}) +`,'u');
 function rfc3164PositionalCsv(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192)return null;
-  const head=/^(?:<(\d{1,3})>)?([A-Z][a-z]{2}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +(\S{1,255}) +/.exec(raw);
+  const head=RX_RFC3164_POSITIONAL_CSV.exec(raw);
   if(!head||!validBsdClock(head[2]!,head[3]!,head[4]!))return null;
   if(head[1]!==undefined&&(Number(head[1])<0||Number(head[1])>191))return null;
   const body=raw.slice(head[0].length);
-  if(/^[A-Za-z_][A-Za-z0-9_.-]*=/.test(body))return null;
+  if(/^[A-Za-z_][A-Za-z0-9_.-]*=/u.test(body))return null;
   const values=positionalCsvValues(body);
-  if(!values||values.length<12||values.length>100||!/^[0-9]{1,10}$/.test(values[0]??''))return null;
+  if(!values||values.length<12||values.length>100||!/^[0-9]{1,10}$/u.test(values[0]??''))return null;
   const panosLike=values.length>=7&&
-    /^\d{0,10}$/.test(values[0]??'')&&
-    /^\d{4}\/\d{2}\/\d{2} +\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$/.test(values[1]??'')&&
-    /^[A-Za-z0-9_.:-]{4,64}$/.test(values[2]??'')&&
-    /^[A-Z][A-Z0-9_]{2,31}$/.test(values[3]??'');
+    /^\d{0,10}$/u.test(values[0]??'')&&
+    /^\d{4}\/\d{2}\/\d{2} +\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$/u.test(values[1]??'')&&
+    /^[A-Za-z0-9_.:-]{4,64}$/u.test(values[2]??'')&&
+    /^[A-Z][A-Z0-9_]{2,31}$/u.test(values[3]??'');
   if(panosLike&&!panosPositionalCsvBody(body))return null;
-  const ip=/^(?:\d{1,3}\.){3}\d{1,3}$/;
+  const ip=/^(?:\d{1,3}\.){3}\d{1,3}$/u;
   const ips=values.filter(value=>ip.test(value)&&value.split('.').every(part=>Number(part)<=255)).length;
   const securityCategory=values.some(value=>
-    /^(?:TRAFFIC|THREAT|SYSTEM|CONFIG|GLOBALPROTECT|USERID|CORRELATION|DECRYPTION|HIPMATCH|AUTHENTICATION)$/.test(value));
+    /^(?:TRAFFIC|THREAT|SYSTEM|CONFIG|GLOBALPROTECT|USERID|CORRELATION|DECRYPTION|HIPMATCH|AUTHENTICATION)$/u.test(value));
   if(ips<2||!securityCategory)return null;
   const panos=panosTrafficFields(values);
   const columns:Record<string,string>={};
@@ -651,20 +747,18 @@ function rfc3164PositionalCsv(raw:string):Record<string,unknown>|null{
     month:head[2],day:head[3],time:head[4],hostname:head[5],
   };
   if(head[1]!==undefined)syslog.pri=head[1];
-  return {
+  return withBodyText({
     syslog,
     generic:panos
       ?{mode:'panos_traffic_csv',delimiter:',',source_raw:raw,fields:panos}
       :{mode:'rfc3164_positional_csv',delimiter:',',source_raw:raw,columns},
-  };
+  },'positional_csv',body);
 }
 
 
 function boundedEnvelopeJson(text:string):Record<string,unknown>|null{
   if(!text.startsWith('{')||new TextEncoder().encode(text).byteLength>8192||text.includes('\0'))return null;
-  let parsed:unknown;
-  try{parsed=JSON.parse(text);}catch{return null;}
-  if(hasDuplicateJsonObjectKeys(text))return null;
+  const parsed=parseJsonBody(text);
   if(!parsed||Array.isArray(parsed)||typeof parsed!=='object')return null;
   let nodes=0;
   function safe(value:unknown,depth:number):boolean{
@@ -683,13 +777,13 @@ function boundedEnvelopeJson(text:string):Record<string,unknown>|null{
 function panosPositionalCsvBody(text:string):Record<string,unknown>|null{
   const values=positionalCsvValues(text);
   if(!values||values.length<7||values.length>150)return null;
-  if(!/^\d{0,10}$/.test(values[0]??''))return null;
-  const received=/^(\d{4})\/(\d{2})\/(\d{2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)$/.exec(values[1]??'');
+  if(!/^\d{0,10}$/u.test(values[0]??''))return null;
+  const received=/^(\d{4})\/(\d{2})\/(\d{2}) +(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)$/u.exec(values[1]??'');
   if(!received||!validIsoPriClock(
     received[1]+'-'+received[2]+'-'+received[3],received[4]!,'Z'
   ))return null;
-  if(!/^[A-Za-z0-9_.:-]{4,64}$/.test(values[2]??''))return null;
-  if(!/^(?:TRAFFIC|THREAT|SYSTEM|CONFIG|GLOBALPROTECT|USERID|CORRELATION|DECRYPTION|HIPMATCH|AUTHENTICATION|GTP|IPTAG|SCTP|TUNNEL|URL|DATA|WILDFIRE)$/.test(values[3]??''))return null;
+  if(!/^[A-Za-z0-9_.:-]{4,64}$/u.test(values[2]??''))return null;
+  if(!/^(?:TRAFFIC|THREAT|SYSTEM|CONFIG|GLOBALPROTECT|USERID|CORRELATION|DECRYPTION|HIPMATCH|AUTHENTICATION|GTP|IPTAG|SCTP|TUNNEL|URL|DATA|WILDFIRE)$/u.test(values[3]??''))return null;
   const columns:Record<string,string>={};
   values.forEach((value,index)=>{columns['column_'+String(index)]=value;});
   return columns;
@@ -698,7 +792,7 @@ function panosPositionalCsvBody(text:string):Record<string,unknown>|null{
 function securityPositionalCsvBody(text:string):Record<string,unknown>|null{
   const values=positionalCsvValues(text);
   if(!values||values.length<12||values.length>150)return null;
-  const ip=/^(?:\d{1,3}\.){3}\d{1,3}$/;
+  const ip=/^(?:\d{1,3}\.){3}\d{1,3}$/u;
   const validIp=(value:string)=>ip.test(value)&&value.split('.').every(part=>Number(part)<=255);
   if(values.filter(validIp).length<2)return null;
   const columns:Record<string,string>={};
@@ -713,13 +807,13 @@ function bracketColonKvBody(text:string):Record<string,unknown>|null{
   if(!segments)return null;
   const body:Record<string,unknown>={};
   for(const rawSegment of segments){
-    const segment=rawSegment.trim();
+    const segment=rawSegment.replace(ASCII_EDGE_SPACE,'');
     if(!segment)continue;
-    const delimiter=/:\s*"/.exec(segment);
+    const delimiter=/:[ \t\n\r\f\v]*"/u.exec(segment);
     if(!delimiter||delimiter.index<=0)return null;
-    const key=segment.slice(0,delimiter.index).trim();
-    if(!/^[A-Za-z_][A-Za-z0-9_.#:-]{0,127}$/.test(key)||!sourceKeySafe(key))return null;
-    const encoded=segment.slice(delimiter.index+1).trim();
+    const key=segment.slice(0,delimiter.index).replace(ASCII_EDGE_SPACE,'');
+    if(!/^[A-Za-z_][A-Za-z0-9_.#:-]{0,127}$/u.test(key)||!sourceKeySafe(key))return null;
+    const encoded=segment.slice(delimiter.index+1).replace(ASCII_EDGE_SPACE,'');
     if(encoded.length<2||!encoded.startsWith('"')||!encoded.endsWith('"'))return null;
     const value=encoded.slice(1,-1),previous=body[key];
     body[key]=previous===undefined?value:Array.isArray(previous)?[...previous,value]:[previous,value];
@@ -729,10 +823,10 @@ function bracketColonKvBody(text:string):Record<string,unknown>|null{
 }
 
 function juniperRtFlowBody(text:string):Record<string,unknown>|null{
-  const event=/^(RT_FLOW_SESSION_(?:CREATE|CLOSE|DENY)):[ \t]+/.exec(text);
+  const event=/^(RT_FLOW_SESSION_(?:CREATE|CLOSE|DENY)):[ \t]+/u.exec(text);
   if(!event)return null;
   const body=scanProfileTokens(text,event[0].length);
-  if(!body||!body.tokens.some(value=>/^[^/\s]+\/[0-9]{1,5}->[^/\s]+\/[0-9]{1,5}$/.test(value)))return null;
+  if(!body||!body.tokens.some(value=>/^[^/ \t\n\r\f\v]+\/[0-9]{1,5}->[^/ \t\n\r\f\v]+\/[0-9]{1,5}$/u.test(value)))return null;
   return {event:event[1],...body};
 }
 
@@ -740,13 +834,13 @@ function watchguardTrafficBody(text:string):{
   header:Record<string,unknown>;
   body:{tokens:string[];kv:Record<string,unknown>;groups:string[]};
 }|null{
-  const head=/^(?:([A-Za-z0-9.-]{2,64}) +)?(?:\(([0-9T:+-]{19,35})\) +)?(firewall(?:\[\d{1,8}\])?): +/.exec(text);
+  const head=/^(?:([A-Za-z0-9.-]{2,64}) +)?(?:\(([0-9T:+-]{19,35})\) +)?(firewall(?:\[\d{1,8}\])?): +/u.exec(text);
   if(!head)return null;
-  if(head[2]!==undefined&&Number.isNaN(Date.parse(head[2]!)))return null;
+  if(head[2]!==undefined&&!isoTimestampOk(head[2]!))return null;
   const body=scanProfileTokens(text,head[0].length);
   if(!body||!body.tokens.length||!['Allow','Deny','Drop'].includes(body.tokens[0]!))return null;
   const msgId=body.kv.msg_id;
-  if(typeof msgId!=='string'||!/^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$/.test(msgId))return null;
+  if(typeof msgId!=='string'||!/^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$/u.test(msgId))return null;
   if(body.tokens.filter(ipToken).length<2)return null;
   return {
     header:{
@@ -764,7 +858,7 @@ function syslogEnvelopeStructuredFallback(raw:string):Record<string,unknown>|nul
   const syslog=envelopeToSyslogFields(envelope);
   const message=envelope.message;
 
-  if(/^%(?:ASA|FTD)-/.test(message)){
+  if(/^%(?:ASA|FTD)-/u.test(message)){
     const parsed=asa(message);
     if(!parsed?.asa||typeof parsed.asa!=='object')return null;
     const vendorSyslog=parsed.syslog&&typeof parsed.syslog==='object'
@@ -800,59 +894,59 @@ function syslogEnvelopeStructuredFallback(raw:string):Record<string,unknown>|nul
     watchguard_header:watchguard.header,
     watchguard:{...watchguard.body,source_raw:raw,message_raw:message},
   };
-  if(/\bfirewall(?:\[\d{1,8}\])?: +msg_id=/.test(message))return null;
+  if(/\bfirewall(?:\[\d{1,8}\])?: +msg_id=/u.test(message))return null;
 
   if(message.startsWith('CEF:')){
-    if(!/^CEF:0\|/.test(message))return null;
+    if(!/^CEF:0\|/u.test(message))return null;
     const parsed=extractStructuredFamily(message,'cef');
     if(parsed.errors.length)return null;
-    return {
+    return withBodyText({
       syslog,body:parsed.fields,
       generic:{mode:'syslog_envelope_cef',source_raw:raw,message_raw:message},
-    };
+    },'cef',message);
   }
   if(message.startsWith('LEEF:')){
-    if(!/^LEEF:(?:1\.0|2\.0)\|/.test(message))return null;
+    if(!/^LEEF:(?:1\.0|2\.0)\|/u.test(message))return null;
     const parsed=extractStructuredFamily(message,'leef');
     if(parsed.errors.length)return null;
-    return {
+    return withBodyText({
       syslog,body:parsed.fields,
       generic:{mode:'syslog_envelope_leef',source_raw:raw,message_raw:message},
-    };
+    },'leef',message);
   }
 
   if(message.startsWith('{')){
     const json=boundedEnvelopeJson(message);
     if(!json)return null;
-    return {
+    return withBodyText({
       syslog,body:json,
       generic:{mode:'syslog_envelope_json',source_raw:raw,message_raw:message},
-    };
+    },'json',message);
   }
 
   const panosValues=positionalCsvValues(message);
   const panosLike=!!panosValues&&panosValues.length>=7&&
-    /^\d{0,10}$/.test(panosValues[0]??'')&&
-    /^\d{4}\/\d{2}\/\d{2} +\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$/.test(panosValues[1]??'')&&
-    /^[A-Za-z0-9_.:-]{4,64}$/.test(panosValues[2]??'')&&
-    /^[A-Z][A-Z0-9_]{2,31}$/.test(panosValues[3]??'');
+    /^\d{0,10}$/u.test(panosValues[0]??'')&&
+    /^\d{4}\/\d{2}\/\d{2} +\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$/u.test(panosValues[1]??'')&&
+    /^[A-Za-z0-9_.:-]{4,64}$/u.test(panosValues[2]??'')&&
+    /^[A-Z][A-Z0-9_]{2,31}$/u.test(panosValues[3]??'');
   const panos=panosPositionalCsvBody(message);
   if(panos){
     const named=panosValues?panosTrafficFields(panosValues):null;
-    return {
+    return withBodyText({
       syslog,
       generic:named
         ?{mode:'panos_traffic_csv',profile:'panos',delimiter:',',source_raw:raw,message_raw:message,fields:named}
         :{mode:'syslog_envelope_positional_csv',profile:'panos',delimiter:',',source_raw:raw,message_raw:message,columns:panos},
-    };
+    },'positional_csv',message);
   }
   if(panosLike)return null;
 
   const positional=securityPositionalCsvBody(message);
-  if(positional)return {
+  if(positional)return withBodyText({
     syslog,
     generic:{mode:'syslog_envelope_positional_csv',delimiter:',',source_raw:raw,message_raw:message,columns:positional},
-  };
+  },'positional_csv',message);
 
   const comma=delimitedCommaKv(message);
   if(comma?.generic&&typeof comma.generic==='object')return {
@@ -869,20 +963,23 @@ function syslogEnvelopeStructuredFallback(raw:string):Record<string,unknown>|nul
   return null;
 }
 
+const RX_ASA_BSD_HEADER=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) +(?:(\d{4}) +)?(\d{2}):(\d{2}):(\d{2}) +([^ \t\n\r\f\v:]{1,255})(?: +(${T.TAG}(?:\[\d{1,8}\])?))? *:? *$`,'u');
+const RX_ASA_FACILITY_HOST=new RegExp(String.raw`^([A-Z0-9]{2,16})\.([A-Z]{2,16}): +(${T.RFC5424_HOSTNAME}) +$`,'u');
+const RX_ASA_HOST_ONLY=new RegExp(String.raw`^(${T.RFC5424_HOSTNAME}) +: +$`,'u');
 function asa(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const id=/%(ASA|FTD)-(\d)-(\d{6}):[ \t]*/.exec(raw);
+  const id=/%(ASA|FTD)-(\d)-(\d{6}):[ \t]*/u.exec(raw);
   if(!id||id.index===undefined)return null;
   const after=raw.slice(id.index+id[0].length);
-  if(/%(?:ASA|FTD)-\d-\d{6}:[ \t]*/.test(after))return null;
+  if(/%(?:ASA|FTD)-\d-\d{6}:[ \t]*/u.test(after))return null;
   const severity=Number(id[2]);
   if(!Number.isInteger(severity)||severity<0||severity>7)return null;
-  const built=after.match(/^(?<action>Built) (?<direction>inbound|outbound) (?<protocol>TCP|UDP) connection (?<connection_id>[0-9]{1,20}) for (?<src_interface>[A-Za-z0-9_.:-]{1,64}):(?<src_ip>[0-9A-Fa-f:.]{2,64})\/(?<src_port>[0-9]{1,5}) \((?<mapped_src_ip>[0-9A-Fa-f:.]{2,64})\/(?<mapped_src_port>[0-9]{1,5})\) to (?<dst_interface>[A-Za-z0-9_.:-]{1,64}):(?<dst_ip>[0-9A-Fa-f:.]{2,64})\/(?<dst_port>[0-9]{1,5}) \((?<mapped_dst_ip>[0-9A-Fa-f:.]{2,64})\/(?<mapped_dst_port>[0-9]{1,5})\)$/);
-  const deny=after.match(/^(?<action>Deny) (?<protocol>tcp|udp|icmp) src (?<src_interface>[A-Za-z0-9_.:-]{1,64}):(?<src_ip>[0-9A-Fa-f:.]{2,64})\/(?<src_port>[0-9]{1,5}) dst (?<dst_interface>[A-Za-z0-9_.:-]{1,64}):(?<dst_ip>[0-9A-Fa-f:.]{2,64})\/(?<dst_port>[0-9]{1,5})$/);
-  const denyAccess=after.match(/^(?<action>Deny) (?<protocol>tcp|udp|icmp) src (?:(?<src_context>v[12]):)?(?<src_interface>[A-Za-z0-9_.-]{1,64}):(?<src_ip>[0-9A-Fa-f:.]{2,64})(?:\/(?<src_port>[0-9]{1,5}))? dst (?:(?<dst_context>v[12]):)?(?<dst_interface>[A-Za-z0-9_.-]{1,64}):(?<dst_ip>[0-9A-Fa-f:.]{2,64})(?:\/(?<dst_port>[0-9]{1,5}))? by access-group \"(?<access_group>[^\"\r\n]{0,128})\" \[(?<flag_1>0x[0-9A-Fa-f]+), (?<flag_2>0x[0-9A-Fa-f]+)\]$/);
+  const built=after.match(/^(?<action>Built) (?<direction>inbound|outbound) (?<protocol>TCP|UDP) connection (?<connection_id>[0-9]{1,20}) for (?<src_interface>[A-Za-z0-9_.:-]{1,64}):(?<src_ip>[0-9A-Fa-f:.]{2,64})\/(?<src_port>[0-9]{1,5}) \((?<mapped_src_ip>[0-9A-Fa-f:.]{2,64})\/(?<mapped_src_port>[0-9]{1,5})\) to (?<dst_interface>[A-Za-z0-9_.:-]{1,64}):(?<dst_ip>[0-9A-Fa-f:.]{2,64})\/(?<dst_port>[0-9]{1,5}) \((?<mapped_dst_ip>[0-9A-Fa-f:.]{2,64})\/(?<mapped_dst_port>[0-9]{1,5})\)$/u);
+  const deny=after.match(/^(?<action>Deny) (?<protocol>tcp|udp|icmp) src (?<src_interface>[A-Za-z0-9_.:-]{1,64}):(?<src_ip>[0-9A-Fa-f:.]{2,64})\/(?<src_port>[0-9]{1,5}) dst (?<dst_interface>[A-Za-z0-9_.:-]{1,64}):(?<dst_ip>[0-9A-Fa-f:.]{2,64})\/(?<dst_port>[0-9]{1,5})$/u);
+  const denyAccess=after.match(/^(?<action>Deny) (?<protocol>tcp|udp|icmp) src (?:(?<src_context>v[12]):)?(?<src_interface>[A-Za-z0-9_.-]{1,64}):(?<src_ip>[0-9A-Fa-f:.]{2,64})(?:\/(?<src_port>[0-9]{1,5}))? dst (?:(?<dst_context>v[12]):)?(?<dst_interface>[A-Za-z0-9_.-]{1,64}):(?<dst_ip>[0-9A-Fa-f:.]{2,64})(?:\/(?<dst_port>[0-9]{1,5}))? by access-group "(?<access_group>[^"\r\n]{0,128})" \[(?<flag_1>0x[0-9A-Fa-f]+), (?<flag_2>0x[0-9A-Fa-f]+)\]$/u);
   const full=built??deny??denyAccess;
-  if(!full?.groups)return null;
-  const fields:Record<string,unknown>={source_raw:raw,product:id[1],severity:id[2],message_id:id[3],...full.groups};
+  if(!full)return null;
+  const fields:Record<string,unknown>={source_raw:raw,product:id[1],severity:id[2],message_id:id[3],...namedGroups(full)};
   for(const name of ['src_port','dst_port','mapped_src_port','mapped_dst_port']){
     const value=fields[name];
     if(value===undefined)continue;
@@ -892,7 +989,7 @@ function asa(raw:string):Record<string,unknown>|null{
   const syslog:Record<string,unknown>={app_tag:`%${id[1]}-${id[2]}-${id[3]}`};
   const prefix=raw.slice(0,id.index);
   if(prefix){
-    const header=prefix.match(/^(?:<(\d{1,3})>)?([A-Z][a-z]{2}) +(\d{1,2}) +(?:(\d{4}) +)?(\d{2}):(\d{2}):(\d{2}) +([^\s:]{1,255})(?: +([A-Za-z_][A-Za-z0-9_.-]{0,95}(?:\[\d{1,8}\])?))? *:? *$/);
+    const header=prefix.match(RX_ASA_BSD_HEADER);
     if(header){
       const monthDays:Record<string,number>={Jan:31,Feb:29,Mar:31,Apr:30,May:31,Jun:30,Jul:31,Aug:31,Sep:30,Oct:31,Nov:30,Dec:31};
       const pri=header[1]===undefined?undefined:Number(header[1]);
@@ -908,8 +1005,8 @@ function asa(raw:string):Record<string,unknown>|null{
         ...(header[9]?{source_tag:header[9]}:{}),
       });
     }else{
-      const facility=prefix.match(/^([A-Z0-9]{2,16})\.([A-Z]{2,16}): +([!-~]{1,255}) +$/);
-      const hostOnly=prefix.match(/^([!-~]{1,255}) +: +$/);
+      const facility=prefix.match(RX_ASA_FACILITY_HOST);
+      const hostOnly=prefix.match(RX_ASA_HOST_ONLY);
       if(facility)Object.assign(syslog,{source_facility:facility[1],source_level:facility[2],hostname:facility[3]});
       else if(hostOnly)Object.assign(syslog,{hostname:hostOnly[1]});
       else return null;
@@ -918,13 +1015,14 @@ function asa(raw:string):Record<string,unknown>|null{
   return {syslog,asa:fields};
 }
 
+const RX_SYSLOG_PREFIXED_KEY_VALUES=new RegExp(String.raw`^<(${T.PRI})>(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +(${T.RFC5424_HOSTNAME}) +([^\r\n]+)$`,'u');
 /** Additional, explicitly selected grammar; it does not widen the V15 routes. */
 function syslogPrefixedKeyValues(raw:string):Record<string,unknown>|null{
-  if(new TextEncoder().encode(raw).byteLength>8192||/[\u0000-\u0008\u000a-\u001f\u007f]/.test(raw))return null;
-  const head=/^<(\d{1,3})>([A-Z][a-z]{2}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([!-~]{1,255}) +([^\r\n]+)$/.exec(raw);
+  if(new TextEncoder().encode(raw).byteLength>8192||/[\u0000-\u0008\u000a-\u001f\u007f]/u.test(raw))return null;
+  const head=RX_SYSLOG_PREFIXED_KEY_VALUES.exec(raw);
   if(!head||Number(head[1])>191||!validBsdClock(head[2]!,head[3]!,head[4]!))return null;
   const message=head[6]!;
-  const first=/[ \t]([A-Za-z_][A-Za-z0-9_-]{0,63})=/.exec(message);
+  const first=/[ \t]([A-Za-z_][A-Za-z0-9_-]{0,63})=/u.exec(message);
   if(!first)return null;
   let cursor=first.index+1;
   const prefix=message.slice(0,cursor);
@@ -932,12 +1030,12 @@ function syslogPrefixedKeyValues(raw:string):Record<string,unknown>|null{
   // payloads, unsafe keys or previously discoverable network tuples in it.
   // Only space and TAB are separators. Other Unicode remains literal data,
   // including Unicode spaces and line/paragraph separators in one record.
-  if(!/[^ \t\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/.test(prefix)||
+  if(!/[^ \t\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/u.test(prefix)||
      new TextEncoder().encode(prefix).byteLength>1024||
-     /[="'{}\[\]|<>\/]/.test(prefix)||
-     /(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9A-Fa-f]{0,4}:){2}|->/.test(prefix))return null;
+     /[="'{}\[\]|<>\/]/u.test(prefix)||
+     /(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9A-Fa-f]{0,4}:){2}|->/u.test(prefix))return null;
   const fields:Record<string,unknown>={};
-  const token=/^([A-Za-z_][A-Za-z0-9_-]{0,63})=(?:"((?:\\["\\]|[^"\\\u0000-\u001f\u007f])*)"|'((?:\\['\\]|[^'\\\u0000-\u001f\u007f])*)'|([^ \t"'\\]+))(?=[ \t]|$)/;
+  const token=/^([A-Za-z_][A-Za-z0-9_-]{0,63})=(?:"((?:\\["\\]|[^"\\\u0000-\u001f\u007f])*)"|'((?:\\['\\]|[^'\\\u0000-\u001f\u007f])*)'|([^ \t"'\\]+))(?=[ \t]|$)/u;
   while(cursor<message.length){
     const match=token.exec(message.slice(cursor));
     if(!match)return null;
@@ -947,7 +1045,7 @@ function syslogPrefixedKeyValues(raw:string):Record<string,unknown>|null{
     fields[key]=value;
     if(Object.keys(fields).length>60)return null;
     cursor+=match[0].length;
-    while(cursor<message.length&&/[ \t]/.test(message[cursor]!))cursor++;
+    while(cursor<message.length&&/[ \t]/u.test(message[cursor]!))cursor++;
   }
   if(Object.keys(fields).length<2)return null;
   return {
@@ -957,10 +1055,40 @@ function syslogPrefixedKeyValues(raw:string):Record<string,unknown>|null{
   };
 }
 
-export function extractGenericStructural(raw:string,profile?:GenericStructuralProfile):GenericStructuralExtraction{
-  // Physical C0 control separators must not be misread as unquoted KV spacing.
-  if(/[\x0b\x0c\x0d\x1c-\x1f]/.test(raw))
+const FAMILY_CLAIM=new RegExp(GRAMMAR_FRAGMENTS.structured_family_claim.source,'yu');
+/** 'CEF' or 'LEEF' when the line claims to be such an event (contract fragment structured_family_claim). */
+export function structuredFamilyClaim(raw:string):'CEF'|'LEEF'|null{
+  const match=matchAt(FAMILY_CLAIM,raw,0);
+  return match?match.groups!.family as 'CEF'|'LEEF':null;
+}
+/**
+ * The same claim made by the message of a Syslog envelope. A line is one vendor's CEF or LEEF event whether or
+ * not a relay put a Syslog header in front of it, and it is read by one grammar either way.
+ */
+export function envelopedFamilyClaim(raw:string):'CEF'|'LEEF'|null{
+  const envelope=parseSyslogEnvelope(raw);
+  return envelope&&envelope.variant!=='colon_date'?structuredFamilyClaim(envelope.message):null;
+}
+/** Modes that read a CEF/LEEF event with the CEF/LEEF grammar. */
+export const GENERIC_FAMILY_MODES:readonly string[]=['structured_family_cef','structured_family_leef','syslog_envelope_cef','syslog_envelope_leef','leef2_implicit_tab'];
+
+/**
+ * familyGrammar (owner policy D-2): 'dedicated' is set for every newly created Generic Structural parser; a
+ * line that claims to be CEF or LEEF is then read by the CEF/LEEF grammar or declined, never by a generic
+ * key=value route. Absent keeps the V15 behaviour of existing projects unchanged (legacy compatibility
+ * route); the parse verdict of such a line is PARTIAL, never FULL (src/grammar/genericParseStatus.ts).
+ */
+export function extractGenericStructural(raw:string,profile?:GenericStructuralProfile,familyGrammar?:'dedicated'):GenericStructuralExtraction{
+  // Physical C0 control separators must not be misread as unquoted KV spacing, and one event is one line:
+  // NUL, LF, VT, FF, CR and the information separators decline the event in the browser and in the
+  // generated Ruby alike (no sub-profile is ever asked what LF or NUL means).
+  if(/[\x00\x0a-\x0d\x1c-\x1f]/u.test(raw))
     return {fields:{},errors:['Unsupported physical control separator in Generic Structural source']};
+  // VERSION 1 only: a line that claims to be RFC 5424 with another VERSION is not parsed by any generic
+  // grammar either (it used to succeed as space-separated key=value with the header kept as prefix tokens).
+  const unsupportedVersion=unsupportedRfc5424Version(raw);
+  if(unsupportedVersion!==null)
+    return {fields:{},errors:['Unsupported RFC5424 version '+unsupportedVersion+': only VERSION 1 is supported']};
   const includesLeef=profile==='leef2_implicit_tab'||profile===GENERIC_STRUCTURAL_MIXED_PROFILE_V1;
   const includesSyslog=profile==='syslog_prefix_kv'||profile===GENERIC_STRUCTURAL_MIXED_PROFILE_V1;
   // This selected profile owns the standalone LEEF 2.0 family. A legacy KV
@@ -969,6 +1097,24 @@ export function extractGenericStructural(raw:string,profile?:GenericStructuralPr
     const fields=extractLeef2ImplicitTab(raw);
     return fields?{fields,errors:[]}:
       {fields:{},errors:['Event does not match the bounded Generic Structural compiler grammar']};
+  }
+  const claim=familyGrammar==='dedicated'?structuredFamilyClaim(raw):null;
+  if(claim){
+    const parsed=extractStructuredFamily(raw,claim==='CEF'?'cef':'leef');
+    if(parsed.errors.length)
+      return {fields:{},errors:['The event claims to be '+claim+' but does not match the '+claim+' grammar; it is not read as generic key=value']};
+    return {fields:withBodyText({body:parsed.fields,
+      generic:{mode:claim==='CEF'?'structured_family_cef':'structured_family_leef',source_raw:raw}},claim==='CEF'?'cef':'leef',raw),errors:[]};
+  }
+  // The claim of an enveloped message is honoured the same way: before this, a CEF event with five or more
+  // pairs behind a Syslog header was taken by the space-separated key=value route (its header and first pair
+  // became prefix tokens), while the same event with fewer pairs was read as CEF.
+  const enveloped=familyGrammar==='dedicated'?envelopedFamilyClaim(raw):null;
+  if(enveloped){
+    const fields=syslogEnvelopeStructuredFallback(raw);
+    const generic=fields?.generic as {mode?:unknown}|undefined;
+    if(fields&&typeof generic?.mode==='string'&&GENERIC_FAMILY_MODES.includes(generic.mode))return {fields,errors:[]};
+    return {fields:{},errors:['The event claims to be '+enveloped+' inside a Syslog envelope but does not match the '+enveloped+' grammar; it is not read as generic key=value']};
   }
   const fields=shortRfc5424Structured(raw)??shortRfc5424Json(raw)??prefixedJson(raw)??isoPriMixed(raw)??isoPriPositional(raw)??asa(raw)??watchguardProfile(raw)??watchguardMessageProfile(raw)??dualTimestampSessionProfile(raw)??bsdBracketPidMessageProfile(raw)??
     juniperLegacyProfile(raw)??junosRfc5424Sd(raw)??bracketColonKv(raw)??

@@ -70,7 +70,9 @@ assert(manifest['receipts'].map { |entry| entry['slug'] } == allowed &&
 
 files = {}
 filenames.each do |filename|
-  source = regular_source(File.join(root, filename), 128 * 1024)
+  # One parser file is bounded by the product limit (512,000 bytes): an artifact carries the generated grammar
+  # and is larger than the hand-written fragment this bound was written for (128 KiB).
+  source = regular_source(File.join(root, filename), 512_000)
   assert(Digest::SHA256.hexdigest(source) == manifest['files'].fetch(filename),
     'generated source differs from compiler SHA receipt')
   files[filename] = source

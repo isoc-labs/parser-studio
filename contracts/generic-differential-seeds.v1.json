@@ -1,0 +1,296 @@
+{
+  "schema": "parserstudio.generic-differential-seeds.v1",
+  "purpose": "Seed lines for the browser versus generated-Ruby differential of Generic Structural (scripts/verification/semantic-oracle.ts differential). Every seed is a line from the fixtures and tests of this repository and tests that the browser extractor parses; the two shortest per result mode. The oracle derives the variants (PRI, VERSION, month, host and key mutations, Unicode white space and separators, control characters, impossible dates, time zones and fractions of a second, JSON escapes, comments and nesting, CSV quoting, and a fixed pseudo-random stream of token insertions, deletions and splices) and requires the same decision and the same field tree from both engines for every variant. No expected value is stored here: the two engines are the reference for each other, and the hand-authored goldens (semantic-goldens.v1.json) say which of them is right.",
+  "seeds": [
+    {
+      "id": "asa-syslog-1",
+      "mode": "asa+syslog",
+      "raw": "[::1] : %ASA-4-106023: Deny tcp src outside:192.0.2.12/61943 dst identity:198.51.100.5/443 by access-group \"\" [0x3499b430, 0x0]"
+    },
+    {
+      "id": "asa-syslog-2",
+      "mode": "asa+syslog",
+      "raw": "FW-EDGE : %ASA-4-106023: Deny tcp src outside:192.0.2.12/61943 dst identity:198.51.100.5/443 by access-group \"\" [0x3499b430, 0x0]"
+    },
+    {
+      "id": "body-syslog-1",
+      "mode": "body+syslog",
+      "raw": "<0>1 2026-10-21T00:01:02Z gateway {\"left\":{\"k\":1},\"right\":{\"k\":2}}"
+    },
+    {
+      "id": "body-syslog-2",
+      "mode": "body+syslog",
+      "raw": "<134>1 2026-10-21T00:01:02Z [::1] {\"left\":{\"k\":1},\"right\":{\"k\":2}}"
+    },
+    {
+      "id": "bsd-bracket-pid-message-1",
+      "mode": "bsd_bracket_pid_message",
+      "raw": "Mar 26 10:20:16 SSB SNMPD_CONTEXT_ERROR: [7400]: emq: isiu: success in 6237 context 5367"
+    },
+    {
+      "id": "bsd-bracket-pid-message-2",
+      "mode": "bsd_bracket_pid_message",
+      "raw": "Mar 26 10:20:16 ssb SNMPD_CONTEXT_ERROR: [7400]: EMQ: isiu: success in 6237 context 5367"
+    },
+    {
+      "id": "bsd-classic-pid-message-1",
+      "mode": "bsd_classic_pid_message",
+      "raw": "Jan 29 06:09:59 procA.exe[100]: EVENT_ALPHA_LONG: [::1] message one"
+    },
+    {
+      "id": "bsd-classic-pid-message-2",
+      "mode": "bsd_classic_pid_message",
+      "raw": "Jan 29 06:09:59 procA.exe[100]: EVENT_ALPHA_LONG: private [::1] one"
+    },
+    {
+      "id": "bsd-tagged-message-1",
+      "mode": "bsd_tagged_message",
+      "raw": "Oct 16 15:44:21 edge app: hello"
+    },
+    {
+      "id": "bsd-tagged-message-2",
+      "mode": "bsd_tagged_message",
+      "raw": "Oct 7 01:02:03 SEC01 app: line1"
+    },
+    {
+      "id": "comma-kv-1",
+      "mode": "comma_kv",
+      "raw": "<182>Mar 3 10:43:05 ise-host APP 0002 1 0 2022-03-03 10:43:05.020 +00:00 0003 INFO Connector: ok, _k=host.local, AD-Log-Id=1645707128/8"
+    },
+    {
+      "id": "comma-kv-2",
+      "mode": "comma_kv",
+      "raw": "APP 0001 1 0 2022-03-03 [::1] +00:00 0002 WARN Connector: failed, AD-Admin=ise.host.local, AD-Domain=host.local, AD-IP-Address=192.0.2.10"
+    },
+    {
+      "id": "delimited-kv-1",
+      "mode": "delimited_kv",
+      "raw": "Mar 17 18:24:37 mailhost: Info: Prefix words. Name = 'sample.exe', ID = 5, Size = 10, Type = binary"
+    },
+    {
+      "id": "delimited-kv-2",
+      "mode": "delimited_kv",
+      "raw": "<166>Mar 17 18:24:37 [::1] Info: Prefix words. Name = 'sample.exe', ID = 5, Size = 10, Type = binary"
+    },
+    {
+      "id": "generic-syslog-1",
+      "mode": "generic+syslog",
+      "raw": "<0>2026-10-15 14:54:44.502 +0100 edge WAF ALERT CODE 192.0.2.1 61507 198.51.100.2 443 app policy LOG NONE token1 token2 token3 token4 \"-\" \"multi word positional value\" token7 token8"
+    },
+    {
+      "id": "generic-syslog-2",
+      "mode": "generic+syslog",
+      "raw": "<7>2026-10-15 14:54:44.502 +0100 edge WAF ALERT CODE 192.0.2.1 61507 198.51.100.2 443 app policy LOG NONE token1 token2 token3 token4 \"-\" \"multi word positional value\" token7 token8"
+    },
+    {
+      "id": "iso-pri-positional-1",
+      "mode": "iso_pri_positional",
+      "raw": "<0>2026-10-16 03:11:07.915 +0200 edge SYS APS INFO 19034 Num clients to walk : 0"
+    },
+    {
+      "id": "iso-pri-positional-2",
+      "mode": "iso_pri_positional",
+      "raw": "<7>2026-10-16 03:11:07.915 +0200 edge SYS APS INFO 19034 Num clients to walk : 0"
+    },
+    {
+      "id": "juniper-syslog-1",
+      "mode": "juniper+syslog",
+      "raw": "<134>Oct 19 08:24:00 [::1] RT_FLOW: RT_FLOW_SESSION_DENY: session denied 192.0.2.12/52333->198.51.100.9/80 0x0 None 6(0) policy-deny trust untrust 0 0"
+    },
+    {
+      "id": "juniper-syslog-2",
+      "mode": "juniper+syslog",
+      "raw": "<134>Oct 23 08:24:00 [::1] RT_FLOW: RT_FLOW_SESSION_DENY: session denied 192.0.2.12/52333->198.51.100.9/80 0x0 None 6(0) policy-deny trust untrust 0 0"
+    },
+    {
+      "id": "junos-sd-syslog-1",
+      "mode": "junos_sd+syslog",
+      "raw": "<14>1 2019-11-14T09:37:51.184+01:00 SRX-GW1 RT_FLOW - [::1] [junos@67.43.156.15 source-address=\"10.0.0.1\" source-port=\"594\" application-risk=\"1\"]"
+    },
+    {
+      "id": "junos-sd-syslog-2",
+      "mode": "junos_sd+syslog",
+      "raw": "<14>1 2019-11-14T09:37:51.184+01:00 SRX-GW1 RT_FLOW - RT_FLOW_SESSION_CREATE [junos@67.43.156.15 _k=\"10.0.0.1\" source-port=\"594\" application-risk=\"1\"]"
+    },
+    {
+      "id": "panos-traffic-csv-1",
+      "mode": "panos_traffic_csv",
+      "raw": "Oct 15 00:03:21 PA-FW01 1,2026/10/15 00:03:21,012345678901,TRAFFIC,end,2561,2026/10/15 00:03:20,10.10.20.15,8.8.8.8,203.0.113.10,8.8.8.8,allow-web,,,ssl,vsys1,trust,untrust,ethernet1/1,ethernet1/2,forward-all,2026/10/15 00:03:21,123456,1,51234,443,45001,443,0x400000,tcp,allow,1480,720,760,12,2026/10/15 00:02:55,25,any,0,0x0,10.0.0.0-10.255.255.255,United States,,6,6,tcp-fin,0,0,0,0,,PA-FW01,from-policy"
+    },
+    {
+      "id": "panos-traffic-csv-2",
+      "mode": "panos_traffic_csv",
+      "raw": "<14>Oct 15 00:03:21 [::1] 1,2026/10/15 00:03:21,012345678901,TRAFFIC,end,2561,2026/10/15 00:03:20,10.10.20.15,8.8.8.8,203.0.113.10,8.8.8.8,allow-web,,,ssl,vsys1,trust,untrust,ethernet1/1,ethernet1/2,forward-all,2026/10/15 00:03:21,123456,1,51234,443,45001,443,0x400000,tcp,allow,1480,720,760,12,2026/10/15 00:02:55,25,any,0,0x0,10.0.0.0-10.255.255.255,United States,,6,6,tcp-fin,0,0,0,0,,PA-FW01,from-policy"
+    },
+    {
+      "id": "prefixed-json-1",
+      "mode": "prefixed_json",
+      "raw": "EXAMPLE: {\"a\":1}"
+    },
+    {
+      "id": "prefixed-json-2",
+      "mode": "prefixed_json",
+      "raw": "Example: {\"A\":1}"
+    },
+    {
+      "id": "rfc3164-positional-csv-1",
+      "mode": "rfc3164_positional_csv",
+      "raw": "<14>Oct 16 15:44:21 PA01 1,2026/02/30: 15:44:21,012345678901,TRAFFIC,end,2561,2026/10/16 15:44:20,10.0.0.1,198.51.100.1,203.0.113.1,198.51.100.1,allow"
+    },
+    {
+      "id": "rfc3164-positional-csv-2",
+      "mode": "rfc3164_positional_csv",
+      "raw": "<14>Oct 19 08:12:21 PA-FW01 1,2026/10/19 08:12:21,012345678901,TRAFFIC,end,2561,2026/10/19 08:12:20,10.10.20.15,8.8.8.8,203.0.113.10,8.8.8.8,allow-web,,,ssl,vsys1,trust,untrust,ethernet1/1,ethernet1/2,forward-all,2026/10/19 [::1]"
+    },
+    {
+      "id": "session-envelope-syslog-1",
+      "mode": "session_envelope+syslog",
+      "raw": "Oct 19 09:11:55 [::1] 1 2026-10-19T09:11:55+02:00 192.0.2.3 SecureAccess: - - - 2026-10-19 09:11:55 - edge-node - [198.51.100.10] user.name(REALM)[ROLE] - Session established successfully"
+    },
+    {
+      "id": "session-envelope-syslog-2",
+      "mode": "session_envelope+syslog",
+      "raw": "Oct 19 09:11:55 edge-node 1 2026-10-19T09:11:55+02:00 [::1] SecureAccess: - - - 2026-10-19 09:11:55 - edge-node - [198.51.100.10] user.name(REALM)[ROLE] - Session established successfully"
+    },
+    {
+      "id": "space-kv-1",
+      "mode": "space_kv",
+      "raw": "_k=firewall sn=ABC fw=10.0.0.1 pri=6 src=10.1.1.1 dst=10.2.2.2"
+    },
+    {
+      "id": "space-kv-2",
+      "mode": "space_kv",
+      "raw": "_k=threat src_ip=192.0.2.1 dst_port=443 action=block alert=foo"
+    },
+    {
+      "id": "structured-family-cef-1",
+      "mode": "structured_family_cef",
+      "raw": "CEF:0|A|B|1|3|Name|5|_k=192.0.2.1"
+    },
+    {
+      "id": "structured-family-cef-2",
+      "mode": "structured_family_cef",
+      "raw": "CEF:0|A|B|1|3|Name|5|src=192.0.2.1"
+    },
+    {
+      "id": "structured-family-leef-1",
+      "mode": "structured_family_leef",
+      "raw": "LEEF:2.0|Acme|Edge|1.0|100|^|_k="
+    },
+    {
+      "id": "structured-family-leef-2",
+      "mode": "structured_family_leef",
+      "raw": "LEEF:2.0|Acme|Edge|1.0|100|^|src="
+    },
+    {
+      "id": "syslog-watchguard-watchguard-header-1",
+      "mode": "syslog+watchguard+watchguard_header",
+      "raw": "<139>Jan 16 15:19:05 WatchGuard-Firebox FVE6035FD3AE3: (2024-01-19T08:48:15) firewall: msg_id=\"1BFF-000F\" Allow 1-Trusted 0-External tcp 10.0.1.2 175.16.199.1 39398 25 msg=\"SMTP request\" proxy_act=\"SMTP-Outgoing.1\" rcvd_bytes=\"272\" sent_bytes=\"282\" sender=\"tester@testnet.com\" recipients=\"wg@localhost\" (SMTP-proxy-00)"
+    },
+    {
+      "id": "syslog-envelope-bracket-colon-kv-1",
+      "mode": "syslog_envelope_bracket_colon_kv",
+      "raw": "<134>Oct 16 15:44:21 CP01 CheckPoint[8363]: [action:\"Accept\"; CONSTRUCTOR:\"BAD\"; src:\"192.0.2.1\"]"
+    },
+    {
+      "id": "syslog-envelope-cef-1",
+      "mode": "syslog_envelope_cef",
+      "raw": "<13>CEF:0|A|B|1|3|Name|5|src=192.0.2.1"
+    },
+    {
+      "id": "syslog-envelope-cef-2",
+      "mode": "syslog_envelope_cef",
+      "raw": "<13>CEF:0|Synthetic|FW|1|42|Blocked|8|"
+    },
+    {
+      "id": "syslog-envelope-json-1",
+      "mode": "syslog_envelope_json",
+      "raw": "Oct 12 01:02:05 fw01 {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "syslog-envelope-json-2",
+      "mode": "syslog_envelope_json",
+      "raw": "<0>Oct 12 01:02:05 fw01 {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "syslog-envelope-leef-1",
+      "mode": "syslog_envelope_leef",
+      "raw": "<13>LEEF:2.0|Acme|Edge|1.0|100|^|src="
+    },
+    {
+      "id": "syslog-envelope-leef-2",
+      "mode": "syslog_envelope_leef",
+      "raw": "<13>LEEF:2.0|Synthetic|FW|1|501|0x5E|"
+    },
+    {
+      "id": "syslog-envelope-positional-csv-1",
+      "mode": "syslog_envelope_positional_csv",
+      "raw": "<14>Oct 16 15:44:21 PA01 1,2026/10/16 15:44:21,012345678901,TRAFFIC,end,2561,2026/10/16 [::1]"
+    },
+    {
+      "id": "syslog-envelope-positional-csv-2",
+      "mode": "syslog_envelope_positional_csv",
+      "raw": "<14>Oct 19 08:12:21 PA-FW01 1,2026/10/19 08:12:21,012345678901,TRAFFIC,end,2561,2026/10/19 [::1] 08:12:21,123456,1,51234,443"
+    },
+    {
+      "id": "watchguard-watchguard-header-1",
+      "mode": "watchguard+watchguard_header",
+      "raw": "<139>Jan 16 15:19:05 [::1] FVE6035FD3AE3 (2024-01-19T08:48:15) firewall: msg_id=\"1BFF-000F\" Allow 1-Trusted 0-External tcp 10.0.1.2 175.16.199.1 39398 25 msg=\"SMTP request\" proxy_act=\"SMTP-Outgoing.1\" rcvd_bytes=\"272\" sent_bytes=\"282\" sender=\"tester@testnet.com\" recipients=\"wg@localhost\" (SMTP-proxy-00)"
+    },
+    {
+      "id": "watchguard-watchguard-header-2",
+      "mode": "watchguard+watchguard_header",
+      "raw": "Jan 16 15:19:05 WatchGuard-Firebox FVE6035FD3AE3 (2024-01-19T08:48:15) firewall: msg_id=\"1BFF-000F\" Allow 1-Trusted 0-External tcp 10.0.1.2 175.16.199.1 39398 25 msg=\"SMTP request\" proxy_act=\"SMTP-Outgoing.1\" rcvd_bytes=\"272\" sent_bytes=\"282\" sender=\"tester@testnet.com\" recipients=\"wg@localhost\" (SMTP-proxy-00)"
+    },
+    {
+      "id": "watchguard-header-watchguard-message-1",
+      "mode": "watchguard_header+watchguard_message",
+      "raw": "<142>May 10 15:19:05 [::1] FVE6035FD3AE3 (2024-05-10T09:49:05) firewall[10]: msg_id=\"3000-0006\" Application control settings updated"
+    },
+    {
+      "id": "watchguard-header-watchguard-message-2",
+      "mode": "watchguard_header+watchguard_message",
+      "raw": "<142>May 10 15:19:05 [::1] (2024-05-10T09:49:05) firewall: msg_id=\"3000-0152\" IPv4 source route attack from 10.0.1.34 detected. (IPS)"
+    },
+    {
+      "id": "audit-iso-space-offset",
+      "mode": "syslog_envelope_json",
+      "raw": "<13>2026-10-16 03:11:07 +0200 edge {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "audit-slash-date-offset",
+      "mode": "syslog_envelope_json",
+      "raw": "<13>2026/10/16 03:11:07 -0000 edge {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "audit-rfc3339-loose-offset",
+      "mode": "syslog_envelope_json",
+      "raw": "<13>2026-10-16T03:11:07+0200 edge {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "audit-bsd-fraction",
+      "mode": "syslog_envelope_json",
+      "raw": "<13>Oct 16 03:11:07.915 edge {\"srcip\":\"10.5.5.6\"}"
+    },
+    {
+      "id": "audit-rfc5424-offset-asa",
+      "mode": "asa+syslog",
+      "raw": "<34>1 2026-11-14T09:30:00+0530 host app 123 ID47 - %ASA-6-302013: Built outbound TCP connection 1 for outside:10.1.1.1/80 (10.1.1.1/80) to inside:10.2.2.2/1234 (10.2.2.2/1234)"
+    },
+    {
+      "id": "audit-json-nested-arrays",
+      "mode": "prefixed_json",
+      "raw": "EXAMPLE: {\"a\":[[[[[[[1]]]]]]],\"s\":\"\\ud83d\\ude00 \\u00e9 \\n\",\"n\":1.5}"
+    },
+    {
+      "id": "audit-bsd-tagged-json",
+      "mode": "syslog_envelope_json",
+      "raw": "Oct 12 01:02:05 fw01 app: {\"c\":\"\\ud83d\\ude00\",\"d\":{\"e\":[1,2]}}"
+    },
+    {
+      "id": "audit-positional-csv-quoted",
+      "mode": "rfc3164_positional_csv",
+      "raw": "<14>Oct 16 15:44:21 PA01 1,2026/10/16 15:44:21,012345678901,TRAFFIC,end,2561,2026/10/16 15:44:20,10.0.0.1,198.51.100.1,203.0.113.1,198.51.100.1,\"rule \"\"A\"\", east\""
+    }
+  ]
+}

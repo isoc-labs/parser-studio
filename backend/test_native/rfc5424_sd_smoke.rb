@@ -20,18 +20,19 @@ invalid = [
   '[meta@32473 bad]',
   '[meta@32473 bad="ok"]junk'
 ]
+# The STRUCTURED-DATA scanner of the generated grammar (the translation of the browser grammar), called as
+# the artifact calls it. It declines by returning no reading, never the input contents.
+scan = lambda do |text|
+  parser.send(:psg_export, parser.send(:psg_scan_structured_data, parser.send(:psg_text, text)))
+end
 valid.each_with_index do |source, i|
-  actual, remaining = parser.parserstudio_rfc5424_sd(source + ' src_ip=192.0.2.10 action=deny')
-  raise "RFC5424 valid SD case #{i} altered" unless actual == source
-  raise "RFC5424 valid SD case #{i} lost body" unless remaining == 'src_ip=192.0.2.10 action=deny'
+  reading = scan.call(source + ' src_ip=192.0.2.10 action=deny')
+  raise "RFC5424 valid SD case #{i} declined" unless reading.is_a?(Hash)
+  raise "RFC5424 valid SD case #{i} altered" unless reading['structured'] == source
+  raise "RFC5424 valid SD case #{i} lost body" unless reading['message'] == 'src_ip=192.0.2.10 action=deny'
 end
 invalid.each_with_index do |source, i|
-  begin
-    parser.parserstudio_rfc5424_sd(source)
-    raise "RFC5424 invalid SD case #{i} silently accepted"
-  rescue ArgumentError
-    # Expected static parse error, never the input contents.
-  end
+  raise "RFC5424 invalid SD case #{i} silently accepted" unless scan.call(source).nil?
 end
 puts "RFC5424 SD grammar: #{valid.length} valid + #{invalid.length} invalid bounded cases PASS (synthetic only)"
 
@@ -41,7 +42,9 @@ juniper = '<14>1 2019-11-14T11:12:46.573+01:00 SRX-GW1 RT_FLOW - RT_FLOW_SESSION
   '[junos@67.43.156.15 source-address="10.0.0.26" source-port="37233" ' \
   'destination-address="67.43.156.13" destination-port="161" ' \
   'policy-name="MgmtAccess-trust-cleanup" reason="Denied by policy"]'
-parsed_juniper = parser.parserstudio_syslog_rfc5424(juniper, {'syslogBodyFormat'=>'raw'})
+juniper_reading = parser.send(:psg_export, parser.send(:psg_parse_rfc5424_subset, parser.send(:psg_text, juniper)))
+raise 'RFC5424 vendor SD event was declined' unless juniper_reading['ok'] == true
+parsed_juniper = juniper_reading['fields']
 expected = {
   'source-address'=>'10.0.0.26',
   'source-port'=>'37233',

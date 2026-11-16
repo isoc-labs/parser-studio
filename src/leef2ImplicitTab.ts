@@ -1,10 +1,11 @@
+import {isWellFormed} from './grammar/primitives';
 /** Explicit additional compiler profile; the existing LEEF grammar is unchanged. */
 export function extractLeef2ImplicitTab(raw:string):Record<string,unknown>|null{
   const bytes=new TextEncoder().encode(raw);
-  if(bytes.byteLength>8192||/[\u0000-\u0008\u000a-\u001f\u007f]/.test(raw)||
+  if(bytes.byteLength>8192||/[\u0000-\u0008\u000a-\u001f\u007f]/u.test(raw)||
      !raw.startsWith('LEEF:2.0|'))return null;
   // An unpaired UTF-16 surrogate must not become an invented replacement byte.
-  if(new TextDecoder('utf-8',{ignoreBOM:true}).decode(bytes)!==raw)return null;
+  if(!isWellFormed(raw))return null;
   const names=['vendor','product','product_version','event_id'] as const;
   const header:Record<string,string>={version:raw.slice(5,8)};
   let cursor='LEEF:2.0|'.length;
@@ -12,7 +13,7 @@ export function extractLeef2ImplicitTab(raw:string):Record<string,unknown>|null{
     const end=raw.indexOf('|',cursor);
     if(end<0)return null;
     const value=raw.slice(cursor,end);
-    if(!value||!value.replaceAll(' ','')||/[\\\t]/.test(value)||
+    if(!value||!value.replaceAll(' ','')||/[\\\t]/u.test(value)||
        new TextEncoder().encode(value).byteLength>256)return null;
     header[name]=value;
     cursor=end+1;
@@ -30,7 +31,7 @@ export function extractLeef2ImplicitTab(raw:string):Record<string,unknown>|null{
     const equal=token.indexOf('=');
     if(equal<1)return null;
     const key=token.slice(0,equal),value=token.slice(equal+1);
-    if(!/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(key)||
+    if(!/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/u.test(key)||
        ['__proto__','prototype','constructor'].includes(key)||
        Object.prototype.hasOwnProperty.call(fields,key)||!value||
        new TextEncoder().encode(value).byteLength>512)return null;

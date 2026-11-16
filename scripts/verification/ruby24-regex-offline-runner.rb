@@ -24,26 +24,30 @@ input['records'].each do |item|
     (item.keys.sort == %w[compressedRuby id sha256] ||
      item.keys.sort == %w[compressedRuby id pattern sha256] ||
      item.keys.sort == %w[compressedRuby corpus id pattern sha256]) &&
-    item['compressedRuby'].is_a?(String) && item['compressedRuby'].length < 150000 &&
+    item['compressedRuby'].is_a?(String) && item['compressedRuby'].length < 200000 &&
     item['sha256'].to_s.match?(/\A[0-9a-f]{64}\z/)
   ruby = Zlib::Inflate.inflate(Base64.strict_decode64(item['compressedRuby']))
   abort 'INVALID_ARTIFACT_SHA' unless Digest::SHA256.hexdigest(ruby) == item['sha256']
-  abort 'UNEXPECTED_RUBY_SIZE' unless ruby.bytesize.between?(1000,180000)
+  # The grammar of an artifact is generated from the browser grammar; a Generic Structural artifact carries
+  # both generated parts (the product's own upload limit is 512,000 bytes).
+  abort 'UNEXPECTED_RUBY_SIZE' unless ruby.bytesize.between?(1000,400000)
   klass = Class.new
   klass.class_eval(ruby,'synthetic-generated-ruby',1)
   parser = klass.new
   if item['id'] == 'csv'
     # Fixed, independently expected CSV values: unquoted edge spaces are
     # trimmed, quoted whitespace is preserved, embedded comma stays quoted.
-    output=parser.send(:parserstudio_csv,
-      '  alpha  ," quoted, value ",  gamma  ',
-      {'csvColumns'=>%w[alpha bravo charlie],'csvDelimiter'=>','})
+    # The row reader of the generated grammar, called as the artifact calls it.
+    csv_row = lambda do |text, delimiter|
+      outcome = parser.send(:psg_extract_csv_row, parser.send(:psg_text, text), %w[alpha bravo charlie], delimiter)
+      abort 'CSV_ROW_DECLINED' unless outcome['errors'].empty?
+      parser.send(:psg_export, outcome['fields'])
+    end
+    output=csv_row.call('  alpha  ," quoted, value ",  gamma  ', ',')
     abort 'CSV_INDEPENDENT_FIELDS_MISMATCH' unless
       output=={'alpha'=>'alpha','bravo'=>' quoted, value ','charlie'=>'gamma'}
     # TAB grammar must not silently trim fields.
-    tab=parser.send(:parserstudio_csv,
-      " first\t second\t third ",
-      {'csvColumns'=>%w[alpha bravo charlie],'csvDelimiter'=>"\t"})
+    tab=csv_row.call(" first\t second\t third ", "\t")
     abort 'CSV_TAB_WHITESPACE_LOST' unless
       tab=={'alpha'=>' first','bravo'=>' second','charlie'=>' third '}
     result_count+=2
@@ -53,7 +57,8 @@ input['records'].each do |item|
     # A fixed independent PAN-OS source proves actual generated grammar
     # execution on both Ruby 2.4.9 and Ruby 3.2.11, not syntax alone.
     source='<14>Oct 15 00:03:21 PA-FW01 1,2026/10/15 00:03:21,012345678901,TRAFFIC,end,2561,2026/10/15 00:03:20,10.10.20.15,8.8.8.8,203.0.113.10,8.8.8.8,allow-web,,,ssl,vsys1,trust,untrust,ethernet1/1,ethernet1/2,forward-all,2026/10/15 00:03:21,123456,1,51234,443,45001,443,0x400000,tcp,allow,1480,720,760,12,2026/10/15 00:02:55,25,any,0,0x0,10.0.0.0-10.255.255.255,United States,,6,6,tcp-fin,0,0,0,0,,PA-FW01,from-policy'
-    result=parser.send(:parserstudio_generic_rfc3164_positional_csv,source)
+    positional = lambda { |text| parser.send(:psg_export, parser.send(:psg_rfc3164_positional_csv, parser.send(:psg_text, text))) }
+    result=positional.call(source)
     abort 'PANOS_STRUCTURAL_SOURCE_NOT_PARSED' unless
       result.is_a?(Hash) && result.dig('syslog','hostname') == 'PA-FW01' &&
       result.dig('generic','mode') == 'panos_traffic_csv' &&
@@ -61,10 +66,10 @@ input['records'].each do |item|
       result.dig('generic','fields','sport') == '51234' &&
       result.dig('generic','fields','dport') == '443' &&
       result.dig('generic','fields','action') == 'allow'
+    # The route needs two IPv4 addresses with octets up to 255: with every address out of range it declines.
     abort 'INVALID_IPV4_ACCEPTED' if
-      parser.send(:parserstudio_generic_valid_ipv4?,'256.10.20.15')
-    abort 'VALID_IPV4_REJECTED' unless
-      parser.send(:parserstudio_generic_valid_ipv4?,'10.10.20.15')
+      positional.call(source.gsub(/\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b/, '256.\\2.\\3.\\4')).is_a?(Hash)
+    abort 'VALID_IPV4_REJECTED' unless result.dig('generic','fields','dst') == '8.8.8.8'
     result_count += 3
     next
   end

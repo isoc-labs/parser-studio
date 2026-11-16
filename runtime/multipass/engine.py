@@ -13,15 +13,23 @@ import ipaddress
 import json
 import math
 import re
+from syslog_header_grammar_generated import KV_ASCII_WHITESPACE
 from typing import Any
 
 MAX_RAW_BYTES = 131072
 MAX_CAPTURED_FIELDS = 4096
-MAX_JSON_DEPTH = 40
+# The JSON source contract of the product: eight nested levels (src/jsonSourceSafety.ts). The browser and the
+# generated Ruby decline a value at the ninth level, so the preview does too.
+MAX_JSON_DEPTH = 8
 BSD = re.compile(r"^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +\d{1,2} \d\d:\d\d:\d\d +\S+ +")
 PRI = re.compile(r"^<(?P<priority>\d{1,3})>")
 IPv4_STRICT = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
 DEC = json.JSONDecoder()
+
+
+def _has_unpaired_surrogate(text: str) -> bool:
+    """True when a decoded JSON string holds a surrogate code point (the decoder joins a valid pair into one character)."""
+    return any(0xD800 <= ord(ch) <= 0xDFFF for ch in text)
 
 
 @dataclass(frozen=True)
@@ -104,6 +112,19 @@ class ParseResult:
         }
 
 
+def _unsafe_json_float(token:str,value:float) -> bool:
+    """The rule of hasUnsafeJsonNumbers (src/jsonNumberSafety.ts) for a number in decimal or exponent spelling."""
+    # An integer beyond 2^53 - 1, whatever its spelling, is not a number a double identifies.
+    if value==math.floor(value) and abs(value)>2**53-1:
+        return True
+    mantissa=re.split("[eE]",token,maxsplit=1)[0]
+    significant=re.sub(r"0+$","",re.sub(r"^[+-]?0*","",mantissa,count=1).replace(".","",1))
+    if len(significant)>15:
+        return True
+    # A nonzero decimal that underflows is not zero.
+    return value==0 and re.search("[1-9]",mantissa) is not None
+
+
 class SpanJsonDecoder:
     """Bounded strict JSON visitor with exact original character-index spans.
 
@@ -143,6 +164,8 @@ class SpanJsonDecoder:
                     key,self.i=DEC.raw_decode(self.raw,self.i)
                     if not isinstance(key,str) or key in out or key in {"__proto__","constructor","prototype"}:
                         raise ValueError("JSON_DUPLICATE_OR_UNSAFE_KEY")
+                    if _has_unpaired_surrogate(key):
+                        raise ValueError("JSON_UNPAIRED_SURROGATE")
                     self.whitespace()
                     if self.raw[self.i:self.i+1]!=":":
                         raise ValueError("JSON_COLON_MISSING")
@@ -183,6 +206,16 @@ class SpanJsonDecoder:
         # exponents. Neither may become a verified original numeric value.
         if isinstance(value,float) and not math.isfinite(value):
             raise ValueError("JSON_NUMBER_RANGE_OR_CONSTANT_UNSUPPORTED")
+        # Number precision as the browser and the generated Ruby read it (src/jsonNumberSafety.ts): a number in
+        # decimal or exponent spelling that a double does not hold as written declines the event; the rounded
+        # double is not a value of the event. An integer written as an integer is kept exactly by Python and is
+        # reported with its digits.
+        if isinstance(value,float) and _unsafe_json_float(self.raw[self.i:end],value):
+            raise ValueError("JSON_NUMBER_PRECISION_UNSAFE")
+        # RFC 8259 8.2 / RFC 3629: a surrogate escape without its partner names no character and has no UTF-8
+        # form. Python's decoder keeps it as a lone surrogate; the browser and the generated Ruby decline it.
+        if isinstance(value,str) and _has_unpaired_surrogate(value):
+            raise ValueError("JSON_UNPAIRED_SURROGATE")
         self.i=end
         self.count+=1
         self.nodes[path]=(value,start,end)
@@ -255,7 +288,7 @@ def parse_quoted_kv(result:ParseResult, begin:int) -> dict[str,tuple[str,int,int
     out:dict[str,tuple[str,int,int]]={}
     while i<n:
         start=i
-        while i<n and s[i].isspace():
+        while i<n and s[i] in KV_ASCII_WHITESPACE:
             i+=1
         if i>start:result.covered.append((start,i))
         if i>=n:break
@@ -285,12 +318,12 @@ def parse_quoted_kv(result:ParseResult, begin:int) -> dict[str,tuple[str,int,int
             else:
                 result.issues.append("KV_QUOTE_UNCLOSED")
                 return out
-            if i<n and not s[i].isspace():
+            if i<n and not s[i] in KV_ASCII_WHITESPACE:
                 result.issues.append("KV_AFTER_QUOTE_INVALID");return out
             value="".join(decoded)
             val_span=(val_start+1,i-1)
         else:
-            while i<n and not s[i].isspace():
+            while i<n and not s[i] in KV_ASCII_WHITESPACE:
                 i+=1
             value=s[val_start:i]
             val_span=(val_start,i)
@@ -342,6 +375,10 @@ def parse_csv_spans(result:ParseResult,begin:int) -> list[tuple[str,int,int]]:
             captured_end=pos
             if result.raw[captured_start:captured_end]!=value:
                 raise ValueError("CSV_VALUE_MISMATCH")
+            # RFC 4180 rule 5: a double quote may not appear inside a field that is not enclosed. csv.reader
+            # accepts it even in strict mode; the browser tokenizer and Ruby's CSV.parse_line reject the row.
+            if '"' in value:
+                raise ValueError("CSV_GRAMMAR_INVALID")
         parts.append((value,captured_start,captured_end))
         if pos<len(result.raw):
             if result.raw[pos]!=',':raise ValueError("CSV_DELIMITER_INVALID")

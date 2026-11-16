@@ -206,20 +206,34 @@ assert(sd_instance.parserstudio_extract(max_hostname)['body']['src_ip'] == '192.
        "RFC5424 maximum reviewed hostname length")
 puts "Extended synthetic formats: 45 scenarios PASS (CSV/RFC5424/CEF/LEEF)"
 
-# Escaped CEF/LEEF header delimiters must not accept an incomplete escape.
-# A dangling backslash is not evidence of a complete parsed event.
+# Escaped CEF/LEEF header delimiters must not accept an incomplete escape: a dangling backslash inside
+# the header is not evidence of a complete parsed event. The text after the last header delimiter belongs
+# to the extension grammar and is not decoded by the header split: a CEF extension still declines a dangling
+# backslash (CEF escapes its values), a LEEF value keeps it as the text it is (LEEF has no value escapes).
 delimiter_parser_path = File.join(folder, 'customized_sample_cef')
 delimiter_parser_class = Class.new
 delimiter_parser_class.class_eval(SyntheticFixtureGuard.read_source(delimiter_parser_path), delimiter_parser_path, 1)
 delimiter_parser = delimiter_parser_class.new
-begin
-  delimiter_parser.parserstudio_split_escaped("first|second\\", '|', 1)
-  raise "Incomplete CEF header escape silently accepted"
-rescue ArgumentError
-  # Expected a static extraction error.
+header_split = lambda do |text|
+  delimiter_parser.send(:psg_export,
+    delimiter_parser.send(:psg_split_escaped, delimiter_parser.send(:psg_text, text), '|', 1))
 end
-_, leef_dangling = execute_parser(folder, 'sample_leef', "LEEF:1.0|Synthetic|FW|1|500|src=203.0.113.7\\")
-assert(leef_dangling['parser_err_msg'] == 'ArgumentError' &&
-       leef_dangling['parser_err_stage'] == 'extraction' &&
-       !leef_dangling.key?('srcip'), 'LEEF dangling header escape must fail closed')
-puts "Delimited header escape safety: 2 malformed cases REJECTED (synthetic only)"
+assert(header_split.call("first\\").nil?, 'Incomplete CEF header escape silently accepted')
+assert(header_split.call("first|second\\") == ['first', "second\\"], 'Text after the last header delimiter was decoded')
+_, cef_header = execute_parser(folder, 'sample_cef', "CEF:0|Synthetic|FW|1|500|De\\")
+assert(cef_header['parser_err_msg'] == 'ArgumentError' &&
+       cef_header['parser_err_stage'] == 'extraction', 'CEF dangling header escape must fail closed')
+_, cef_dangling = execute_parser(folder, 'sample_cef', "CEF:0|Synthetic|FW|1|500|Deny|5|src=203.0.113.7\\")
+assert(cef_dangling['parser_err_msg'] == 'ArgumentError' &&
+       cef_dangling['parser_err_stage'] == 'extraction' &&
+       !cef_dangling.key?('srcip'), 'CEF dangling extension escape must fail closed')
+_, leef_literal = execute_parser(folder, 'sample_leef', "LEEF:1.0|Synthetic|FW|1|500|src=203.0.113.7\tpath=C:\\Temp\\")
+assert(leef_literal['srcip'] == '203.0.113.7' && !leef_literal.key?('parser_err_msg'),
+       'LEEF value text ending in a backslash must be kept')
+leef_parser_path = File.join(folder, 'customized_sample_leef')
+leef_parser_class = Class.new
+leef_parser_class.class_eval(SyntheticFixtureGuard.read_source(leef_parser_path), leef_parser_path, 1)
+leef_extracted = leef_parser_class.new.parserstudio_extract("LEEF:1.0|Synthetic|FW|1|500|src=203.0.113.7\tpath=C:\\Temp\\")
+assert(leef_extracted['path'] == "C:\\Temp\\" && leef_extracted['src'] == '203.0.113.7',
+       'LEEF value text ending in a backslash must be extracted exactly as written')
+puts "Delimited header escape safety: 3 malformed cases REJECTED, 1 literal LEEF value kept (synthetic only)"

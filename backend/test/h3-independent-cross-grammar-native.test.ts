@@ -4,6 +4,7 @@
  * The full raw input never appears in a persisted CI evidence artifact.
  */
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import test from 'node:test';
@@ -99,7 +100,7 @@ function native(p:ParserProject,raw:string[]):Array<Record<string,unknown>>{
    "JSON.parse(STDIN.read).each{|line| parser.parse(line){|_time,record|rows << record}}",
    "STDOUT.write(JSON.generate(rows))",
  ].join('\n');
- const result=spawnSync('ruby',['-e',harness],{
+ const result=spawnSync('ruby',rubyE(harness),{
    encoding:'utf8',timeout:15000,maxBuffer:1024*1024,
    input:Buffer.from(code,'utf8').toString('base64')+'\n'+JSON.stringify(raw),
  });

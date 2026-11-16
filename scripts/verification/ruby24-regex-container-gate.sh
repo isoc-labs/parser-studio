@@ -17,9 +17,10 @@ trap 'rm -f "$payload"' EXIT
 node backend/node_modules/tsx/dist/cli.mjs \
   scripts/verification/ruby24-regex-artifact-evidence.ts --private-payload > "$payload"
 test "$(wc -c < "$payload")" -gt 1000
-# Six fixed fixtures of ~45 KB each (shared template, compressed). The cap only bounds
-# the stdin payload; it was raised from 256 KiB when the Cisco ASA fixture was added.
-test "$(wc -c < "$payload")" -lt 393216
+# Six fixed fixtures (compressed). The cap only bounds the stdin payload; it was raised from
+# 256 KiB when the Cisco ASA fixture was added, and from 384 KiB when the grammar of an artifact
+# became generated from the browser grammar (each artifact now carries the generated grammar).
+test "$(wc -c < "$payload")" -lt 524288
 runner=$(cat scripts/verification/ruby24-regex-offline-runner.rb)
 sandbox=(
   --rm -i --platform linux/amd64

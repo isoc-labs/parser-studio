@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {compilePair} from '../src/compiler.js';
@@ -51,7 +52,7 @@ function native(p:ParserProject,inputs:string[]):Record<string,unknown>[]{
  ].join('\n');
  const raws=inputs.map(raw=>p.normalization.eventProfiles?
   raw.replace(/^\{/,'{"event_type":"security",'):raw);
- const response=spawnSync('ruby',['-e',code],{input:JSON.stringify(raws),
+ const response=spawnSync('ruby',rubyE(code),{input:JSON.stringify(raws),
   encoding:'utf8',timeout:15000,maxBuffer:4*1024*1024});
  assert.equal(response.status,0,response.stderr||String(response.error));
  const actual=JSON.parse(response.stdout) as Record<string,unknown>[];

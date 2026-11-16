@@ -8,6 +8,7 @@
 // declared classification rules; none is read back from Ruby output. Synthetic
 // logs only. Not a Stellar Cyber import, Syslog reception or indexing result.
 import assert from "node:assert/strict";
+import {rubyE} from "./ruby-argv.js";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -51,7 +52,7 @@ function run(project: ParserProject, lines: string[]): Array<Record<string, any>
     "JSON.parse(STDIN.read).each{|line| parser.parse(line){|_time,record|rows << record}}",
     "STDOUT.write(JSON.generate(rows))",
   ].join("\n");
-  const result = spawnSync("ruby", ["-e", harness], {
+  const result = spawnSync("ruby", rubyE(harness), {
     encoding: "utf8", timeout: 20000, maxBuffer: 1024 * 1024,
     input: Buffer.from(code, "utf8").toString("base64") + "\n" + JSON.stringify(lines),
   });
