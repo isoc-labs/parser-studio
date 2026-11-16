@@ -28,5 +28,9 @@ describe('the reason shown for a JSON number the grammar declines',()=>{
     expect(text).toContain('Nothing was discarded');
     expect(unsafeJsonNumberExplanation('srcip=10.1.1.1 id=1731719701123456789')).toBeNull();
     expect(unsafeJsonNumberExplanation('{"a":1')).toBeNull();
+    // A brace in the structured data of the header is not the object of the event.
+    const withSd='<134>1 2026-11-16T01:15:01Z host app - - [meta@1 note="{x}"] {"id":1731719701123456789}';
+    expect(jsonObjectOfEvent(withSd)).toBe('{"id":1731719701123456789}');
+    expect(unsafeJsonNumberExplanation(withSd)).toContain('1731719701123456789');
   });
 });

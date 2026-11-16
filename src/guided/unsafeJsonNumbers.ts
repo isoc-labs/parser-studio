@@ -33,13 +33,16 @@ export function unsafeJsonNumberLexemes(source:string,limit=3):string[]{
 
 /** The JSON object of an event: the whole event, or the text after a Syslog header. Null when there is none. */
 export function jsonObjectOfEvent(raw:string):string|null{
-  const start=raw.indexOf('{');
-  if(start<0)return null;
-  const text=raw.slice(start);
-  try{
-    const value:unknown=JSON.parse(text);
-    return value!==null&&typeof value==='object'&&!Array.isArray(value)?text:null;
-  }catch{return null;}
+  // The object may follow a header that itself holds a brace (structured data): try each opening brace in turn.
+  let start=raw.indexOf('{');
+  for(let tries=0;start>=0&&tries<8;tries++,start=raw.indexOf('{',start+1)){
+    const text=raw.slice(start);
+    try{
+      const value:unknown=JSON.parse(text);
+      if(value!==null&&typeof value==='object'&&!Array.isArray(value))return text;
+    }catch{/* not the object of the event */}
+  }
+  return null;
 }
 
 /** One sentence for a user, or null when the event has no such number. */
@@ -50,5 +53,5 @@ export function unsafeJsonNumberExplanation(raw:string):string|null{
   if(!numbers.length)return null;
   return 'This event holds '+(numbers.length===1?'a number':'numbers')+' that cannot be kept digit for digit: '+numbers.join(', ')+
     '. A browser and the parser runtime store such a number as the nearest value they can hold, so Parser Studio does not build a parser that would change it. '+
-    'Nothing was discarded. The event can be read when the sender writes the number as text (in quotes); a parsing rule cannot repair it.';
+    'Nothing was discarded. A parsing rule cannot repair this; a sender that writes the number as text (in quotes) does not have the problem.';
 }

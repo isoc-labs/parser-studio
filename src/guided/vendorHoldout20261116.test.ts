@@ -5,6 +5,7 @@ import {preview} from '../parser';
 import {analyzeLogEnvelopes,assessEnvelopeCompilation} from './autoParserEnvelope';
 import {prepareAutoParserDraft} from './autoParserDraft';
 import {buildAutomaticGenericStructuralDraft} from './genericStructuralAutoDraft';
+import {listSafeLeafPaths} from '../fieldPaths';
 import type {BackendCapabilities} from './backendCapabilities';
 
 // Holdout logs written from vendor log grammars (tests/fixtures/vendor-holdout-20261116). Each sample carries a
@@ -17,34 +18,36 @@ const cap=JSON.parse(readFileSync('tests/fixtures/vendor-holdout-capabilities-20
 interface Oracle{canon:Record<string,unknown>;values:Record<string,unknown>;forbid:[string,unknown][]}
 interface Meta{expect:'PARSE'|'ASSISTED';oracle:Oracle[]}
 
-/** How the automatic journey reads each sample today. A change of a line here is a change of behaviour to review. */
-const READING:Record<string,string>={
-  h_checkpoint_logexporter:'generic',
-  h_cloudtrail_line:'json',
-  h_fortigate_mixed:'generic',
-  h_fortigate_webfilter:'generic',
-  h_imperva_cef:'cef',
-  h_okta_system_log:'json',
-  h_panos_threat_url:'generic',
-  h_panos_traffic:'generic',
-  h_sonicwall_fw:'generic',
-  h_sophos_xg_fw:'kv',
-  h_srx_sd_close_deny:'syslog_rfc5424',
-  h_stormshield_filter:'kv',
-  h_suricata_rfc5424:'syslog_rfc5424',
+/** How the automatic journey reads each sample today, and how many expected Stellar meanings it maps correctly
+ * (Stellar field present with the value of the oracle). A change of a line here is a change of behaviour to
+ * review; a lower number is a lost mapping, such as the automatic mappings that read nothing for CEF lines. */
+const READING:Record<string,[string,number]>={
+  h_checkpoint_logexporter:['generic',6],
+  h_cloudtrail_line:['json',2],
+  h_fortigate_mixed:['generic',6],
+  h_fortigate_webfilter:['generic',12],
+  h_imperva_cef:['cef',1],
+  h_okta_system_log:['json',1],
+  h_panos_threat_url:['generic',1],
+  h_panos_traffic:['generic',12],
+  h_sonicwall_fw:['generic',0],
+  h_sophos_xg_fw:['kv',8],
+  h_srx_sd_close_deny:['syslog_rfc5424',13],
+  h_stormshield_filter:['kv',6],
+  h_suricata_rfc5424:['syslog_rfc5424',10],
   // Free text: a parsing rule is needed (ChatGPT Assisted Parser). Declined with a diagnosis, never guessed.
-  h_cisco_asa_mixed:'declined',
-  h_nginx_combined:'declined',
-  h_pfsense_filterlog:'declined',
-  h_sshd_auth:'declined',
-  h_vpcflow_v2:'declined',
+  h_cisco_asa_mixed:['declined',0],
+  h_nginx_combined:['declined',0],
+  h_pfsense_filterlog:['declined',0],
+  h_sshd_auth:['declined',0],
+  h_vpcflow_v2:['declined',0],
   // Vendor records the automatic journey does not read yet (docs/verification/20261116-accuracy-after-311.md).
-  h_cisco_ftd_430003:'declined',   // "Key: value, Key: value" list behind %FTD-n-nnnnnn:
-  h_cloudflare_http:'declined',    // nanosecond integers above 2^53
-  h_meraki_urls_flows:'declined',  // a urls record has fewer than five key=value pairs
-  h_trendmicro_ds_leef:'declined', // LEEF 2.0 without a delimiter field behind a Syslog header
-  h_win4625_nxlog_json:'declined', // Keywords is a 64-bit integer
-  h_zeek_conn_json:'declined',     // ts has sixteen significant digits
+  h_cisco_ftd_430003:['declined',0],   // "Key: value, Key: value" list behind %FTD-n-nnnnnn:
+  h_cloudflare_http:['declined',0],    // nanosecond integers above 2^53
+  h_meraki_urls_flows:['declined',0],  // a urls record has fewer than five key=value pairs
+  h_trendmicro_ds_leef:['declined',0], // LEEF 2.0 without a delimiter field behind a Syslog header
+  h_win4625_nxlog_json:['declined',0], // Keywords is a 64-bit integer
+  h_zeek_conn_json:['declined',0],     // ts has sixteen significant digits
 };
 
 function automaticDraft(raw:string):ParserDraft|null{
@@ -54,10 +57,13 @@ function automaticDraft(raw:string):ParserDraft|null{
   if(native.ok)return native.draft;
   return ledger.unsupported>0?buildAutomaticGenericStructuralDraft(raw,draft)?.draft??null:null;
 }
+/** Every value of the output except the copies of the whole source text that the grammar keeps (source_raw,
+ * message_raw): a value counts as kept when a field holds it, not when the raw line happens to contain it. */
 function leaves(value:unknown,out:unknown[]=[]):unknown[]{
   if(Array.isArray(value))for(const item of value)leaves(item,out);
-  else if(value!==null&&typeof value==='object')for(const item of Object.values(value))leaves(item,out);
-  else out.push(value);
+  else if(value!==null&&typeof value==='object'){
+    for(const [key,item] of Object.entries(value))if(key!=='source_raw'&&key!=='message_raw')leaves(item,out);
+  }else out.push(value);
   return out;
 }
 const same=(a:unknown,b:unknown)=>String(a)===String(b);
@@ -81,9 +87,13 @@ describe('vendor holdout logs: the automatic draft maps nothing wrongly and lose
       const meta=JSON.parse(readFileSync(ROOT+id+'/meta.json','utf8')) as Meta;
       const draft=automaticDraft(raw);
       const reading=draft===null?'declined':draft.format==='generic_structural'?'generic':draft.format;
-      expect(reading).toBe(READING[id]);
+      expect(reading).toBe(READING[id]![0]);
       if(draft===null)return;
       const suite=preview(raw,draft);
+      // Every automatic mapping reads a field that some event of the sample has.
+      const produced=new Set(suite.events.flatMap(event=>listSafeLeafPaths(event.fields)));
+      expect(draft.mappings.filter(mapping=>!produced.has(mapping.source)).map(mapping=>mapping.source)).toEqual([]);
+      let correct=0;
       expect(suite.events.length).toBe(meta.oracle.length);
       expect(suite.counts.failures).toBe(0);
       const lines=raw.split('\n');
@@ -92,8 +102,11 @@ describe('vendor holdout logs: the automatic draft maps nothing wrongly and lose
         const output=event.normalized as Record<string,unknown>;
         const found=leaves(output);
         const problems:string[]=[];
-        for(const [field,value] of Object.entries(oracle.canon))
-          if(field in output&&!same(output[field],value))problems.push('wrong '+field+'='+String(output[field])+', the event says '+String(value));
+        for(const [field,value] of Object.entries(oracle.canon)){
+          if(!(field in output))continue;
+          if(same(output[field],value))correct++;
+          else problems.push('wrong '+field+'='+String(output[field])+', the event says '+String(value));
+        }
         for(const [field,value] of oracle.forbid)
           if(field in output&&same(output[field],value))problems.push('forbidden '+field+'='+String(value));
         for(const [field,value] of [...Object.entries(oracle.canon),...Object.entries(oracle.values)])
@@ -105,6 +118,7 @@ describe('vendor holdout logs: the automatic draft maps nothing wrongly and lose
         }
         expect(problems,id+' event '+(index+1)).toEqual([]);
       });
+      expect(correct,'Stellar meanings mapped correctly').toBe(READING[id]![1]);
     });
   }
 });
