@@ -159,4 +159,27 @@ describe('AP2 zero-forced-format guided novice mapping handoff',()=>{
      expect(prepare(json,draft),vendor).toMatchObject({ok:true});
    }
  });
+ it('keeps a field that is empty in one event and filled in another',()=>{
+   // Two records of one firewall: the denied connection has no user, no NAT address and no outgoing interface.
+   const sample=[
+     'device="SFW" log_type="Firewall" status="Allow" user_name="jkim" out_interface="Port2" src_ip=10.1.10.25 dst_ip=142.250.196.14 src_port=51544 dst_port=443 tran_src_ip=203.0.113.5 application=""',
+     'device="SFW" log_type="Firewall" status="Deny" user_name="" out_interface="" src_ip=203.0.113.77 dst_ip=10.1.10.9 src_port=40022 dst_port=22 tran_src_ip="" application=""',
+   ].join('\n');
+   const result=prepare(sample);
+   expect(result).toMatchObject({ok:true});
+   if(!result.ok)return;
+   const sources=result.draft.mappings.map(mapping=>mapping.source);
+   expect(sources).toEqual(expect.arrayContaining(['user_name','out_interface','tran_src_ip']));
+   // Empty in every event: there is no value to keep.
+   expect(sources).not.toContain('application');
+   const events=preview(sample,result.draft).events;
+   const flat=(value:unknown):string=>JSON.stringify(value);
+   expect(flat(events[0]!.normalized)).toContain('"jkim"');
+   expect(flat(events[0]!.normalized)).toContain('"203.0.113.5"');
+   expect(flat(events[0]!.normalized)).toContain('"Port2"');
+   expect(events.every(event=>event.normalizedOk)).toBe(true);
+   // The empty occurrence adds no field and no empty text to the other record.
+   expect(flat(events[1]!.normalized)).not.toContain('user_name');
+   expect(toBackendProject(result.draft)).toMatchObject({ok:true});
+ });
 });
