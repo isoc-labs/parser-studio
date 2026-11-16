@@ -8,6 +8,7 @@
  * parser was actually executed in Ruby or accepted by a Stellar Cyber DP.
  */
 import unicodeCaseMap from './unicode-case-map.v1.json' with {type:'json'};
+import {trimCanonicalAscii} from './canonical-value-contract.js';
 
 export const CANONICAL_OPERATOR_CONTRACT_V1 = Object.freeze({
   contract:'parser-studio.operator-semantics.v1',
@@ -52,7 +53,7 @@ export const CANONICAL_OPERATOR_CONTRACT_V1 = Object.freeze({
   }),
   values:Object.freeze({
     compoundScalarCoercion:false,compoundStringEncoding:'json',
-    ignoredStringsMatchOriginalType:true,timestampIntermediate:'canonical-utc-iso-ms',
+    ignoredStringsMatchOriginalType:true,blankOnlyStringIsMissing:true,timestampIntermediate:'canonical-utc-iso-ms',
     timestampWireField:'timestamp',timestampWireEncoding:'epoch-ms',
     splitDelimiter:'literal-preserve-empty',unicodeCase:unicodeCaseMap.contract,
     unicodeVersion:unicodeCaseMap.unicodeVersion,
@@ -65,8 +66,13 @@ export const CANONICAL_OPERATOR_CONTRACT_V1 = Object.freeze({
   }),
 });
 
+/** A source value that is not mapped and is no error: absent, one of the listed
+ * placeholder strings, or a string of nothing but ASCII white space. The typed
+ * conversion calls the last one a missing value; here it is treated as one,
+ * like the empty string, so that the event keeps its other mappings. */
 export function canonicalIgnoreSourceValue(value:unknown,ignored:readonly string[]):boolean{
-  return value===null||value===undefined||typeof value==='string'&&ignored.includes(value);
+  return value===null||value===undefined||
+    typeof value==='string'&&(ignored.includes(value)||trimCanonicalAscii(value)==='');
 }
 
 /** Pinned Unicode 15.0 per-codepoint mappings, independent of host ICU.

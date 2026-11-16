@@ -182,4 +182,24 @@ describe('AP2 zero-forced-format guided novice mapping handoff',()=>{
    expect(flat(events[1]!.normalized)).not.toContain('user_name');
    expect(toBackendProject(result.draft)).toMatchObject({ok:true});
  });
+ it('a value of nothing but white space is a missing value: its event keeps its other fields',()=>{
+   // Found by the independent audit of 2026-11-16 (P2-4). The typed conversion rejects a blank-only value as
+   // "Missing value"; the run time skipped only the exact strings '', 'N/A' and '-', so the second event took
+   // the field-error path. A blank-only value is now skipped like the empty one, in the browser and in the Ruby.
+   for(const sample of [
+     ['action=allow srcip=10.1.1.1 dstport=443 user="bob" note="x"','action=deny srcip=10.1.1.2 dstport=22 user=" " note="y"'],
+     ['{"action":"allow","srcip":"10.1.1.1","user":"bob","comment":"x"}','{"action":"deny","srcip":"10.1.1.2","user":"  ","comment":"\\t"}'],
+   ].map(lines=>lines.join('\n'))){
+     const result=prepare(sample);
+     expect(result,sample).toMatchObject({ok:true});
+     if(!result.ok)return;
+     expect(result.draft.mappings.map(mapping=>mapping.source)).toContain('user');
+     const events=preview(sample,result.draft).events;
+     expect(events.map(event=>event.normalizedOk),sample).toEqual([true,true]);
+     expect(events.flatMap(event=>event.diagnostics.filter(d=>d.severity==='error')),sample).toEqual([]);
+     expect(JSON.stringify(events[0]!.normalized)).toContain('"bob"');
+     expect(JSON.stringify(events[1]!.normalized)).not.toContain('user');
+     expect(JSON.stringify(events[1]!.normalized)).toContain('"10.1.1.2"');
+   }
+ });
 });

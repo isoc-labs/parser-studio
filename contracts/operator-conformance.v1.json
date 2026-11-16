@@ -1095,6 +1095,85 @@
       "expected": {}
     },
     {
+      "id": "typed-blank-string",
+      "raw": "{\"value\":\"  \",\"action\":\"allow\"}",
+      "mappings": [
+        {
+          "source": "value",
+          "target": "custom.value",
+          "type": "string"
+        },
+        {
+          "source": "action",
+          "target": "action",
+          "type": "string"
+        }
+      ],
+      "expected": {
+        "action": "allow"
+      }
+    },
+    {
+      "id": "typed-blank-tab-ip",
+      "raw": "{\"value\":\"\\t \",\"action\":\"allow\"}",
+      "mappings": [
+        {
+          "source": "value",
+          "target": "srcip",
+          "type": "ip"
+        },
+        {
+          "source": "action",
+          "target": "action",
+          "type": "string"
+        }
+      ],
+      "expected": {
+        "action": "allow"
+      }
+    },
+    {
+      "id": "typed-blank-integer",
+      "raw": "{\"value\":\" \\r\\n\",\"action\":\"allow\"}",
+      "mappings": [
+        {
+          "source": "value",
+          "target": "custom.value",
+          "type": "integer"
+        },
+        {
+          "source": "action",
+          "target": "action",
+          "type": "string"
+        }
+      ],
+      "expected": {
+        "action": "allow"
+      }
+    },
+    {
+      "id": "typed-nbsp-is-a-value",
+      "raw": "{\"value\":\"\\u00a0\",\"action\":\"allow\"}",
+      "mappings": [
+        {
+          "source": "value",
+          "target": "custom.value",
+          "type": "string"
+        },
+        {
+          "source": "action",
+          "target": "action",
+          "type": "string"
+        }
+      ],
+      "expected": {
+        "action": "allow",
+        "custom": {
+          "value": " "
+        }
+      }
+    },
+    {
       "id": "typed-scientific-predicate",
       "raw": "{\"kindnum\":1e-7,\"value\":\"allow\"}",
       "mappings": [

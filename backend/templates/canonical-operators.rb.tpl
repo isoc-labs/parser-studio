@@ -392,7 +392,9 @@ def parserstudio_apply_field_maps(original, normalized, maps, ignored)
       begin
         next unless parserstudio_when_applies?(original, rule)
         raw = parserstudio_lookup(original, source, rule['source_path_kind'])
-        next if raw.nil? || (raw.is_a?(String) && ignored.include?(raw))
+        # A string of nothing but ASCII white space is a missing value, like ''.
+        next if raw.nil? || (raw.is_a?(String) &&
+          (ignored.include?(raw) || parserstudio_trim_ascii(raw).empty?))
         converted = parserstudio_coerce(raw, rule)
         if section != 'vendorFields' && !parserstudio_stellar7_value_valid?(rule['normalized_name'], raw, converted)
           raise ArgumentError, 'Invalid official Stellar field value'
