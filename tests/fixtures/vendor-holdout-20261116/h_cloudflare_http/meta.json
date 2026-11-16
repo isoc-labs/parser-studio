@@ -1,0 +1,31 @@
+{
+ "vendor": "Cloudflare HTTP requests (Logpush)",
+ "family": "flat JSON with a nanosecond integer",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 1,
+ "unit": "line",
+ "note": "1731719701123456789 is above 2^53: it must come out digit for digit or be diagnosed",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "203.0.113.77"
+   },
+   "values": {
+    "EdgeStartTimestamp": "1731719701123456789",
+    "EdgeEndTimestamp": "1731719701223456789",
+    "RayID": "8e1a2b3c4d5e6f70",
+    "ClientRequestURI": "/admin?x=1",
+    "SecurityAction": "block",
+    "ClientSrcPort": 40022
+   },
+   "forbid": [
+    [
+     "x_EdgeStartTimestamp",
+     "1731719701123456800"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "aee20e2c15a02251f92c0fd1d443526c7ac0eb4c4f42dd364338d8ff53d44309"
+}

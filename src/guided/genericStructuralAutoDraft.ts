@@ -10,8 +10,14 @@ import {vendorFieldNames} from './vendorFieldNames';
 import type {MultiPassSourcePreview} from './multipassPreviewClient';
 
 const MAX_EXPLICIT_MAPPINGS=100;
+/** A new Generic Structural parser reads CEF/LEEF lines with the dedicated grammar or declines them (D-2). */
+const FAMILY_GRAMMAR='dedicated' as const;
+// What the reading says about itself, not a value of the event: which grammar route read the line, with which
+// separator and profile, which Syslog header variant matched and how strictly. These stay in the source container
+// (parserstudio_source) and never become a vendor field: `variant="rfc3164"` or `confidence="strict"` beside the
+// fields of a firewall record would be output the device did not send.
 const NON_DATA_PATHS=new Set([
-  'generic.mode','generic.delimiter',
+  'generic.mode','generic.delimiter','generic.profile','syslog.variant','syslog.confidence',
 ]);
 
 function sourcePaths(source:string,draft:ParserDraft):{paths:string[];profile?:GenericStructuralProfile}|null{
@@ -19,7 +25,12 @@ function sourcePaths(source:string,draft:ParserDraft):{paths:string[];profile?:G
   if(boundary!=='single-line')return null;
   const records=splitEvents(source,boundary,MAX_EVENTS+1);
   if(!records.length||records.length>MAX_EVENTS)return null;
-  const legacy=records.map(record=>extractGenericStructural(record.raw));
+  // The draft built from these paths always reads CEF/LEEF lines with the dedicated grammar (owner policy D-2), so
+  // the paths are discovered with the same grammar. Discovering them with the earlier reading named fields
+  // (generic.kv.*) that the preview and the generated parser never produce for such a line: every automatic mapping
+  // pointed at nothing and no recommended Stellar match could be applied to it.
+  const extract=(raw:string,candidate?:GenericStructuralProfile)=>extractGenericStructural(raw,candidate,FAMILY_GRAMMAR);
+  const legacy=records.map(record=>extract(record.raw));
   // Prefer one existing profile when it supports every record. Only the explicit
   // versioned combination may select both additional grammars in one project.
   const ownsLeefFamily=records.some(record=>record.raw.startsWith('LEEF:2.0|'));
@@ -27,11 +38,11 @@ function sourcePaths(source:string,draft:ParserDraft):{paths:string[];profile?:G
     ?['leef2_implicit_tab',GENERIC_STRUCTURAL_MIXED_PROFILE_V1]:GENERIC_STRUCTURAL_PROFILES;
   const needsProfile=ownsLeefFamily||legacy.some(extracted=>extracted.errors.length>0);
   const profile=needsProfile?candidates.find(candidate=>records.every(record=>
-    extractGenericStructural(record.raw,candidate).errors.length===0)):undefined;
+    extract(record.raw,candidate).errors.length===0)):undefined;
   if(needsProfile&&!profile)return null;
   const all=new Set<string>();
   for(const [index,record] of records.entries()){
-    const extracted=profile?extractGenericStructural(record.raw,profile):legacy[index]!;
+    const extracted=profile?extract(record.raw,profile):legacy[index]!;
     if(extracted.errors.length)return null;
     for(const path of listSafeLeafPaths(extracted.fields)){
       if(NON_DATA_PATHS.has(path)||path.endsWith('.source_raw'))continue;
@@ -84,7 +95,7 @@ export function buildAutomaticGenericStructuralDraft(
   if(discovery.profile)candidate.genericStructuralProfile=discovery.profile;
   else delete candidate.genericStructuralProfile;
   // A new parser: CEF/LEEF lines are read by the dedicated grammar or declined (owner policy D-2).
-  candidate.genericStructuralFamilyGrammar='dedicated';
+  candidate.genericStructuralFamilyGrammar=FAMILY_GRAMMAR;
   let candidateSuite=preview(source,candidate);
 
   const suggestions=suggestNormalizationCandidatesFromSuite(

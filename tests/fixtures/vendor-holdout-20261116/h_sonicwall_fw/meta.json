@@ -1,0 +1,70 @@
+{
+ "vendor": "SonicWall SonicOS",
+ "family": "syslog PRI + kv with composite address values",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "src and dst are address:port:interface; fw= is the firewall WAN address, not the source",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443,
+    "username": "jkim"
+   },
+   "values": {
+    "src": "10.1.10.25:51544:X0",
+    "dst": "142.250.196.14:443:X1",
+    "fw": "203.0.113.5",
+    "msg": "Connection Opened",
+    "proto": "tcp/https"
+   },
+   "forbid": [
+    [
+     "srcip",
+     "10.1.10.25:51544:X0"
+    ],
+    [
+     "dstip",
+     "142.250.196.14:443:X1"
+    ],
+    [
+     "srcip",
+     "203.0.113.5"
+    ],
+    [
+     "proto_name",
+     "tcp/https"
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "action": "drop"
+   },
+   "values": {
+    "src": "203.0.113.77:40022:X1",
+    "dst": "10.1.10.9:22:X0",
+    "fw_action": "drop"
+   },
+   "forbid": [
+    [
+     "srcip",
+     "203.0.113.77:40022:X1"
+    ],
+    [
+     "dstip",
+     "10.1.10.9:22:X0"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "b83e373e73aa5603a005e8bf5c679d5303c98a59b9f22d135da02dac641a1c93"
+}

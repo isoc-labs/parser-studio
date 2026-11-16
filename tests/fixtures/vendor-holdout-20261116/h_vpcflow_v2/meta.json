@@ -1,0 +1,41 @@
+{
+ "vendor": "AWS VPC Flow Logs (version 2, default format)",
+ "family": "space-separated positions without names",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "ASSISTED",
+ "events": 2,
+ "unit": "line",
+ "note": "",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443
+   },
+   "values": {},
+   "forbid": [
+    [
+     "srcport",
+     443
+    ],
+    [
+     "dstport",
+     51544
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22
+   },
+   "values": {},
+   "forbid": []
+  }
+ ],
+ "raw_sha256": "da5176b2cde04f3522d9b6e2dd92a298c3330ce9e2b545e49aa0cc5f3b4eb675"
+}

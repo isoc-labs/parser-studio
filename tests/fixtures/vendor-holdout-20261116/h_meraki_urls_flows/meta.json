@@ -1,0 +1,55 @@
+{
+ "vendor": "Cisco Meraki MX",
+ "family": "syslog + space kv, composite address and trailing text",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "\"pattern: deny all\" and \"request: GET ...\" are trailing text, not part of dport or agent",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443
+   },
+   "values": {
+    "src": "10.1.10.25:51544",
+    "dst": "142.250.196.14:443",
+    "agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "mac": "C0:EA:E4:12:34:56"
+   },
+   "forbid": [
+    [
+     "srcip",
+     "10.1.10.25:51544"
+    ],
+    [
+     "dstip",
+     "142.250.196.14:443"
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "proto_name": "tcp"
+   },
+   "values": {
+    "sport": "40022",
+    "protocol": "tcp"
+   },
+   "forbid": [
+    [
+     "dstport",
+     "22 pattern: deny all"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "f1647b3dd4ec95834efc21a290e0075a13ac206a23ba097758c02a5dc00cf38f"
+}

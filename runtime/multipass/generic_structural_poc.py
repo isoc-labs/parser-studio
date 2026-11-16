@@ -1096,6 +1096,66 @@ def _generic_event(raw:str,start:int,outer:SourceEvent|None,syntax:str,
     return out
 
 
+# The whole message of the adjacent form: name="value" pairs joined by a comma, with nothing but blanks after
+# it (the F5 documentation wraps the record after some commas), every name one plain word, every value in
+# double quotes. A value holds no quote. It may hold a backslash, which is text (F5 writes the line breaks of
+# a request as the four characters `\r\n`), except directly before a quote: whether `\"` ends the value is
+# not for this route to decide. Nothing looser is this form: a word before the first name would become part of
+# that name, and an apostrophe in an unquoted value would be read as an opening quote that swallows the pairs
+# up to the next apostrophe.
+_ADJACENT_VALUE=r'"(?:[^"\\]|\\(?!"))*"'
+# Names every JavaScript object already has. The browser reading does not hold such a name as a plain field
+# (src/genericStructural.ts declines some and fails on others), so a record with one keeps its earlier verdict.
+_JS_OBJECT_MEMBERS=frozenset((
+    '__proto__','constructor','prototype','toString','toLocaleString','valueOf','hasOwnProperty',
+    'isPrototypeOf','propertyIsEnumerable','__defineGetter__','__defineSetter__','__lookupGetter__',
+    '__lookupSetter__'))
+_ADJACENT_COMMA_RECORD=re.compile(
+    r'[A-Za-z_][A-Za-z0-9_]*='+_ADJACENT_VALUE+r'(?:, *[A-Za-z_][A-Za-z0-9_]*='+_ADJACENT_VALUE+r')+\Z')
+
+
+def _adjacent_tag_comma_kv(raw:str,recipe:StructuralRecipe|None)->SourceEvent|None:
+    """`<PRI>Mmm dd hh:mm:ss host TAG:key="value",key="value",...` - the tag directly followed by the record.
+
+    F5 BIG-IP ASM sends its key-value log this way. The browser envelope (src/syslogEnvelope.ts) reads a tag
+    followed by zero or more blanks. This route accepts the frame only when the whole message after the colon is
+    two or more name="value" pairs joined by a comma and optional blanks (_ADJACENT_COMMA_RECORD), read completely as that record,
+    with no name repeated (owner policy D-1). A message that is
+    anything else - space-separated pairs, CEF or LEEF, free text, words before the first name, a value that is
+    not in double quotes, a record that does not parse - is not taken
+    here and keeps the RFC 3164 verdict of the caller: it must not reach a fallback that would read the line
+    from the PRI again and leave the tag glued to the first pair.
+    """
+    framed=extract_rfc3164(raw,adjacent=True)
+    if framed is None:
+        return None
+    fragment,start=framed
+    if fragment.issues or start is None:
+        return None
+    if _ADJACENT_COMMA_RECORD.match(raw,start) is None:
+        return None
+    outer=SourceEvent(raw,syntax='GENERIC_RFC3164_ENVELOPE')
+    outer.vendor_fields=fragment.fields
+    outer.value_spans=[_span(path,raw,a,b) for path,a,b in fragment.spans]
+    outer.primitive_fields=len(outer.value_spans)
+    candidate=_generic_event(
+        raw,start,outer,'GENERIC_RFC3164_BODY',
+        force_mode=(recipe.mode if recipe is not None and recipe.mode!='auto' else None),
+    )
+    if candidate is None or candidate.status!='SOURCE_PARSED' or not candidate.syntax.endswith('+COMMA_KV'):
+        return None
+    generic=candidate.vendor_fields.get('generic')
+    fields=generic.get('fields') if isinstance(generic,dict) else None
+    if not isinstance(fields,dict) or any(isinstance(value,list) for value in fields.values()):
+        return None
+    if not _JS_OBJECT_MEMBERS.isdisjoint(fields):
+        return None
+    # The record starts directly after the colon: text between the tag and the first name is not this form.
+    if generic.get('prefix_tokens'):
+        return None
+    return candidate
+
+
 def parse_generic_structural(raw:str,recipe:StructuralRecipe|None=None)->SourceEvent:
     if not isinstance(raw,str):raise TypeError('RAW_NOT_STRING')
     if not raw or len(raw.encode('utf8'))>MAX_RAW_BYTES or '\x00' in raw:
@@ -1140,6 +1200,11 @@ def parse_generic_structural(raw:str,recipe:StructuralRecipe|None=None)->SourceE
         is not None
     )
     if looks_rfc3164 and extract_rfc3164(raw) is None:
+        # One narrow exception: the tag directly followed by a complete comma-separated key="value" record.
+        # Everything else keeps the verdict above; no later fallback may read such a line again.
+        adjacent=_adjacent_tag_comma_kv(raw,recipe)
+        if adjacent is not None:
+            return adjacent
         result=deepcopy(standard)
         if 'RFC3164_HEADER_INVALID' not in result.issues:
             result.issues.append('RFC3164_HEADER_INVALID')

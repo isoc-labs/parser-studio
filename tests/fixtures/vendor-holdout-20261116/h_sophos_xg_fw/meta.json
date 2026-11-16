@@ -1,0 +1,66 @@
+{
+ "vendor": "Sophos Firewall (SFOS)",
+ "family": "kv, no syslog header",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443,
+    "username": "jkim"
+   },
+   "values": {
+    "device_name": "XG210",
+    "tran_src_ip": "203.0.113.5",
+    "tran_src_port": "40112",
+    "sent_bytes": "2345",
+    "recv_bytes": "6789",
+    "status": "Allow",
+    "protocol": "TCP"
+   },
+   "forbid": [
+    [
+     "srcip",
+     "203.0.113.5"
+    ],
+    [
+     "srcport",
+     40112
+    ],
+    [
+     "dstport",
+     0
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22
+   },
+   "values": {
+    "status": "Deny",
+    "log_subtype": "Denied"
+   },
+   "forbid": [
+    [
+     "dstport",
+     0
+    ],
+    [
+     "srcport",
+     0
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "422b78d48cd5c964b1ff0c3795bd468971cff326e8fadbf64996ee536b76088b"
+}

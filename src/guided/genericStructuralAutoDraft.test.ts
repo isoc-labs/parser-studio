@@ -1,6 +1,8 @@
 import {describe,it,expect} from 'vitest';
 import {createDraft} from '../model';
 import {buildAutomaticGenericStructuralDraft} from './genericStructuralAutoDraft';
+import {suggestNormalizationCandidatesFromSuite} from './normalizationCandidates';
+import {listSafeLeafPaths} from '../fieldPaths';
 
 describe('beginner automatic Generic Structural handoff',()=>{
   it('prepares named BIG-IP fields while requiring review for competing hostname aliases',()=>{
@@ -61,5 +63,43 @@ describe('beginner automatic Generic Structural handoff',()=>{
     expect(buildAutomaticGenericStructuralDraft(raw,createDraft())).not.toBeNull();
     const withRelay={...createDraft(),forwarder:{maxHops:1 as const,relayHosts:['relay-a']}};
     expect(buildAutomaticGenericStructuralDraft(raw,withRelay)).toBeNull();
+  });
+
+  // The paths of the automatic mappings and the preview of the same draft come from one grammar. A CEF or LEEF line
+  // is read by the dedicated grammar (owner policy D-2); paths taken from the earlier reading (generic.kv.*) do not
+  // exist in the preview or in the generated parser, so every mapping pointed at nothing and the six correct Stellar
+  // matches of this F5 line were left as "Apply 6 recommended matches".
+  const F5_ASM_CEF='<134>Sep 19 13:35:00 bigip-4.pme-ds.f5.com ASM:CEF:0|F5|ASM|11.3.0|Successful Request|Successful Request|2| dvchost=bigip-4.pme-ds.f5.com dvc=172.16.73.34 cs1=topaz4-web4 cs1Label=policy_name externalId=18205860747014045699 act=passed cn1=200 cn1Label=response_code src=10.4.1.101 spt=52963 dst=10.4.1.200 dpt=80 requestMethod=GET app=HTTP rt=Sep 19 2012 13:35:00';
+  const FAMILY_LINES:Record<string,string>={
+    'CEF behind an RFC 3164 header and a tag':F5_ASM_CEF,
+    'bare CEF':'CEF:0|Check Point|VPN-1 & FireWall-1|Check Point|Log|https|Unknown|act=Accept dst=203.0.113.9 dpt=443 src=10.1.1.5 spt=51000 proto=6',
+    'bare LEEF 2.0, tab separated':'LEEF:2.0|Vendor|Product|1.0|100|src=10.1.1.5\tdst=203.0.113.9\tsrcPort=51000\tdstPort=443',
+    'CEF behind an RFC 5424 header':'<134>1 2026-11-13T10:00:00Z fw01 app 100 ID1 - CEF:0|Vendor|Product|1.0|100|Name|5|src=10.1.1.5 dst=203.0.113.9 spt=51000 dpt=443 act=blocked',
+    'key=value behind a PRI':'<134>Nov 13 10:00:00 srcip=10.1.1.1 dstip=203.0.113.9 srcport=1000 dstport=443 action=allow',
+  };
+  for(const [name,raw] of Object.entries(FAMILY_LINES)){
+    it('maps only fields the preview produces and leaves no recommended match to apply by hand: '+name,()=>{
+      const result=buildAutomaticGenericStructuralDraft(raw,createDraft());
+      expect(result).not.toBeNull();
+      const {draft,suite}=result!;
+      const produced=new Set(suite.events.flatMap(event=>listSafeLeafPaths(event.fields)));
+      expect(draft.mappings.filter(mapping=>!produced.has(mapping.source)).map(mapping=>mapping.source)).toEqual([]);
+      // What the reading says about itself is not a vendor field: no mapping emits a value the device did not send.
+      expect(draft.mappings.map(mapping=>mapping.source).filter(source=>
+        ['generic.mode','generic.delimiter','generic.profile','syslog.variant','syslog.confidence'].includes(source))).toEqual([]);
+      const left=suggestNormalizationCandidatesFromSuite(suite,draft.mappings,draft.guided!.groups)
+        .filter(candidate=>candidate.confidence==='HIGH'&&candidate.safeForBulk);
+      expect(left.map(candidate=>candidate.source+' -> '+candidate.target)).toEqual([]);
+    });
+  }
+  it('applies the Stellar matches of an F5 ASM CEF line without a click',()=>{
+    const result=buildAutomaticGenericStructuralDraft(F5_ASM_CEF,createDraft())!;
+    const official=Object.fromEntries(result.draft.mappings
+      .filter(mapping=>result.draft.guided!.groups[mapping.id]!=='vendor_fields').map(mapping=>[mapping.source,mapping.target]));
+    expect(official).toEqual({'body.act':'action','body.dpt':'dstport','body.dst':'dstip','body.spt':'srcport',
+      'body.src':'srcip','syslog.hostname':'hostname'});
+    expect(result.automaticOfficialMappings).toBe(6);
+    expect(result.suite.events[0]!.normalized).toMatchObject({action:'passed',dstport:80,dstip:'10.4.1.200',
+      srcport:52963,srcip:'10.4.1.101',hostname:'bigip-4.pme-ds.f5.com'});
   });
 });

@@ -1,0 +1,35 @@
+{
+ "vendor": "Windows Security 4625 forwarded by NXLog (JSON)",
+ "family": "flat JSON",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 1,
+ "unit": "line",
+ "note": "Keywords is a 64-bit integer below -2^53",
+ "oracle": [
+  {
+   "canon": {},
+   "values": {
+    "Hostname": "DC01.corp.example.com",
+    "TargetUserName": "jkim",
+    "TargetDomainName": "CORP",
+    "IpAddress": "10.1.10.25",
+    "IpPort": "51544",
+    "EventID": 4625,
+    "Keywords": "-9218868437227405312",
+    "Status": "0xc000006d"
+   },
+   "forbid": [
+    [
+     "severity",
+     "ERROR"
+    ],
+    [
+     "srcip",
+     "DC01.corp.example.com"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "d63854f4880ad284228b7013c31e04c19beabace6a48ebfb5683bdbdd37a7a72"
+}

@@ -3,7 +3,7 @@ import {hasAmbiguousFieldPath,hasAmbiguousSourceFields,listSafeLeafPaths,lookupF
 import {sha256Utf8Hex} from '../sha256';
 import {defaultGuidedOptions,type FieldGroup} from './contract';
 import {findStellarMetadataField,STELLAR_METADATA_CATALOG_PROVENANCE} from './stellarMetadataCatalog';
-import {explicitPortSourceAlias,sourceHasExcludedPortSegment,valueFitsNormalizationTarget} from './normalizationCandidates';
+import {explicitPortSourceAlias,fortiGateFalseFriend,sourceHasExcludedPortSegment,valueFitsNormalizationTarget} from './normalizationCandidates';
 import {createCanonicalMappingPlan} from './canonicalMappingPlan';
 import {validateNormalizationMappings,isBlockingNormalizationFinding} from './normalizationValidation';
 import {toBackendProject} from './backendAdapter';
@@ -163,9 +163,7 @@ function semanticConflict(source:string,target:string,suite:SuiteResult):string|
     const found=lookupFieldValue(e.fields,source);
     return found.found&&['TRAFFIC','THREAT','SYSTEM','CONFIG'].includes(String(found.value).toUpperCase());
   }))return 'The PAN-OS event category is not the Stellar Windows-agent type field.';
-  const fortios=suite.events.some(e=>lookupFieldValue(e.fields,'logid').found&&lookupFieldValue(e.fields,'type').found&&
-    (lookupFieldValue(e.fields,'vd').found||lookupFieldValue(e.fields,'srcintf').found));
-  if(fortios&&['type','eventtype','event_type','direction','duration','hostname'].includes(leaf))
+  if(fortiGateFalseFriend(source,suite.events.map(e=>e.fields)))
     return 'FortiOS semantics or measurement units differ from the Stellar field.';
   if(['srcport','dstport'].includes(target)&&!explicitPortSourceAlias(source,target)&&suite.events.some(e=>{
     if(!lookupFieldValue(e.fields,source).found)return false;

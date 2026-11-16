@@ -1,0 +1,42 @@
+{
+ "vendor": "Palo Alto Networks PAN-OS 10.x",
+ "family": "syslog + positional CSV, THREAT/url record",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 1,
+ "unit": "line",
+ "note": "a THREAT record has another column order than TRAFFIC after position 31; traffic names must not be applied to it",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.31",
+    "dstip": "198.51.100.80",
+    "srcport": 50211,
+    "dstport": 80,
+    "hostname": "PA-850-HQ"
+   },
+   "values": {
+    "user": "corp\\mlee",
+    "url": "bad.example.net/dl/a.exe?x=1&y=2",
+    "act": "block-url",
+    "rule": "LAN-to-WAN",
+    "nat": "203.0.113.5"
+   },
+   "forbid": [
+    [
+     "srcip",
+     "203.0.113.5"
+    ],
+    [
+     "dstport",
+     50211
+    ],
+    [
+     "srcport",
+     80
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "17aac9a915a5dd890979b09a231641bc879502ccd11c0dd080154cd51839b0d0"
+}

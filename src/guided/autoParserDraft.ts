@@ -99,10 +99,13 @@ export function prepareAutoParserDraft(
     };
     const fieldPlan=suggestUnmappedFieldPlan(
       suite.events.map(event=>event.fields),blank);
+    // A field is left out of the automatic mapping only when no event of the sample carries a value for it. One
+    // empty occurrence used to remove the field for every event: `user_name=""` on a denied connection dropped
+    // `user_name="jkim"` of the allowed one from the generated parser, and nothing else in the output kept it.
     const suggestions=fieldPlan.suggestions.filter(suggestion=>
-        suite.events.every(event=>{
+        suite.events.some(event=>{
           const found=lookupFieldValue(event.fields,suggestion.source);
-          if(!found.found)return true;
+          if(!found.found)return false;
           const value=found.value;
           return value!==undefined&&value!==null&&
             !(typeof value==='string'&&value.trim()==='');

@@ -1,0 +1,29 @@
+{
+ "vendor": "Trend Micro Deep Security",
+ "family": "syslog + LEEF 2.0 (tab separated)",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 1,
+ "unit": "line",
+ "note": "",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "action": "Deny"
+   },
+   "values": {
+    "name": "Remote Domain Enforcement (Split Tunnel)",
+    "dvchost": "web01.corp.example.com",
+    "cs3Label": "Fragmentation Bits",
+    "proto": "TCP",
+    "srcMAC": "78:FD:E7:07:9F:2C"
+   },
+   "forbid": []
+  }
+ ],
+ "raw_sha256": "cc7e3cd979db6b62ba146e4aba0a9af8fe0bb47d148c4dadcc50ed18b9802b57"
+}

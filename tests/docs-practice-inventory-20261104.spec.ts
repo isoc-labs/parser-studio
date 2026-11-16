@@ -81,10 +81,14 @@ test.describe('actual published Parser Studio documentation practice corpus',()=
         officialCount=result.filter(row=>row.group==='official').length;
         vendorCount=result.filter(row=>row.group==='vendor').length;
         if(item.file==='06-panos-traffic-issue.log'){
-          // Three non-data structural bookkeeping paths are intentionally
-          // excluded; the 97 source-backed values must all survive.
+          // Six paths say how the line was read, not what the device sent, and
+          // are intentionally excluded (three structural bookkeeping paths,
+          // and since 2026-11-16 syslog.variant, syslog.confidence and
+          // generic.profile); the 94 source-backed values must all survive.
           expect(fieldCount).toBe(100);
-          expect(result).toHaveLength(97);
+          expect(result).toHaveLength(94);
+          expect(result.map(row=>row.source).filter(source=>
+            /(^|\.)(syslog\.(variant|confidence)|generic\.(profile|mode|delimiter))$/.test(source))).toEqual([]);
         }
         if(item.file==='01-juniper-srx.log'){
           const mapped=(suffix:string)=>result.find(x=>x.source==='syslog_sd.element_1.params.'+suffix);

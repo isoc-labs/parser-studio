@@ -1,0 +1,37 @@
+{
+ "vendor": "Imperva Cloud WAF (Incapsula)",
+ "family": "bare CEF with escapes and a URL",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 1,
+ "unit": "line",
+ "note": "Imperva puts the client port in cpt and the server port in spt: spt is not the source port here",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "203.0.113.77"
+   },
+   "values": {
+    "request": "site.example.com/admin?x=1&y=2",
+    "qstr": "x=1&y=2",
+    "requestClientApplication": "Mozilla/5.0 (Windows NT 6.1; WOW64)",
+    "act": "REQ_BLOCKED_SECURITY",
+    "sip": "10.1.10.9",
+    "cpt": "40022",
+    "spt": "443",
+    "fileId": "3412341160002518171"
+   },
+   "forbid": [
+    [
+     "action",
+     "REQ_BLOCKED_SECURITY"
+    ],
+    [
+     "srcport",
+     443
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "d083ac8a411c4bba9bbeed3cd21934189ae539e35441ac2c9abbc482ff4f7a9a"
+}

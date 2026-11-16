@@ -1,0 +1,46 @@
+{
+ "vendor": "AWS CloudTrail (one record per line, as delivered by CloudWatch Logs or Kinesis)",
+ "family": "nested JSON",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "203.0.113.77"
+   },
+   "values": {
+    "userName": "jkim",
+    "eventName": "ConsoleLogin",
+    "eventTime": "2026-11-16T01:15:01Z",
+    "ConsoleLogin": "Failure",
+    "errorMessage": "Failed authentication"
+   },
+   "forbid": [
+    [
+     "event_type",
+     "AwsConsoleSignIn"
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "198.51.100.20"
+   },
+   "values": {
+    "eventName": "DeleteBucket",
+    "bucketName": "corp-logs",
+    "awsRegion": "ap-northeast-2"
+   },
+   "forbid": [
+    [
+     "hostname",
+     "corp-logs.s3.ap-northeast-2.amazonaws.com"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "fb980b7793f5c6e42b454e940a8199214928306124ee30d6320fa8eefd667b39"
+}

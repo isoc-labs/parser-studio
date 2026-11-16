@@ -249,4 +249,34 @@ const scoped=suggest([{src_ip:'192.0.2.1'}],
   [{...mismatch,type:'ip',when:{sourcePath:'event',operator:'in',values:['login']}}],
   {'auto-1':'top_fields'});
 assert.equal(scoped.length,1,'scoped rules do not suppress global official mapping');
+// One vendor record has one meaning in every reading (2026-11-16). The KV and JSON formats hold a record at the
+// root; Generic Structural holds it under generic.kv, a Syslog-wrapped body under body. The evidence that names the
+// record is beside the field or in a container around it, never in an unrelated sibling.
+const fortiWeb={hostname:'bad.example.net',direction:'outgoing',logid:'0316013056',vd:'root',type:'utm'};
+absent({generic:{kv:fortiWeb}},'generic.kv.hostname');
+absent({generic:{kv:fortiWeb}},'generic.kv.direction');
+absent({body:fortiWeb},'body.hostname');
+// A FortiGate record without vd is named by its source interface.
+absent({generic:{kv:{hostname:'bad.example.net',logid:'0316013056',srcintf:'internal',type:'utm'}}},'generic.kv.hostname');
+absent({hostname:'bad.example.net',logid:'0316013056',srcintf:'internal',type:'utm'},'hostname');
+absent({body:{logid:'0316013056',vd:'root',type:'utm',request:{hostname:'bad.example.net'}}},'body.request.hostname');
+high({generic:{kv:{hostname:'sensor1',vd:'root',type:'utm'}}},'generic.kv.hostname','hostname','string');
+high({hostname:'sensor1',other:{logid:'0316013056',vd:'root',type:'utm'}},'hostname','hostname','string');
+assert.equal(mod.fortiGateFalseFriend('generic.kv.hostname',[{generic:{kv:fortiWeb}}]),true);
+assert.equal(mod.fortiGateFalseFriend('hostname',[fortiWeb]),true);
+assert.equal(mod.fortiGateFalseFriend('generic.kv.srcip',[{generic:{kv:{...fortiWeb,srcip:'192.0.2.1'}}}]),false);
+assert.equal(mod.fortiGateFalseFriend('generic.kv.hostname',[{generic:{kv:{hostname:'sensor1',type:'utm'}}}]),false);
+absent({body:{event_type:'alert',alert:{signature_id:99,severity:2}}},'body.alert.severity');
+high({body:{event_type:'flow',alert:{signature_id:99,severity:2}}},'body.alert.severity','severity','integer');
+// The evidence of a record is in one container: pieces at different levels do not make a FortiGate record, and
+// a key of the same name deeper inside does not hide the alert that contains it.
+high({type:'alert',agent:{logid:'0316013056',vd:'root',hostname:'sensor1'}},'agent.hostname','hostname','string');
+absent({event_type:'alert',alert:{signature_id:99,severity:2,event_type:'x'}},'alert.severity');
+// Imperva Cloud WAF writes the client port as cpt and uses spt for the server port: spt beside cpt is not the
+// source port. Without cpt the CEF dictionary stands (asserted above: spt with protocol tcp is srcport).
+absent({spt:443,cpt:40022,protocol:'tcp'},'spt');
+absent({body:{spt:443,cpt:40022,protocol:'tcp'}},'body.spt');
+high({body:{spt:443,protocol:'tcp'}},'body.spt','srcport','integer');
+high({spt:443,protocol:'tcp',other:{cpt:40022}},'spt','srcport','integer');
+high({body:{spt:443,protocol:'tcp'},cpt:40022},'body.spt','srcport','integer');
 console.log('INDEPENDENT_ORACLE_PASS');

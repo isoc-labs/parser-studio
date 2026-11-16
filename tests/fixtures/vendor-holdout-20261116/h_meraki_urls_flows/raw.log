@@ -1,0 +1,2 @@
+<134>1 1731719701.123456789 MX84-HQ urls src=10.1.10.25:51544 dst=142.250.196.14:443 mac=C0:EA:E4:12:34:56 agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64)' request: GET https://www.example.com/index.html
+<134>1 1731719704.223456789 MX84-HQ flows src=203.0.113.77 dst=10.1.10.9 mac=00:17:C5:11:22:33 protocol=tcp sport=40022 dport=22 pattern: deny all

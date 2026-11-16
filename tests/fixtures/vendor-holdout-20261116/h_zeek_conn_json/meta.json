@@ -1,0 +1,48 @@
+{
+ "vendor": "Zeek conn.log (JSON writer)",
+ "family": "JSON with dotted key names",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "\"id.orig_h\" is one key that contains dots, not a nested object",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443,
+    "proto_name": "tcp"
+   },
+   "values": {
+    "uid": "CHhAvVGS1DHFjwGM9",
+    "orig_bytes": 2345,
+    "resp_bytes": 6789,
+    "conn_state": "SF",
+    "service": "ssl"
+   },
+   "forbid": [
+    [
+     "proto_name",
+     "ssl"
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "proto_name": "tcp"
+   },
+   "values": {
+    "uid": "C8vC0u3xk1f9oH2Rb5",
+    "conn_state": "S0"
+   },
+   "forbid": []
+  }
+ ],
+ "raw_sha256": "887251c03be1ae32e535141ec4bfd65c53e5004d893d12697870bf7b2a5d531e"
+}

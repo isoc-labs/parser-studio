@@ -1,0 +1,32 @@
+{
+ "vendor": "OpenSSH sshd via rsyslog",
+ "family": "RFC 3164 + free text",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "ASSISTED",
+ "events": 2,
+ "unit": "line",
+ "note": "",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "srcport": 40022,
+    "hostname": "web01",
+    "username": "admin"
+   },
+   "values": {},
+   "forbid": []
+  },
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "srcport": 51544,
+    "hostname": "web01",
+    "username": "jkim"
+   },
+   "values": {},
+   "forbid": []
+  }
+ ],
+ "raw_sha256": "894102e94152a75631f5ec2d407e818c77486c7c0b60b0928dc4d477b0b22913"
+}

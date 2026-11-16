@@ -1,0 +1,54 @@
+{
+ "vendor": "Suricata EVE alert sent through syslog",
+ "family": "RFC 5424 + JSON",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "alert.severity is the Suricata priority 1-4, not the Stellar 0-100 severity",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "203.0.113.71",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "hostname": "ids01"
+   },
+   "values": {
+    "signature_id": 2010935,
+    "severity": 2,
+    "signature": "ET SCAN Suspicious inbound to MSSQL port 1433",
+    "category": "Potentially Bad Traffic"
+   },
+   "forbid": [
+    [
+     "severity",
+     2
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.72",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "hostname": "ids01"
+   },
+   "values": {
+    "signature_id": 2010935,
+    "severity": 2,
+    "signature": "ET SCAN Suspicious inbound to MSSQL port 1433",
+    "category": "Potentially Bad Traffic"
+   },
+   "forbid": [
+    [
+     "severity",
+     2
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "3d1dd53af5cdb50952c27d0b049a889042bd4dead0e36a178e80506192fed9d8"
+}

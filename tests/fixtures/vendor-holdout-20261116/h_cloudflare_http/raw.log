@@ -1,0 +1,1 @@
+{"ClientIP":"203.0.113.77","ClientRequestHost":"www.example.com","ClientRequestMethod":"GET","ClientRequestURI":"/admin?x=1","ClientSrcPort":40022,"EdgeEndTimestamp":1731719701223456789,"EdgeResponseBytes":6789,"EdgeResponseStatus":403,"EdgeStartTimestamp":1731719701123456789,"RayID":"8e1a2b3c4d5e6f70","SecurityAction":"block","WAFRuleID":"100015"}
