@@ -6,6 +6,7 @@ from __future__ import annotations
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import socket
 import ssl
@@ -50,6 +51,9 @@ class SecurePreviewHost(unittest.TestCase):
             self.assertNotIn(credential, installer)
 
     def test_nginx_public_no_login_https_and_post_origin_gate(self):
+        # This test starts the system nginx binary. As root that binary acts on the host with root's rights (it
+        # creates its state directories and hands them to its worker user), so the test refuses before starting it.
+        self.assertNotEqual(os.geteuid(),0,'run this suite as an unprivileged user, never as root')
         with tempfile.TemporaryDirectory(prefix='parser-studio-vhost-') as temp:
             root=Path(temp)
             static=root/'www'
@@ -172,7 +176,8 @@ class SecurePreviewHost(unittest.TestCase):
                     # A generated parser is above nginx's memory buffer for a request body (16 KB): the body goes
                     # through the temporary directory, which must be the fixture's own.
                     self.assertEqual(request('/api/v1/parser-pairs/package','POST','https://app.parser.xdr.ooo',size=200_000)[0],200)
-                    self.assertTrue((root/'tmp-body').is_dir(),'nginx did not use the body directory of the fixture')
+                    for name in ('body','proxy','fastcgi','uwsgi','scgi'):
+                        self.assertTrue((root/f'tmp-{name}').is_dir(),f'nginx did not keep its {name} directory inside the fixture')
                 finally:
                     process.terminate()
                     process.wait(timeout=8)
