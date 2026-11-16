@@ -80,14 +80,33 @@ function unsupportedPortProtocolInEvent(
 // meanings from Stellar's context-specific names or require unit conversion.
 // Restrict the guard to records with FortiOS's recognizable field family so
 // Windows/EDR payloads with independently supported semantics stay unaffected.
-function fortiGateRecord(fields:Record<string,unknown>):boolean{
-  return lookupFieldValue(fields,'logid').found&&
-    (lookupFieldValue(fields,'vd').found||lookupFieldValue(fields,'srcintf').found)&&
-    lookupFieldValue(fields,'type').found;
+/** A field of the record that `source` belongs to. One vendor record is read at the root by the KV and JSON formats
+ * and inside a container by others (generic.kv.*, body.*, a Syslog-wrapped JSON body). What a record is does not
+ * depend on which reading produced it, so the evidence is looked up beside the source and in every container
+ * around it, the root last. Looking at the root only left the guards below silent for the same record behind a PRI:
+ * a FortiGate web-filter line read by Generic Structural had its requested web host mapped to Stellar hostname. */
+function recordField(fields:Record<string,unknown>,source:string,name:string):ReturnType<typeof lookupFieldValue>{
+  const parts=source.split('.');
+  for(let depth=parts.length-1;depth>0;depth--){
+    const found=lookupFieldValue(fields,parts.slice(0,depth).join('.')+'.'+name);
+    if(found.found)return found;
+  }
+  return lookupFieldValue(fields,name);
+}
+function fortiGateRecord(fields:Record<string,unknown>,source:string):boolean{
+  return recordField(fields,source,'logid').found&&
+    (recordField(fields,source,'vd').found||recordField(fields,source,'srcintf').found)&&
+    recordField(fields,source,'type').found;
 }
 const FORTINET_FALSE_FRIENDS=new Set([
   'type','eventtype','event_type','direction','duration','hostname',
 ]);
+/** One rule for every consumer (automatic candidates and reviewed ChatGPT proposals): a FortiOS field whose name
+ * equals a Stellar field of another meaning or unit. */
+export function fortiGateFalseFriend(source:string,events:readonly Record<string,unknown>[]):boolean{
+  const leaf=(source.split('.').at(-1)??source).toLowerCase();
+  return FORTINET_FALSE_FRIENDS.has(leaf)&&events.some(fields=>fortiGateRecord(fields,source));
+}
 // The official action field describes enforcement/response, not arbitrary
 // event verbs such as a VPN negotiation, session close or admin login.
 const SECURITY_DISPOSITIONS=new Set(semanticPolicy.securityDispositions);
@@ -96,10 +115,10 @@ function windowsAgentEvidence(fields:Record<string,unknown>):boolean{
   return ['provider_guid','record_number','log_name','event_data'].some(name=>
     lookupFieldValue(fields,name).found);
 }
-function suricataAlertEvidence(fields:Record<string,unknown>):boolean{
-  const kind=lookupFieldValue(fields,'event_type');
+function suricataAlertEvidence(fields:Record<string,unknown>,source:string):boolean{
+  const kind=recordField(fields,source,'event_type');
   return kind.found&&String(kind.value).toLowerCase()==='alert'&&
-    lookupFieldValue(fields,'alert.signature_id').found;
+    recordField(fields,source,'alert.signature_id').found;
 }
 function incompatibleVendorMeaning(
   source:string,target:string,events:Record<string,unknown>[],
@@ -121,8 +140,8 @@ function incompatibleVendorMeaning(
   }))return true;
   // Suricata IDS priority severity (1-4) is not Stellar's 0-100 score.
   if(target==='severity'&&lower.endsWith('alert.severity')&&
-    events.some(suricataAlertEvidence))return true;
-  if(events.some(fortiGateRecord)&&FORTINET_FALSE_FRIENDS.has(leaf))return true;
+    events.some(fields=>suricataAlertEvidence(fields,source)))return true;
+  if(fortiGateFalseFriend(source,events))return true;
   // RFC3164 PRI severity 0-7 is a Syslog facility code component, not
   // Stellar's 0-100 security severity score. Never silently relabel it.
   if(source.toLowerCase().endsWith('syslog.severity'))return true;
