@@ -35,6 +35,11 @@ BSD_FRAMED=re.compile(
     r"(?P<time>\d{2}:\d{2}:\d{2}) +(?P<host>[^\s]+) +"
     r"(?P<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95}(?:\[\d{1,8}\])?): +",
 )
+BSD_FRAMED_ADJACENT=re.compile(
+    r"^<(?P<pri>\d{1,3})>(?P<month>[A-Z][a-z]{2}) +(?P<day>\d{1,2}) "
+    r"(?P<time>\d{2}:\d{2}:\d{2}) +(?P<host>[^\s]+) +"
+    r"(?P<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95}(?:\[\d{1,8}\])?):(?=[^ \t])",
+)
 
 
 @dataclass
@@ -268,10 +273,16 @@ def decode_cef_or_leef(raw:str,offset:int=0)->Fragment:
     return out
 
 
-def extract_rfc3164(raw:str)->tuple[Fragment,int]|None:
-    """Bounded PRI/BSD/TAG header frame; body stays in a separate parse pass."""
-    matched=BSD_FRAMED.match(raw)
+def extract_rfc3164(raw:str,*,adjacent:bool=False)->tuple[Fragment,int]|None:
+    """Bounded PRI/BSD/TAG header frame; body stays in a separate parse pass.
+
+    adjacent: the message starts directly after the colon of the tag (`ASM:unit_hostname="..."`, the form F5
+    BIG-IP ASM sends). The browser envelope (src/syslogEnvelope.ts) reads a tag followed by zero or more blanks;
+    the frame above asks for at least one, so this record was left to a route that reads four of its fields.
+    """
+    matched=(BSD_FRAMED_ADJACENT if adjacent else BSD_FRAMED).match(raw)
     if not matched:return None
+    if adjacent and matched.group("tag") in ("CEF","LEEF"):return None
     fields=matched.groupdict()
     pri=int(fields["pri"])
     day=int(fields["day"])

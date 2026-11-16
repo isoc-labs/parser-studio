@@ -1139,7 +1139,7 @@ def parse_generic_structural(raw:str,recipe:StructuralRecipe|None=None)->SourceE
         re.match(r'^<\d{1,3}>\d{1,2} +\S+ +\S+ +\S+ +\S+ +\S+ +',raw)
         is not None
     )
-    if looks_rfc3164 and extract_rfc3164(raw) is None:
+    if looks_rfc3164 and extract_rfc3164(raw) is None and extract_rfc3164(raw,adjacent=True) is None:
         result=deepcopy(standard)
         if 'RFC3164_HEADER_INVALID' not in result.issues:
             result.issues.append('RFC3164_HEADER_INVALID')
@@ -1176,6 +1176,8 @@ def parse_generic_structural(raw:str,recipe:StructuralRecipe|None=None)->SourceE
     for envelope_syntax,extractor in (
         ('GENERIC_RFC5424_ENVELOPE',extract_rfc5424),
         ('GENERIC_RFC3164_ENVELOPE',extract_rfc3164),
+        # The tag directly followed by the message (no blank after its colon), as the browser envelope reads it.
+        ('GENERIC_RFC3164_ENVELOPE',lambda value:extract_rfc3164(value,adjacent=True)),
     ):
         framed=extractor(raw)
         if framed is None:continue
