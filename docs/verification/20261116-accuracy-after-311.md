@@ -43,7 +43,7 @@ Defects 2, 3, 4 and 7 were on main before #311 as well. Defect 1 came with #311.
 
 | Sample | What it is | Stops at | Verdict |
 |---|---|---|---|
-| `r2_f5_asm_kv` | F5 ASM key-value, vendor documentation | source preview (Python) | **Unjustly blocked. Fixed (defect 5).** Now downloaded, golden values 5 of 5 |
+| `r2_f5_asm_kv` | F5 ASM key-value from the vendor documentation, cut after `geo_location` (the complete record is a test and a journey) | source preview (Python) | **Unjustly blocked. Fixed (defect 5).** Now downloaded, golden values 5 of 5 |
 | `cisco_asa_106023` | Cisco ASA 106023, vendor text | parsing of the message body | Header recognised; the body is free text that differs per message id. Needs a parsing rule: ChatGPT Assisted Parser. Declined with that reason, by design |
 | `r2_bsd_tagged_classic` | three lines of three shapes, one is sshd free text | parsing of one line | 2 of 3 lines read; the free-text line needs a rule. Assisted |
 | `juniper_srx_rtflow` | SRX structured data as printed in the vendor documentation, without `<PRI>1` | header | Not the wire form. The wire form is read: `juniper_srx_rtflow_pri`, holdout `h_srx_sd_close_deny` (13 of 13 canonical) |
@@ -116,12 +116,13 @@ records of the next section.
 
 ## Not fixed here: what needs a grammar or template change
 
-Each needs a change of the grammar or of the Ruby operators, and therefore of the approved template hashes. The
-first seven are vendor records the automatic journey does not read; they are pinned as `declined` in the holdout
-test so that a later change shows up. The last four are readings that main has as well and that this change does
-not touch.
+Each needs a change of the grammar, of the Ruby operators or of a reading rule that both readings share. The
+first seven are vendor records the automatic journey does not read, or reads by position only: five of them (six
+samples) are pinned as `declined` in the holdout test and PAN-OS THREAT with its single correct meaning, so that a
+later change shows up; `CEF:1` and the trailing LEEF delimiter are samples of the earlier corpus. The rest are
+readings that main has as well and that this change does not touch.
 
-| Record | Why it is declined | Size of the fix |
+| Record | What happens | Size of the fix |
 |---|---|---|
 | Zeek JSON (`"ts":1731719701.123456`) and any JSON number of 16 or 17 digits printed from a double | `hasUnsafeJsonNumbers` counts digits (more than 15 declines) | small; prepared as a separate change that needs new template hashes |
 | JSON integers above 2^53 (NXLog `Keywords`, Cloudflare nanosecond times) | a browser number cannot hold them; owner policy: decline, never round | needs an exact integer value through the grammar, the preview and the Ruby |
@@ -133,6 +134,8 @@ not touch.
 | A mapped value that is only white space (`user=" "`) | the run time skips the exact strings `""`, `N/A`, `-`; a blank-only value reaches the conversion, which rejects it, and the event takes the field-error path (its other mapped fields and the `parser_err_*` keys are written, the blank value is not). Before defect 2 was fixed the sample hid this by dropping the field for every event; a parser built from a sample without the blank fails the same way on main. In Chromium, for `user="bob"` / `user=" "` / `user="eve"`: main downloads a parser that writes no `user` for any event; with this change the Map Fields step stops at "a sample value does not fit the selected value type" for the second event | small: a blank-only value is a missing value in the browser and in the Ruby operators (template change) |
 | Comma-separated pairs behind `TAG: ` with words before the first name, or with an apostrophe in an unquoted value (`myapp: Login failed user=bob,src=...`; `user=o'brien,...,dept=o'neil`) | the comma-record grammar takes the words into the first name and reads an apostrophe as an opening quote; the browser grades the first PARTIAL and still adopts the draft. The values stay in `parserstudio_source`; no Stellar field is wrong. On main as well | grammar change: a name is one word; a quote opens a value only at its start |
 | A key=value record with a field named `toString`, `valueOf` or `hasOwnProperty` behind `TAG: ` | building the browser draft fails (`DataCloneError`): in Chromium the Add Logs step shows no result and no parser is built. On main as well | `src/genericStructural.ts`: fields in an object without a prototype |
+| F5-form record behind an adjacent tag whose value holds a double quote (`\"` or raw) or ends with a backslash, e.g. a request header `sec-ch-ua: \"Chromium\"` | declined by the Python preview as on main; the browser grammar reads every field. How a BIG-IP writes a quote inside `request` is not established | preview rule, once a device sample shows the escaping |
+| A field named `source_raw`, or with a name of 127 or 128 characters | read and adopted as complete, but not mapped; the value stays in `parserstudio_source`. On main for the `TAG: ` form | `genericStructuralAutoDraft.ts` (suffix test for the raw copy) |
 | RFC 3164 tag directly followed by space-separated pairs (`kernel:IN=eth0 OUT=eth1 ...`) | the browser grammar glues the tag and the first pair into one positional token (`prefix_005:"kernel:IN=eth0"`, no `IN`); the Python preview reads `IN`. On main as well | grammar change (`priSpaceKv`) |
 
 ## Mapping left to the user on purpose
@@ -143,6 +146,8 @@ not touch.
 - `user`, `user_name`, `usr` are advisory aliases of `username` (semantic policy): kept, not mapped.
 - Composite values are kept whole: SonicWall `src=10.1.10.25:51544:X0`, Meraki `src=ip:port`.
 - A port beside a non-transport protocol name is not mapped (Stormshield `proto=https`).
+- An automatic Generic Structural draft writes at most 100 mappings; further fields of a record stay in
+  `parserstudio_source`.
 
 ## Independent audit
 
@@ -161,7 +166,7 @@ An independent auditor read and ran the first version of this change (8803471) a
 | P3-1 Vendor evidence was combined across container levels | Fixed: all evidence must be in one container |
 | P3-2 Imperva rule keyed on `cpt` anywhere | Partly: `cpt` must be beside `spt`. A record without `cpt` is not recognised |
 | P3-3 Only the FortiGate rule is shared with the review of ChatGPT proposals | Not changed; proposals for Imperva `spt` and Suricata `alert.severity` come back as "Check first", not applied |
-| P3-4 Wording of the number explanation; object behind structured data not found | Partly fixed: the wording and the search for the object. The summary sentence still names the number whenever the selected event holds one |
+| P3-4 Wording of the number explanation; object behind structured data not found | Partly fixed: the wording and the search for the object. The summary sentence still names the number whenever the selected event holds one, and an object behind more than seven braces gets no explanation |
 | P3-5 Fixture epochs (2024) do not match the text dates (2026) | Not changed; nothing asserts the pair. The fixtures are frozen with the measurements of this document |
 | P3-6 Two new tests were red on the old code for a missing function, not for the behaviour | Not changed; the behaviour is held by the other tests of the same files |
 
@@ -190,6 +195,17 @@ seven lines through Ruby 2.4.9) found no wrong, glued, truncated, invented or mi
 | R2 (P3) Three weakenings of the rule survived the tests (backslash allowed, a blank before `=`, a single pair) | Tests added for the first two; a single pair changes no verdict (the check behind the rule declines it) |
 | R3 (P3) A field named `toString`, `valueOf` or `hasOwnProperty` makes the browser reading fail, on main as well; the Python preview newly called such an adjacent record parsed | A record with a name every JavaScript object has keeps its earlier verdict. The browser failure itself is in `src/genericStructural.ts`: see "Not fixed here" |
 | R4 (P3) Statements of this document that the evidence contradicted or did not support | Corrected: the complete F5 record, the count for the first audit's lines, what a field-error record holds, where the values of the `TAG: ` form stay, P2-6 and P3-4 as partly fixed, the wording about the F5 documentation and PAN-OS |
+
+The fourth pass, on 26182c2 (3,327 more lines, 249 further field names, seven weakenings of the rule, five lines
+through Ruby 2.4.9 with the `request` of the complete F5 record compared byte for byte): **PASS, 0 P1, 0 P2,
+4 P3.**
+
+| Finding of the fourth pass | Disposition |
+|---|---|
+| T1 (P3) An F5-form record whose value holds a double quote or ends with a backslash is still declined | Deliberate; listed under "Not fixed here" |
+| T2 (P3) A field named `source_raw` or with a 127- or 128-character name is read, adopted and not mapped | On main for the `TAG: ` form; listed under "Not fixed here" |
+| T3 (P3) Single names could leave the object-member list, and "a backslash before a non-letter is text" was untested | Tests added; each name removed alone now fails |
+| T4 (P3) Statements of this document | Corrected: which records the holdout test pins, the cut corpus sample, the bounds of P3-4 and of the automatic draft |
 
 Both readings mis-segment the same two inputs when a blank follows the tag (`myapp: Login failed user=bob,...`), on
 main as well: see "Not fixed".
@@ -227,7 +243,7 @@ were run again on the final rule) and tests.
 Among the 42 samples that both trees download, the only differences are `r2_f5_asm_cef` (8 of 8) and the three
 descriptors that are no longer written for Generic Structural samples.
 
-**Gates run locally on this tree**: TypeScript build; vitest 235 files, 1,998 tests; Python suite 184 tests;
+**Gates run locally on this tree**: TypeScript build; vitest 235 files, 1,998 tests; Python suite 185 tests;
 grammar and generated-Ruby generators `--verify` (no generated file changes); duplication ratchet 45 of 45;
 candidate mutation gate 92.44% with the 8 reviewed equivalents; Python preview over the 9,306 lines of both audits:
 304 verdicts change, all the record of double-quoted pairs. On c6ae049 (before the audit fixes, which touch no grammar):

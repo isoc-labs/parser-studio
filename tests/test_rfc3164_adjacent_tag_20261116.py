@@ -156,6 +156,25 @@ class Rfc3164AdjacentTag(unittest.TestCase):
         self.assertEqual(result['fields']['generic']['fields'],
                          {'user':"o'brien",'note':'a,b=c','empty':'','src':'203.0.113.5','dst':'10.1.1.9'})
 
+    def test_every_object_member_name_keeps_the_record_out_and_a_backslash_is_text(self):
+        """Fourth audit pass: single names could leave the list, and "a backslash before a non-letter is text"
+        was held by no test."""
+        members=('__proto__','constructor','prototype','toString','toLocaleString','valueOf','hasOwnProperty',
+                 'isPrototypeOf','propertyIsEnumerable','__defineGetter__','__defineSetter__','__lookupGetter__',
+                 '__lookupSetter__')
+        head='<134>Nov 16 10:15:04 web01 portal:'
+        rest=',src="203.0.113.5",dst="10.1.1.9",port="443",result="ok"'
+        self.assertEqual(preview(head+'user="bob"'+rest)['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV')
+        for name in members:
+            for raw in (head+name+'="bob"'+rest,head+'user="bob"'+rest+','+name+'="x"'):
+                self.assertNotIn('GENERIC_RFC3164_BODY',preview(raw).get('syntax') or '',raw)
+        for value in ('a\\ b','a\\,b','a\\=b','\\1','\\\\x','\\/etc','x\\\u00e9','\\ ','a\\,k="v'[:5]):
+            raw=head+'path="'+value+'"'+rest
+            result=preview(raw)
+            self.assertEqual(result['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV',raw)
+            self.assertEqual(result['fields']['generic']['fields']['path'],value,raw)
+            self.assertEqual(result['fields']['generic']['fields']['src'],'203.0.113.5',raw)
+
     def test_cef_behind_an_adjacent_tag_is_still_read_as_cef(self):
         raw=HEAD+'CEF:0|F5|ASM|11.3.0|Successful Request|Successful Request|2| act=passed src=10.4.1.101 spt=52963 dst=10.4.1.200 dpt=80'
         result=preview(raw)
