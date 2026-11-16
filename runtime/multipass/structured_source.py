@@ -35,11 +35,9 @@ BSD_FRAMED=re.compile(
     r"(?P<time>\d{2}:\d{2}:\d{2}) +(?P<host>[^\s]+) +"
     r"(?P<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95}(?:\[\d{1,8}\])?): +",
 )
-BSD_FRAMED_ADJACENT=re.compile(
-    r"^<(?P<pri>\d{1,3})>(?P<month>[A-Z][a-z]{2}) +(?P<day>\d{1,2}) "
-    r"(?P<time>\d{2}:\d{2}:\d{2}) +(?P<host>[^\s]+) +"
-    r"(?P<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95}(?:\[\d{1,8}\])?):(?=[^ \t])",
-)
+# The same frame with the message directly after the colon of the tag: one definition, two endings.
+assert BSD_FRAMED.pattern.endswith(": +")
+BSD_FRAMED_ADJACENT=re.compile(BSD_FRAMED.pattern[:-len(": +")]+r":(?=[^ \t])")
 
 
 @dataclass

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { BACKEND_CAPABILITIES } from "../src/capabilities.ts";
+import { BACKEND_CAPABILITIES } from "../src/capabilities.js";
 
 // The browser holdout test (src/guided/vendorHoldout20261116.test.ts) decides which formats the automatic journey
 // may choose from a copy of the capabilities this backend serves. The copy must be what the backend serves.
