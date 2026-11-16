@@ -1096,14 +1096,22 @@ def _generic_event(raw:str,start:int,outer:SourceEvent|None,syntax:str,
     return out
 
 
+# The whole message of the adjacent form: name="value" pairs joined by single commas, every value in double
+# quotes without a quote or a backslash inside, every name one plain word. Nothing looser is this form: a word
+# before the first name would become part of that name, and an apostrophe in an unquoted value would be read as
+# an opening quote that swallows the pairs up to the next apostrophe.
+_ADJACENT_COMMA_RECORD=re.compile(r'[A-Za-z_][A-Za-z0-9_]*="[^"\\]*"(?:,[A-Za-z_][A-Za-z0-9_]*="[^"\\]*")+\Z')
+
+
 def _adjacent_tag_comma_kv(raw:str,recipe:StructuralRecipe|None)->SourceEvent|None:
     """`<PRI>Mmm dd hh:mm:ss host TAG:key="value",key="value",...` - the tag directly followed by the record.
 
     F5 BIG-IP ASM sends its key-value log this way. The browser envelope (src/syslogEnvelope.ts) reads a tag
     followed by zero or more blanks. This route accepts the frame only when the whole message after the colon is
-    one complete comma-separated key=value record that starts with its first name and repeats none (owner policy
-    D-1). A message that is
-    anything else - space-separated pairs, CEF or LEEF, free text, a record that does not parse - is not taken
+    two or more name="value" pairs joined by commas (_ADJACENT_COMMA_RECORD), read completely as that record,
+    with no name repeated (owner policy D-1). A message that is
+    anything else - space-separated pairs, CEF or LEEF, free text, words before the first name, a value that is
+    not in double quotes, a record that does not parse - is not taken
     here and keeps the RFC 3164 verdict of the caller: it must not reach a fallback that would read the line
     from the PRI again and leave the tag glued to the first pair.
     """
@@ -1112,6 +1120,8 @@ def _adjacent_tag_comma_kv(raw:str,recipe:StructuralRecipe|None)->SourceEvent|No
         return None
     fragment,start=framed
     if fragment.issues or start is None:
+        return None
+    if _ADJACENT_COMMA_RECORD.match(raw,start) is None:
         return None
     outer=SourceEvent(raw,syntax='GENERIC_RFC3164_ENVELOPE')
     outer.vendor_fields=fragment.fields

@@ -73,6 +73,39 @@ class Rfc3164AdjacentTag(unittest.TestCase):
             self.assertNotEqual(result['status'],'SOURCE_PARSED',raw)
             self.assertNotIn('prefix_tokens',str(result.get('fields',{}).get('generic',{})),raw)
 
+    def test_only_double_quoted_pairs_with_plain_names_are_the_adjacent_record(self):
+        """Found by the second independent audit. The route also took names with blanks and values without double
+        quotes: `myapp:Login failed user=bob,...` came back as parsed with a field named "Login failed user", and
+        two apostrophes in unquoted values swallowed the pairs between them into one value."""
+        head='<134>Nov 16 10:15:04 web01 '
+        not_this_form=(
+            head+'myapp:Login failed user=bob,src=203.0.113.5,dst=10.1.1.9,port=22,proto=tcp,reason=badpass',
+            head+'myapp:Login failed user="bob",src="203.0.113.5",dst="10.1.1.9",port="22",proto="tcp"',
+            head+"portal:user=o'brien,src=203.0.113.5,dept=o'neil,dst=10.1.1.9,port=443,result=ok,proto=tcp,site=hq",
+            head+"portal:user='bob',src='203.0.113.5',dst='10.1.1.9',port='443',result='ok'",
+            head+'portal:user=bob,src=203.0.113.5,dst=10.1.1.9,port=443,result=ok',
+            head+'portal:user="bob",src=203.0.113.5,dst="10.1.1.9",port="443",result="ok"',
+            head+'portal:bytes(in)="10",sig#="7",user="bob",src="203.0.113.5",dst="10.1.1.9"',
+            head+'portal:user="bo\\"b",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok"',
+            head+'portal:user="bob", src="203.0.113.5", dst="10.1.1.9", port="443", result="ok"',
+            head+'portal:user="bob",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok",',
+            head+'portal:user="bob",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok" trailing words',
+            head+'portal:user="bob"',
+        )
+        for raw in not_this_form:
+            # Whatever an older route makes of the line (some read it as one pair), it is not this record.
+            result=preview(raw)
+            self.assertNotIn('GENERIC_RFC3164_BODY',result.get('syntax') or '',raw)
+            names=list((result.get('fields',{}).get('generic') or {}).get('fields',{}))
+            self.assertEqual([name for name in names if ' ' in name],[],raw)
+        # The form itself, with an empty value and a comma, an equals sign and an apostrophe inside the quotes.
+        raw=head+'portal:user="o\'brien",note="a,b=c",empty="",src="203.0.113.5",dst="10.1.1.9"'
+        result=preview(raw)
+        self.assertEqual(result['status'],'SOURCE_PARSED')
+        self.assertEqual(result['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV')
+        self.assertEqual(result['fields']['generic']['fields'],
+                         {'user':"o'brien",'note':'a,b=c','empty':'','src':'203.0.113.5','dst':'10.1.1.9'})
+
     def test_cef_behind_an_adjacent_tag_is_still_read_as_cef(self):
         raw=HEAD+'CEF:0|F5|ASM|11.3.0|Successful Request|Successful Request|2| act=passed src=10.4.1.101 spt=52963 dst=10.4.1.200 dpt=80'
         result=preview(raw)

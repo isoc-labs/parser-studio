@@ -5,6 +5,7 @@ import {analyzeLogEnvelopes,assessEnvelopeCompilation} from './autoParserEnvelop
 import {prepareAutoParserDraft} from './autoParserDraft';
 import {buildAutomaticGenericStructuralDraft} from './genericStructuralAutoDraft';
 import {fortiGateFalseFriend} from './normalizationCandidates';
+import {JSONATA_MAPPING_CONTRACT,createJsonataMappingPrompt,reviewJsonataMapping} from './jsonataMappingAssist';
 import type {BackendCapabilities} from './backendCapabilities';
 
 // What a vendor record means does not depend on which reading produced its fields. The same FortiGate line is read at
@@ -74,5 +75,27 @@ describe('vendor meaning is the same for every reading of one record',()=>{
     const standard=official(['CEF:0|Vendor|Product|1.0|100|Name|5|src=10.1.1.5 dst=203.0.113.9 spt=51000 dpt=443 proto=6',
       'CEF:0|Vendor|Product|1.0|100|Name|5|src=10.1.1.6 dst=203.0.113.9 spt=51001 dpt=443 proto=6'].join('\n'));
     expect(standard).toMatchObject({spt:'srcport',dpt:'dstport',src:'srcip',dst:'dstip'});
+  });
+  it('FortiGate: a ChatGPT proposal for the requested web host is blocked in both readings',async()=>{
+    // The review of proposals shares the rule. Its own copy looked at the root of the event only.
+    for(const sample of [KV,KV_BEHIND_PRI]){
+      const base=createDraft();
+      const ledger=analyzeLogEnvelopes(sample,'single-line');
+      const native=prepareAutoParserDraft(sample,base,preview(sample,base),ledger,assessEnvelopeCompilation(ledger,cap));
+      const made=native.ok?native.draft:buildAutomaticGenericStructuralDraft(sample,base)!.draft;
+      const source=made.mappings.map(mapping=>mapping.source).find(path=>path.split('.').at(-1)==='hostname')!;
+      expect(source,sample.slice(0,20)).toBeDefined();
+      // The proposal is reviewed against a draft that does not map the field yet.
+      const draft={...made,mappings:made.mappings.filter(mapping=>mapping.source!==source)};
+      const suite=preview(sample,draft);
+      const prepared=await createJsonataMappingPrompt(suite,draft);
+      const reviewed=await reviewJsonataMapping(JSON.stringify({contract:JSONATA_MAPPING_CONTRACT,
+        sample:{sha256:prepared.sha256,events:2},mappings:[{expression:source,target:'hostname'}]}),
+        suite,draft,prepared.sha256);
+      expect(reviewed,sample.slice(0,20)).toMatchObject({ok:true});
+      if(!reviewed.ok)return;
+      expect(reviewed.rows.map(row=>[row.status,row.reason]),sample.slice(0,20))
+        .toEqual([['BLOCKED','FortiOS semantics or measurement units differ from the Stellar field.']]);
+    }
   });
 });
