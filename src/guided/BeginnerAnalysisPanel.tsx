@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {unsafeJsonNumberExplanation} from './unsafeJsonNumbers';
 import {independentKeyValuePairs} from '../grammar/parseStatus';
 import {Bot,CheckCircle2,Clipboard,TriangleAlert,Wrench} from 'lucide-react';
 import type {MultiPassSourcePreview} from './multipassPreviewClient';
@@ -73,6 +74,9 @@ function repeatedFieldNames(raw:string,preview?:MultiPassSourcePreview):string[]
   return [...names];
 }
 function plainIssue(code:string,raw='',preview?:MultiPassSourcePreview):string{
+  // A JSON number that cannot be kept as written: say which number and that no parsing rule repairs it.
+  const unsafeNumber=code.toUpperCase().includes('JSON_NUMBER_PRECISION_UNSAFE')?unsafeJsonNumberExplanation(raw):null;
+  if(unsafeNumber)return unsafeNumber;
   if(isZeekHeader(raw))
     return 'This is a Zeek log header describing fields, not an event. Copy the declared column names and separator before reviewing the data rows separately.';
   if(isWindowsEventXml(raw))
@@ -378,7 +382,9 @@ export default function BeginnerAnalysisPanel({source,events,onOpenAssisted,draf
               ?'Parser Studio extracted every source value, but this positional CSV does not contain trustworthy field names. Keep temporary names or enter your own before continuing.'
               :'Parser Studio extracted the source values, but this positional CSV still needs a matching separator plus column names before continuing.'
           :parserRuleReviewRequired
-          ?'Parser Studio read every value, but it cannot build the parser files for this log shape on its own yet. Use Fix with ChatGPT below. No log data was discarded.'
+          ?(current&&unsafeJsonNumberExplanation(raw)
+            ?'Parser Studio read every value, but an event holds a number that cannot be kept exactly, so parser files are not created. No log data was discarded.'
+            :'Parser Studio read every value, but it cannot build the parser files for this log shape on its own yet. Use Fix with ChatGPT below. No log data was discarded.')
           :problems.length
           ?`${problems.length} event${problems.length===1?' needs':'s need'} attention. Pick one below to see why and what to do next.`
           :'The source structure was recognized. Check which field values can be mapped and verify the generated parser separately; native runtime and Stellar target are not verified.'}</p>
@@ -419,7 +425,7 @@ export default function BeginnerAnalysisPanel({source,events,onOpenAssisted,draf
       <div className="beginner-problem-details">
         <div><strong>What needs attention</strong>
           {parserRuleReviewRequired
-            ?<p>The source field values are available. Parser Studio has not yet validated a downloadable parser rule for this log shape.</p>
+            ?<p>{unsafeJsonNumberExplanation(raw)??'The source field values are available. Parser Studio has not yet validated a downloadable parser rule for this log shape.'}</p>
             :current.event.preview.issues.length
               ?<ul>{current.event.preview.issues.map(code=><li key={code}>{plainIssue(code,raw,current.event.preview)}</li>)}</ul>
               :<p>Parser Studio could not produce a complete trustworthy field set for this event.</p>}
