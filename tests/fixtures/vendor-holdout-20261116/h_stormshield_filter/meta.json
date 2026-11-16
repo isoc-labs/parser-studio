@@ -1,0 +1,63 @@
+{
+ "vendor": "Stormshield SNS",
+ "family": "kv, no syslog header",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "proto= is the application protocol, ipproto= the transport; *portname are names, not ports",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443,
+    "username": "jkim",
+    "action": "pass"
+   },
+   "values": {
+    "srcportname": "ephemeral_fw_tcp",
+    "dstportname": "https",
+    "ipproto": "tcp",
+    "proto": "https",
+    "srcname": "pc-jkim",
+    "fw": "SN310A12B3456C7"
+   },
+   "forbid": [
+    [
+     "srcport",
+     "ephemeral_fw_tcp"
+    ],
+    [
+     "dstport",
+     "https"
+    ],
+    [
+     "proto_name",
+     "https"
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "action": "block"
+   },
+   "values": {
+    "dstportname": "ssh",
+    "proto": "ssh"
+   },
+   "forbid": [
+    [
+     "proto_name",
+     "ssh"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "bf41b3d0ea292fcc3c32bd997f1042c15f771566cd8832e86e1ae30bc21ed050"
+}

@@ -1,0 +1,27 @@
+{
+ "vendor": "NGINX access log (combined)",
+ "family": "free text with quoted parts",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "ASSISTED",
+ "events": 2,
+ "unit": "line",
+ "note": "",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "203.0.113.77"
+   },
+   "values": {},
+   "forbid": []
+  },
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "username": "jkim"
+   },
+   "values": {},
+   "forbid": []
+  }
+ ],
+ "raw_sha256": "d163b279f17f5fd30a81b8bf202a12ae1f77453edccd70c3c1842cce6cb5e3c3"
+}

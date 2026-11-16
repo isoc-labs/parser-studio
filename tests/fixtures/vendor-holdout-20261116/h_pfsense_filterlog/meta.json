@@ -1,0 +1,32 @@
+{
+ "vendor": "pfSense filterlog",
+ "family": "RFC 3164 + positional CSV without names",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "ASSISTED",
+ "events": 1,
+ "unit": "line",
+ "note": "",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "action": "block"
+   },
+   "values": {},
+   "forbid": [
+    [
+     "srcport",
+     12345
+    ],
+    [
+     "dstport",
+     60
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "9594b81891df7b7398351923422963e3376f0fa173bb460e7832f1f2364b7317"
+}

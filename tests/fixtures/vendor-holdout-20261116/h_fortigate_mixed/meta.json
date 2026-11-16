@@ -1,0 +1,89 @@
+{
+ "vendor": "Fortinet FortiGate 7.x",
+ "family": "syslog PRI + kv, three record types",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 3,
+ "unit": "line",
+ "note": "hostname= is the web host of the request, devname= is the device; action=login/close are not dispositions",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443,
+    "username": "jkim"
+   },
+   "values": {
+    "devname": "FGT60F-HQ",
+    "transip": "203.0.113.5",
+    "transport": "51544",
+    "sentbyte": "2345",
+    "rcvdbyte": "6789",
+    "policyname": "LAN-to-WAN",
+    "action": "close",
+    "proto": "6"
+   },
+   "forbid": [
+    [
+     "dstport",
+     51544
+    ],
+    [
+     "srcport",
+     443
+    ],
+    [
+     "proto_name",
+     "51544"
+    ],
+    [
+     "hostname",
+     "bad.example.net"
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "10.1.10.31",
+    "dstip": "198.51.100.80",
+    "srcport": 50211,
+    "dstport": 80,
+    "username": "mlee",
+    "action": "blocked",
+    "url": "http://bad.example.net/dl/a.exe?x=1&y=2"
+   },
+   "values": {
+    "hostname": "bad.example.net",
+    "catdesc": "Malicious Websites",
+    "msg": "URL belongs to a denied category in policy"
+   },
+   "forbid": [
+    [
+     "hostname",
+     "bad.example.net"
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "10.1.10.2",
+    "dstip": "10.1.10.1",
+    "username": "admin"
+   },
+   "values": {
+    "ui": "https(10.1.10.2)",
+    "logdesc": "Admin login successful",
+    "status": "success"
+   },
+   "forbid": [
+    [
+     "action",
+     "login"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "a9e30dc038436b0e3457ab81e174ea38dab46bb60ccf4a3da7304d234fc3c80c"
+}

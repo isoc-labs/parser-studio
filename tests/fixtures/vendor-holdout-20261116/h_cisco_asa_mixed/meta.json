@@ -1,0 +1,53 @@
+{
+ "vendor": "Cisco ASA",
+ "family": "syslog + free text, three message ids",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "ASSISTED",
+ "events": 3,
+ "unit": "line",
+ "note": "302013 \"outbound\": the inside address is the initiator",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443
+   },
+   "values": {},
+   "forbid": [
+    [
+     "srcip",
+     "142.250.196.14"
+    ],
+    [
+     "srcip",
+     "203.0.113.5"
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22
+   },
+   "values": {},
+   "forbid": []
+  },
+  {
+   "canon": {
+    "username": "jkim"
+   },
+   "values": {},
+   "forbid": [
+    [
+     "srcip",
+     "10.1.10.50"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "39f77e06d52b6602b92cd22992b35e454d447ae3ca43d5f49488bf3815c3b6dc"
+}

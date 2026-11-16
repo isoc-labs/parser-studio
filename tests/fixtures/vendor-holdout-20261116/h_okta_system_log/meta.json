@@ -1,0 +1,35 @@
+{
+ "vendor": "Okta System Log",
+ "family": "nested JSON",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 1,
+ "unit": "line",
+ "note": "Okta severity WARN is not a Stellar 0-100 score",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "203.0.113.77"
+   },
+   "values": {
+    "alternateId": "jkim@corp.example.com",
+    "eventType": "user.session.start",
+    "result": "FAILURE",
+    "reason": "INVALID_CREDENTIALS",
+    "published": "2026-11-16T01:15:01.123Z",
+    "severity": "WARN"
+   },
+   "forbid": [
+    [
+     "severity",
+     "WARN"
+    ],
+    [
+     "event_type",
+     "user.session.start"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "acfdedf4eb6a39d4ba4da89fe8ce534aed9387f8a7bf786f224f0aec7c36ce56"
+}

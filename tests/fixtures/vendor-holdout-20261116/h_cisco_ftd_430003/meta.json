@@ -1,0 +1,31 @@
+{
+ "vendor": "Cisco Firepower Threat Defense",
+ "family": "syslog + \"Key: value, \" list",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 1,
+ "unit": "line",
+ "note": "keys may contain a space (Prefilter Policy); values may contain spaces",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443,
+    "username": "jkim",
+    "hostname": "ftd-hq"
+   },
+   "values": {
+    "AccessControlRuleAction": "Allow",
+    "InitiatorBytes": "2345",
+    "ResponderBytes": "6789",
+    "URL": "https://www.example.com",
+    "Prefilter Policy": "Default Prefilter Policy",
+    "NAPPolicy": "Balanced Security and Connectivity"
+   },
+   "forbid": []
+  }
+ ],
+ "raw_sha256": "5e0cf8bd443bb52e0af814aeb90fb21f579788af4446a0de2f22100bddacb973"
+}

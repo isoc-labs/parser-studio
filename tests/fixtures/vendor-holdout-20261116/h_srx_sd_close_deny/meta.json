@@ -1,0 +1,70 @@
+{
+ "vendor": "Juniper SRX (structured-data syslog)",
+ "family": "RFC 5424 + structured data, two record types",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "icmp-type=\"0\" on a TCP record is filler; username=\"N/A\" is a placeholder",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443,
+    "username": "jkim",
+    "hostname": "srx-edge-01",
+    "proto": 6
+   },
+   "values": {
+    "nat-source-address": "203.0.113.5",
+    "nat-source-port": "40112",
+    "bytes-from-client": "2345",
+    "bytes-from-server": "6789",
+    "policy-name": "LAN-to-WAN",
+    "reason": "TCP FIN"
+   },
+   "forbid": [
+    [
+     "srcip",
+     "203.0.113.5"
+    ],
+    [
+     "srcport",
+     40112
+    ],
+    [
+     "icmp_type",
+     0
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "hostname": "srx-edge-01",
+    "proto": 6
+   },
+   "values": {
+    "policy-name": "default-deny",
+    "reason": "Denied by policy",
+    "icmp-type": "0"
+   },
+   "forbid": [
+    [
+     "icmp_type",
+     0
+    ],
+    [
+     "username",
+     "N/A"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "1aa321351fdc2381940f2450ca28c60ca1912ff65d0918331e1ba17e890c5d3f"
+}

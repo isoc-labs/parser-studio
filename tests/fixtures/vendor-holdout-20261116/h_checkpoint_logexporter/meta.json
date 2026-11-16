@@ -1,0 +1,52 @@
+{
+ "vendor": "Check Point Log Exporter (syslog format)",
+ "family": "RFC 5424 + [key:\"value\"; ...]",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "service is the destination port, s_port the source port; values hold ; & and parentheses",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443,
+    "action": "Accept"
+   },
+   "values": {
+    "rule_name": "LAN-to-WAN",
+    "origin": "192.0.2.10",
+    "user": "jkim (jkim@corp.example.com)",
+    "product": "VPN-1 & FireWall-1",
+    "service_id": "https"
+   },
+   "forbid": [
+    [
+     "dstport",
+     51544
+    ],
+    [
+     "srcport",
+     443
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "action": "Drop"
+   },
+   "values": {
+    "rule_name": "Cleanup rule",
+    "service_id": "ssh"
+   },
+   "forbid": []
+  }
+ ],
+ "raw_sha256": "8cac4b8ed23a7ba27737a431b9e269f24b10740ece6bac452b3ca6f7d73cc40e"
+}

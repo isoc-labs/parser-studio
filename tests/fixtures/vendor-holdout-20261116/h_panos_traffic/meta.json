@@ -1,0 +1,61 @@
+{
+ "vendor": "Palo Alto Networks PAN-OS",
+ "family": "syslog + positional CSV, TRAFFIC",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "column layout of the project corpus line gp_panos_syslog_125col; NAT address and port are not the source",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.25",
+    "dstip": "142.250.196.14",
+    "srcport": 51544,
+    "dstport": 443,
+    "hostname": "PA-850-HQ",
+    "action": "allow"
+   },
+   "values": {
+    "srcuser": "corp\\jkim",
+    "natsport": "40112",
+    "natsrc": "203.0.113.5",
+    "rule": "LAN-to-WAN"
+   },
+   "forbid": [
+    [
+     "srcip",
+     "203.0.113.5"
+    ],
+    [
+     "srcport",
+     40112
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "203.0.113.77",
+    "dstip": "10.1.10.9",
+    "srcport": 40022,
+    "dstport": 22,
+    "hostname": "PA-850-HQ",
+    "action": "deny"
+   },
+   "values": {
+    "rule": "default-deny"
+   },
+   "forbid": [
+    [
+     "srcip",
+     "0.0.0.0"
+    ],
+    [
+     "srcport",
+     0
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "124a164953f2ca40e5e669f72d9a968758ebc1365bcde451c58a1cbb8d7e1c57"
+}
