@@ -33,15 +33,23 @@ def psg_units(text)
     units << '' if char.ord > 0xffff
   end
   cache[text] = units
-  @psg_unit_cache_units = @psg_unit_cache_units.to_i + units.length
-  # The kept arrays are bounded by their total size, not only by their number: every entry is a String of its
-  # own, so 256 arrays of 60 KB events held several hundred megabytes. The oldest go first and the eight newest
-  # always stay: one event is read through a few texts of its own size (the line, its body, a value), and a
-  # text dropped while it was in use was built again on every read (delta audit of 2026-11-16).
-  while cache.length > 8 && (cache.length > 64 || @psg_unit_cache_units > 131_072)
-    dropped, dropped_units = cache.shift
-    @psg_unit_cache_units -= dropped_units.length
-    @psg_offset_cache.delete(dropped) unless @psg_offset_cache.nil?
+  # What is kept is bounded, oldest first out, in two lists that do not compete: 64 texts shorter than 1,024
+  # units and the eight newest longer ones. One event is read through a few texts of its own size (the line,
+  # its body) and through any number of small ones (a value each); in one list the small ones pushed the
+  # large one out while it was being read, and it was built again every 64 values. Without a bound on size
+  # 256 arrays of 60 KB events held several hundred megabytes (audits of 2026-11-16).
+  if units.length < 1024
+    kept = (@psg_units_short ||= [])
+    limit = 64
+  else
+    kept = (@psg_units_long ||= [])
+    limit = 8
+  end
+  kept << text
+  if kept.length > limit
+    dropped = kept.shift
+    cache.delete(dropped)
+    (@psg_offset_cache ||= {}.compare_by_identity).delete(dropped)
   end
   units
 end
@@ -128,10 +136,11 @@ def psg_slice(value, from = nil, to = nil)
   to = to < 0 ? [size + to, 0].max : [to, size].min
   return (value.is_a?(String) ? '' : []) if to <= from
   return value[from, to - from] unless value.is_a?(String) && !value.ascii_only?
-  # A short piece is put together from the units. Reading it out of the text costs a walk from the start of
-  # the text to the piece (a UTF-8 string has no index of its characters), so a text read in many short
-  # pieces cost the square of its length (delta audit of 2026-11-16).
-  if to - from <= 32
+  # A short piece far into the text is put together from the units. Reading it out of the text costs a walk
+  # from the start of the text to the piece (a UTF-8 string has no index of its characters), so a text read
+  # in many short pieces cost the square of its length. Near the start the walk is the cheaper of the two
+  # (audits of 2026-11-16).
+  if from >= 2048 && to - from <= 32
     units = psg_units(value)
     raise ArgumentError, 'String offset inside a surrogate pair' if units[from] == '' || units[to] == ''
     return units[from, to - from].join
@@ -259,14 +268,19 @@ def psg_match_at(pattern, text, position)
   match
 end
 
+# The text a match was made on: the one it carries, or its own copy for a match that was not made by
+# psg_match_at.
+def psg_match_text(match)
+  match.instance_variable_defined?(:@psg_text) ? match.instance_variable_get(:@psg_text) : match.string
+end
+
 def psg_match_end(match)
-  text = match.string
-  return match.end(0) if text.ascii_only?
-  psg_char_to_unit(match.instance_variable_get(:@psg_text) || text, match.end(0))
+  return match.end(0) if match.string.ascii_only?
+  psg_char_to_unit(psg_match_text(match), match.end(0))
 end
 
 def psg_match_index(match)
-  psg_null?(match) ? nil : psg_char_to_unit(match.string, match.begin(0))
+  psg_null?(match) ? nil : psg_char_to_unit(psg_match_text(match), match.begin(0))
 end
 
 def psg_starts_with(text, prefix, position)
@@ -275,7 +289,7 @@ end
 
 def psg_group(match, name)
   return nil if match.nil? || match.equal?(:psg_null)
-  raise NoMethodError, 'psg_group reads a match' unless match.is_a?(MatchData)
+  return (match.names.include?(name) ? match[name] : nil) unless match.is_a?(MatchData)
   return nil unless name.is_a?(String)
   begin
     match[name]
@@ -526,24 +540,24 @@ end
 
 # A callback of the browser receives (item, index); a Ruby lambda is strict about its argument count. Whether
 # the callback takes the index is asked once per list: Proc#parameters builds an array on every call, and
-# asking per item was a measurable part of the cost of an event (Ruby 2.4.9, 2026-11-15).
-# A list without items does not ask: its callback is never looked at, as it never was.
-def psg_with_index?(list, function)
-  !list.empty? && function.parameters.length >= 2
+# asking per item was a measurable part of the cost of an event (Ruby 2.4.9, 2026-11-15). It is asked at the
+# first item, so a list without items never looks at its callback and the list is only ever enumerated.
+def psg_with_index?(function)
+  function.parameters.length >= 2
 end
 
 def psg_map(list, function)
   out = []
-  with_index = psg_with_index?(list, function)
-  list.each_with_index { |item, index| out << (with_index ? function.call(item, index) : function.call(item)) }
+  with_index = nil
+  list.each_with_index { |item, index| out << ((with_index.nil? ? (with_index = psg_with_index?(function)) : with_index) ? function.call(item, index) : function.call(item)) }
   out
 end
 
 def psg_flat_map(list, function)
   out = []
-  with_index = psg_with_index?(list, function)
+  with_index = nil
   list.each_with_index do |item, index|
-    result = (with_index ? function.call(item, index) : function.call(item))
+    result = ((with_index.nil? ? (with_index = psg_with_index?(function)) : with_index) ? function.call(item, index) : function.call(item))
     result.is_a?(Array) ? out.concat(result) : out << result
   end
   out
@@ -551,38 +565,38 @@ end
 
 def psg_filter(list, function)
   out = []
-  with_index = psg_with_index?(list, function)
-  list.each_with_index { |item, index| out << item if psg_t((with_index ? function.call(item, index) : function.call(item))) }
+  with_index = nil
+  list.each_with_index { |item, index| out << item if psg_t(((with_index.nil? ? (with_index = psg_with_index?(function)) : with_index) ? function.call(item, index) : function.call(item))) }
   out
 end
 
 def psg_some(list, function)
-  with_index = psg_with_index?(list, function)
-  list.each_with_index { |item, index| return true if psg_t((with_index ? function.call(item, index) : function.call(item))) }
+  with_index = nil
+  list.each_with_index { |item, index| return true if psg_t(((with_index.nil? ? (with_index = psg_with_index?(function)) : with_index) ? function.call(item, index) : function.call(item))) }
   false
 end
 
 def psg_every(list, function)
-  with_index = psg_with_index?(list, function)
-  list.each_with_index { |item, index| return false unless psg_t((with_index ? function.call(item, index) : function.call(item))) }
+  with_index = nil
+  list.each_with_index { |item, index| return false unless psg_t(((with_index.nil? ? (with_index = psg_with_index?(function)) : with_index) ? function.call(item, index) : function.call(item))) }
   true
 end
 
 def psg_for_each(list, function)
-  with_index = psg_with_index?(list, function)
-  list.each_with_index { |item, index| (with_index ? function.call(item, index) : function.call(item)) }
+  with_index = nil
+  list.each_with_index { |item, index| ((with_index.nil? ? (with_index = psg_with_index?(function)) : with_index) ? function.call(item, index) : function.call(item)) }
   nil
 end
 
 def psg_find(list, function)
-  with_index = psg_with_index?(list, function)
-  list.each_with_index { |item, index| return item if psg_t((with_index ? function.call(item, index) : function.call(item))) }
+  with_index = nil
+  list.each_with_index { |item, index| return item if psg_t(((with_index.nil? ? (with_index = psg_with_index?(function)) : with_index) ? function.call(item, index) : function.call(item))) }
   nil
 end
 
 def psg_find_index(list, function)
-  with_index = psg_with_index?(list, function)
-  list.each_with_index { |item, index| return index if psg_t((with_index ? function.call(item, index) : function.call(item))) }
+  with_index = nil
+  list.each_with_index { |item, index| return index if psg_t(((with_index.nil? ? (with_index = psg_with_index?(function)) : with_index) ? function.call(item, index) : function.call(item))) }
   -1
 end
 

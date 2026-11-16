@@ -28,6 +28,10 @@ for (const s of STRINGS) {
   for (const t of NEEDLES) for (const a of OFFSETS) for (const b of [0, 1, 3, -2]) calls.push(['probeString', s, t, a, b]);
   for (const a of [-7, -1, 0, 1, 2, 9]) for (const b of [-2, 0, 3]) calls.push(['probeNumber', s, a, b]);
 }
+// A text long enough for both ways the runtime cuts a piece out of a text beyond ASCII (a short piece behind
+// unit 2,048 is put together from the units, any other is read out of the text); offsets on character borders.
+const LONG = 'k\u00e9\u{1f600}'.repeat(700);
+for (const t of ['', '\u{1f600}']) for (const a of [2048, 2052]) for (const b of [2056, 2060, 2076, 2084]) calls.push(['probeString', LONG, t, a, b]);
 for (const v of VALUES) calls.push(['probeValue', v]);
 for (const items of LISTS) for (const record of RECORDS) calls.push(['probeCollections', items, record]);
 
