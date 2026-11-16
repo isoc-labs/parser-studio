@@ -142,6 +142,11 @@ function incompatibleVendorMeaning(
   if(target==='severity'&&lower.endsWith('alert.severity')&&
     events.some(fields=>suricataAlertEvidence(fields,source)))return true;
   if(fortiGateFalseFriend(source,events))return true;
+  // CEF names spt the source port. Imperva Cloud WAF (Incapsula) writes the client port as cpt and uses spt for the
+  // SERVER port (its log file structure reference), with src still the client address: spt mapped to srcport would
+  // pair the client address with the server port. A record that carries cpt beside spt follows that usage.
+  if(target==='srcport'&&leaf==='spt'&&events.some(fields=>
+    lookupFieldValue(fields,source).found&&recordField(fields,source,'cpt').found))return true;
   // RFC3164 PRI severity 0-7 is a Syslog facility code component, not
   // Stellar's 0-100 security severity score. Never silently relabel it.
   if(source.toLowerCase().endsWith('syslog.severity'))return true;

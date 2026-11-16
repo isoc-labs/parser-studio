@@ -57,4 +57,18 @@ describe('vendor meaning is the same for every reading of one record',()=>{
     expect(root).toMatchObject({src_ip:'srcip',dest_ip:'dstip',src_port:'srcport',dest_port:'dstport'});
     expect(wrapped).toMatchObject({src_ip:'srcip',dest_ip:'dstip',src_port:'srcport',dest_port:'dstport'});
   });
+  it('Imperva Cloud WAF: spt beside cpt is the server port and is not mapped to the source port',()=>{
+    const line=(n:number)=>'CEF:0|Incapsula|SIEMintegration|1|1|Illegal Resource Access|3| fileId=341234116000251817'+n+' sourceServiceName=site.example.com siteid=1509732 src=203.0.113.7'+n+' cn1=200 in=54 requestMethod=GET app=HTTPS act=REQ_BLOCKED_SECURITY cpt=4002'+n+' spt=443 sip=10.1.10.9';
+    const bare=official([line(1),line(2)].join('\n'));
+    const wrapped=official([1,2].map(n=>'<134>Nov 16 10:15:0'+n+' waf01 '+line(n)).join('\n'));
+    for(const mapping of [bare,wrapped]){
+      expect(mapping.spt).toBeUndefined();
+      expect(mapping.src).toBe('srcip');
+      expect(Object.values(mapping)).not.toContain('srcport');
+    }
+    // Without cpt the CEF dictionary stands: spt is the source port.
+    const standard=official(['CEF:0|Vendor|Product|1.0|100|Name|5|src=10.1.1.5 dst=203.0.113.9 spt=51000 dpt=443 proto=6',
+      'CEF:0|Vendor|Product|1.0|100|Name|5|src=10.1.1.6 dst=203.0.113.9 spt=51001 dpt=443 proto=6'].join('\n'));
+    expect(standard).toMatchObject({spt:'srcport',dpt:'dstport',src:'srcip',dst:'dstip'});
+  });
 });
