@@ -1096,6 +1096,43 @@ def _generic_event(raw:str,start:int,outer:SourceEvent|None,syntax:str,
     return out
 
 
+def _adjacent_tag_comma_kv(raw:str,recipe:StructuralRecipe|None)->SourceEvent|None:
+    """`<PRI>Mmm dd hh:mm:ss host TAG:key="value",key="value",...` - the tag directly followed by the record.
+
+    F5 BIG-IP ASM sends its key-value log this way. The browser envelope (src/syslogEnvelope.ts) reads a tag
+    followed by zero or more blanks. This route accepts the frame only when the whole message after the colon is
+    one complete comma-separated key=value record that starts with its first name and repeats none (owner policy
+    D-1). A message that is
+    anything else - space-separated pairs, CEF or LEEF, free text, a record that does not parse - is not taken
+    here and keeps the RFC 3164 verdict of the caller: it must not reach a fallback that would read the line
+    from the PRI again and leave the tag glued to the first pair.
+    """
+    framed=extract_rfc3164(raw,adjacent=True)
+    if framed is None:
+        return None
+    fragment,start=framed
+    if fragment.issues or start is None:
+        return None
+    outer=SourceEvent(raw,syntax='GENERIC_RFC3164_ENVELOPE')
+    outer.vendor_fields=fragment.fields
+    outer.value_spans=[_span(path,raw,a,b) for path,a,b in fragment.spans]
+    outer.primitive_fields=len(outer.value_spans)
+    candidate=_generic_event(
+        raw,start,outer,'GENERIC_RFC3164_BODY',
+        force_mode=(recipe.mode if recipe is not None and recipe.mode!='auto' else None),
+    )
+    if candidate is None or candidate.status!='SOURCE_PARSED' or not candidate.syntax.endswith('+COMMA_KV'):
+        return None
+    generic=candidate.vendor_fields.get('generic')
+    fields=generic.get('fields') if isinstance(generic,dict) else None
+    if not isinstance(fields,dict) or any(isinstance(value,list) for value in fields.values()):
+        return None
+    # The record starts directly after the colon: text between the tag and the first name is not this form.
+    if generic.get('prefix_tokens'):
+        return None
+    return candidate
+
+
 def parse_generic_structural(raw:str,recipe:StructuralRecipe|None=None)->SourceEvent:
     if not isinstance(raw,str):raise TypeError('RAW_NOT_STRING')
     if not raw or len(raw.encode('utf8'))>MAX_RAW_BYTES or '\x00' in raw:
@@ -1139,7 +1176,12 @@ def parse_generic_structural(raw:str,recipe:StructuralRecipe|None=None)->SourceE
         re.match(r'^<\d{1,3}>\d{1,2} +\S+ +\S+ +\S+ +\S+ +\S+ +',raw)
         is not None
     )
-    if looks_rfc3164 and extract_rfc3164(raw) is None and extract_rfc3164(raw,adjacent=True) is None:
+    if looks_rfc3164 and extract_rfc3164(raw) is None:
+        # One narrow exception: the tag directly followed by a complete comma-separated key="value" record.
+        # Everything else keeps the verdict above; no later fallback may read such a line again.
+        adjacent=_adjacent_tag_comma_kv(raw,recipe)
+        if adjacent is not None:
+            return adjacent
         result=deepcopy(standard)
         if 'RFC3164_HEADER_INVALID' not in result.issues:
             result.issues.append('RFC3164_HEADER_INVALID')
@@ -1176,8 +1218,6 @@ def parse_generic_structural(raw:str,recipe:StructuralRecipe|None=None)->SourceE
     for envelope_syntax,extractor in (
         ('GENERIC_RFC5424_ENVELOPE',extract_rfc5424),
         ('GENERIC_RFC3164_ENVELOPE',extract_rfc3164),
-        # The tag directly followed by the message (no blank after its colon), as the browser envelope reads it.
-        ('GENERIC_RFC3164_ENVELOPE',lambda value:extract_rfc3164(value,adjacent=True)),
     ):
         framed=extractor(raw)
         if framed is None:continue

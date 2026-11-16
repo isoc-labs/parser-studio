@@ -45,6 +45,34 @@ class Rfc3164AdjacentTag(unittest.TestCase):
                     '<38>Nov 16 10:15:04 web01 sshd:Failed password for root from 203.0.113.5 port 22 ssh2'):
             self.assertNotEqual(preview(raw)['status'],'SOURCE_PARSED',raw)
 
+    def test_only_the_complete_comma_record_is_taken_and_nothing_else_changes_its_verdict(self):
+        """Found by the independent audit of the first version: skipping the RFC 3164 guard for every adjacent tag
+        let later fallbacks read the line from the PRI again, with the tag glued to the first pair
+        (`app:srcip=10.0.0.1` as one positional token and no srcip field), and reported it as parsed."""
+        head='<134>Nov 16 10:15:04 fw01 '
+        not_this_form=(
+            # space-separated pairs, one of them empty: the adjacent route declines, no fallback may take the line
+            head+'app:srcip=10.0.0.1 dstip= srcport=1 dstport=2 action=allow user=bob',
+            head+'kernel:IN=eth0 OUT= MAC=aa:bb SRC=1.2.3.4 DST=5.6.7.8 LEN=60 TOS=0x00 PROTO=TCP SPT=1 DPT=2',
+            # not a tag at all
+            head+'fe80::1 a=1 b=2 c=3 d=4 e=5',
+            head+'http://x/a b=1 c=2 d=3 e=4 f=5',
+            head+'ratio:1:2 a=1 b=2 c=3 d=4 e=5',
+            # a message that claims CEF or LEEF and is not one the grammar reads
+            head+'app:CEF:1|Security|threatmanager|1.0|100|worm successfully stopped|10|src=10.0.0.1 dst=2.1.2.2 spt=1232 dpt=80',
+            head+'app:CEF:0|Security|threatmanager|1.0|100|worm successfully stopped|src=10.0.0.1 dst=2.1.2.2',
+            head+'app:LEEF:3.0|Acme Corp|Gateway|1|event|src=10.0.0.1 dst=2.1.2.2 srcPort=1 dstPort=2',
+            # a repeated name (owner policy D-1)
+            head+'ASM:ip_client="10.4.1.101",ip_client="10.9.9.9",management_ip_address="1.2.3.4",policy_name="p",request_status="passed",unit_hostname="h"',
+            # text between the tag and the first name
+            head+'app:Oct 23 00:14:27 bigip-waf01 ASM: unit_hostname="bigip-waf01",management_ip_address="192.0.2.1",policy_name="p",request_status="passed"',
+            head+'http://ASM: attack_type="SQL Injection",support_id="12345",src=192.0.2.9,dst=198.51.100.40,request="/index.php",action="blocked"',
+        )
+        for raw in not_this_form:
+            result=preview(raw)
+            self.assertNotEqual(result['status'],'SOURCE_PARSED',raw)
+            self.assertNotIn('prefix_tokens',str(result.get('fields',{}).get('generic',{})),raw)
+
     def test_cef_behind_an_adjacent_tag_is_still_read_as_cef(self):
         raw=HEAD+'CEF:0|F5|ASM|11.3.0|Successful Request|Successful Request|2| act=passed src=10.4.1.101 spt=52963 dst=10.4.1.200 dpt=80'
         result=preview(raw)
