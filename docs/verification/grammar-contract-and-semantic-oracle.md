@@ -811,6 +811,9 @@ the pull request name them.
 
 ### Verification of the final tree
 
+State of `3fb766a` / `c3e7b1b`. The runtime changed twice after it (`e4de223`, `129d2d3`); what was run again on
+the last state, and the counts that differ, are in the section "Audits of the changes made after the first one".
+
 - Local battery on Ruby 2.4.9: generators and template set in sync, duplication ratchet 45 = baseline;
   `tsc` 0; vitest 231 files, 1,955 tests; Python unit 178; translation conformance 10,014 calls, 0
   differences, 16/16 faults; Semantic Oracle TypeScript 6,288 cases, 30/30 mutants, 18/18 family mutants;
@@ -848,6 +851,116 @@ the pull request name them.
   key=value with an 8 KB value of astral characters 77 ms -> 3.6 ms; a JSON event that is one 8 KB string
   still takes 68 ms (`main` 2.4 ms) and a CEF event with an 8 KB message 51 ms (`main` 12 ms). Events per
   second on a sensor are not measured.
+
+### Audits of the changes made after the first one (2026-11-16)
+
+**Second audit, `f54ef8c..c3e7b1b`.** Another reviewer that had not taken part in the work compared the two
+commits that carry the changes of the table above, on frozen copies. It found no wrong or lossy result
+reported as FULL, no status or field difference between the browser and Ruby 2.4.9 and no false PARTIAL:
+69,000 mutated lines of 23 configurations, old against new browser (1,952 differ, all key=value or CEF
+readings of a line with a backslash; 551 checked one by one against the two intended changes, the rest only
+grouped); 110,000 lines, browser against generated Ruby 2.4.9 (46 differ, all the older reason text N1
+below); 18,000 generated well-formed events with an independent statement of what was written (7,629
+key=value and 3,340 CEF results equal the text as written); 58 hand-written cases. What it found was cost,
+in the hand-written runtime (`backend/templates/grammar-runtime.rb.tpl`):
+
+| Finding | Decision |
+|---|---|
+| F1 (rated P2 by the reviewer): a CSV row with one character beyond the BMP and many doubled quotes held the parser for seconds: 20 KB, 0.23 s at `f54ef8c` and 5.9 s at `c3e7b1b`; 60 KB, 0.9 s and 51 s. `c3e7b1b` reads a quoted cell in pieces between its doubled quotes, and every piece converted its UTF-16 offsets by counting the units before them | fixed in the runtime, where the cause is (`e4de223`): a text with such a character has two offset tables, built once and kept beside its units (`psg_offsets`, `psg_unit_to_char`, `psg_char_to_unit`), and a short piece far into a text is put together from the units (`psg_slice`). The same rows: 0.18 s and 0.85 s |
+| F2 (P2): the unit arrays of 256 texts were kept, whatever their size: 42 events of 60 KB with text beyond ASCII left 928 MB resident on Ruby 3.2.11 (62 MB at `f54ef8c`) | fixed (`e4de223`, policy replaced in `129d2d3`, see G2): 64 texts shorter than 1,024 units and the eight newest longer ones are kept, oldest first out; an event is at most 65,536 bytes, and the list of eight of `f54ef8c` kept as much |
+| Found in the profile taken for F1 (Ruby 2.4.9), older than `c3e7b1b`: `MatchData#string` is a new copy for every match of a text that is not frozen; the end of a match was asked of that copy, so a scan built the units of its text for every match. One RFC 3164 event of 60 KB with key=value pairs: 1.9 s at `f54ef8c`, 73% of it there | fixed (`e4de223`): a match of a text beyond ASCII carries the text it was made on (`psg_match_at`, `psg_match_text`). The same event: 0.18 s |
+| F3 (P3): `psg_group` with a name that is not a String, and the list primitives with a callback that is not callable on a list without items, no longer meant what they meant at `f54ef8c`. No generated call site passes either | restored (`e4de223`, completed in `129d2d3`, see G4) |
+| F4 (P3): a string changed in place keeps its old units while it is among the kept texts | not changed: nothing in the generated parser changes a string in place (searched by two reviewers) |
+| N1 (P3, older than this section): a JSON event with a lone `\ud83d` escape is UNKNOWN in the browser and in Ruby, with different reason texts | not changed |
+
+**Third audit, of `e4de223`** against `f54ef8c` and `c3e7b1b`, by a reviewer that had not seen the work. The
+meaning of the runtime is that of `f54ef8c` for everything the generated grammar passes (575,784 comparisons
+of the primitives on each of Ruby 2.4.9 and 3.2.11, 507,429 of them also against the reviewer's own UTF-16
+model; 20,000 random operations over 126 live texts with 1,000 checks of the kept state; the instance
+variable on a match under 100,000 reuse rounds and `GC.stress`), F1, F2 and the scan defect are gone, and
+the browser agrees with the generated Ruby on 94,500 lines on each Ruby (14 configurations, about 92% with
+a character beyond the BMP; 57 differ, all N1). It still failed the commit, on G1:
+
+| Finding | Decision (`129d2d3`) |
+|---|---|
+| G1 (P2): the first new test asserted a ratio of two measured times and failed without a defect, 3 of 20 runs on Ruby 2.4.9 and 2 of 10 on 3.2.11 | no test of the file measures time: they count the objects a conversion allocates, the unit arrays built, the texts kept, and whether a text is read by walking |
+| G2 (P3): the kept texts were dropped oldest first from one list, so thousands of small values pushed out the text of the event while it was being read. LEEF, 64 KB, 7,300 small values with BMP text: 2.5 s at `c3e7b1b`, 4.2 s at `e4de223`, the text built 116 times (21 s at `f54ef8c`) | two lists that do not compete: 64 texts shorter than 1,024 units, the eight newest longer ones. The same event: 1.7 s, built twice |
+| G3 (P3): with either offset table unused, the short-piece path removed or the rule for large texts removed, all tests passed | each of nine single changes of the runtime fails the test that names it |
+| G4 (P3): the list primitives asked `list.empty?`; a Range, an Enumerator or a Struct raised where `f54ef8c` enumerated (the generated grammar passes arrays only) | the callback is asked for its parameters at the first item; `psg_group` on a value that is not a match raises what it raised at `f54ef8c`. The reviewer's 575,784 comparisons: no difference left |
+| G5 (P3): F4 again; a changed text is stale for the next 64 kept texts | not changed, as F4 |
+| G6 (P3): a warning under `$VERBOSE` on Ruby 2.4.9 for a state variable; `psg_match_index` read the copy of the match | no unit counter is left; `psg_match_end` and `psg_match_index` read the carried text without touching a variable that is not set |
+| G7 (P3): the comment and a test described the bound more narrowly than the code | the comment and the test state the two lists |
+| G8 (P3): small events with BMP text about 10% slower than at `c3e7b1b` (a short piece joined from the units costs more than reading it near the start of a text) | the short-piece path is taken only behind unit 2,048; not closed by that, see the re-check below |
+
+Left as it is, named by that reviewer: a 64 KB key=value event with text beyond the BMP that is declined
+after its first pair takes 21 ms instead of 10 ms at `f54ef8c` (both offset tables are built for one
+conversion).
+
+**Re-check of `129d2d3`** by the same reviewer, on a frozen copy with the files of the commit. Verdict PASS: no P1
+and no P2 in what was run. The runtime gives the answers of `f54ef8c` in all 612,135 primitive comparisons on
+each Ruby; the browser and the generated Ruby agree on 150,500 lines per Ruby except for N1 (90 lines); the
+test file passed 30 of 30 runs on Ruby 2.4.9 and 20 of 20 on 3.2.11, 25 of them beside another CPU job, and no
+assertion measures time; G1, G2, G3 (28 of the reviewer's own 32 single changes fail a test), G4, G6 and G7
+are closed; over its 133 serial cost rows only the rows of H1 are slower than at `e4de223` beyond noise. What
+it left, all rated P3:
+
+| Finding | Decision |
+|---|---|
+| H1: inside each list the oldest inserted text goes first, not the one used least recently, so more than eight long values (1,024 units or more) beyond ASCII in one event push out the text the event is read through. CSV, 62 cells of 1,030 units, 64 KB: the row is built 18 times and takes 935 ms on Ruby 2.4.9, against 712 ms at `f54ef8c` and 191 ms at `e4de223`; with 40 cells 585 ms against 530 and 171. It is the first row measured slower than at `f54ef8c` (1.3 times) | **open**, not changed in this PR. The answer at the cause is to keep texts by last use (the reviewer's experiment on `e4de223` built every row 2.0 to 2.5 times); it changes the lookup that every read of a text beyond ASCII takes, and both approval values. It belongs with the per-event cost listed under "Not changed" |
+| H2: the eight long texts stay after their events for as long as only short texts follow: 137,713 to 421,742 live heap slots after large events and 1,500 small ones (`f54ef8c` 27,318 to 43,708); resident set on Ruby 3.2.11 41 to 72 MB against 32 to 55 MB at `e4de223`. Bounded by eight texts of at most 65,536 units | **open**, same follow-up |
+| H3: four of the reviewer's 32 single changes passed all six tests: the border between the two lists at 64 units, the short-piece path from unit 0 or from unit 1,024, `psg_match_index` reading the copy | tests added in `55d8adf` (no runtime change): each of the four now fails a test, as do the nine earlier ones |
+| G8, carried over: the short piece itself costs again what it cost at `c3e7b1b` (2.1 against 3.2 microseconds), but at the level of an event small events with BMP text are still up to 9% slower than at `c3e7b1b` in the reviewer's run in one process (0.96 to 1.02 times `e4de223`); the rest is not located | **open** (P3). The author's run of five small shapes gave 0.67 to 1.05 times `c3e7b1b` on Ruby 2.4.9 |
+| H4: an exception between the insert into the cache and the append to the kept list would leave an entry that is never dropped (read, not run); the allocation test relies on `send` allocating nothing on the Ruby in use (0 to 1 objects per 2,000 calls on 2.4.9 and 3.2.11, limit 200); the comment of `psg_units` does not say that long values still push the event text out | not changed (the comment is part of the template text and of both approval values); recorded here |
+
+Not run by that reviewer: the whole backend suite and the other CI gates, `parser.parse` and Fluentd end to
+end, two threads on one parser, formats outside its 14 configurations (Regex, Java stack trace, mixed,
+forwarder, CSV with `;` or TAB), peak memory during one event.
+
+Not run by the reviewers of this section, and so resting on the gates and runs of this document only: the
+Regex lowering (`$`, the optional empty capture), the timestamp constant, the Python files, `parser.parse`
+and Fluentd end to end. No input of their runs made `CEF_PAIR_START` or the exact comparison of an unquoted
+value report anything; the reporting side of those two checks is exercised by the faults
+`contract-cef-backslash-carries-space`, `ts-kv-unquoted-value-decoded` and `py-kv-unquoted-value-decoded`.
+
+Held by `backend/test/grammar-runtime-offset-cost-20261116.test.ts` (six tests; on the runtime of `c3e7b1b`
+five fail, on that of `e4de223` four) and by three runtime faults of
+`scripts/verification/translation-faults.ts`, which the translation conformance gate notices also behind
+unit 2,048 (16 calls on a text of 2,800 units).
+
+Verification of `129d2d3`:
+
+- Local battery on Ruby 2.4.9: generators and template set in sync, duplication ratchet 45 = baseline; `tsc`
+  0; vitest 231 files, 1,955 tests; Python unit 178; translation conformance 10,030 calls, 0 differences,
+  19/19 faults; Semantic Oracle TypeScript 6,288 cases, 30/30 and 18/18 family mutants; native 1,582 cases,
+  9/9; differential 21,052 + 27,000 Generic Structural cases, 44,858 lines of 29 configurations and 25,380
+  CSV rows, 0 differences, 17/17 and 15/15 faults; Python oracle 38/38 mutants and 2,885 lines three ways
+  with 0 differences; backend 774 tests, 758 pass, and the 16 that fail are the same 16 as before.
+- Ruby 3.2.11: the same Ruby-side gates pass with the same counts.
+- The 39 projects of the E2E run compiled again with this tree, against the artifacts the browser downloaded
+  at `3fb766a`: 460 lines (each log as it is, each line with a CR at its end, and the log three more times),
+  every record identical, on Ruby 2.4.9 and on 3.2.11. Chromium was not run again for the download: no file
+  that the browser runs changed after `3fb766a`.
+- Real Fluentd with these pairs: `fluentd --dry-run` loads all 102 artifacts on Fluentd 1.7.4 / Ruby 2.4.9
+  and on 1.17.1 / Ruby 3.2.11; reception over UDP, TCP with LF and TCP with CRLF, 39 of 39 on both.
+- The CI steps 26 to 45 of `web-quality`, locally on `129d2d3`: all pass (Chromium 133 tests); step 29 passes
+  on Ruby 3.2.11 and stops on 2.4.9 at the Regex case without a static cost proof, as before.
+- CI on `129d2d3`: Browser regression 6/6, `native-isolated-synthetic` and `ruby24-fluentd-udp-reception`
+  pass; `web-quality` fails in exactly the two owner-approval tests (751 of 753 pass, the six new tests among
+  them) and prints the same two values as the local run and the independent recalculation. `55d8adf` changes a
+  test file only: generators and template set in sync, `tsc` 0, backend 774 tests with the same 16 failing.
+- Events of 60 KB, one `psg_read_event`, wall time on Ruby 2.4.9 while other jobs ran, `f54ef8c` -> `129d2d3`:
+  key=value with BMP text 0.89 s -> 0.17 s, with text beyond the BMP 2.0 s -> 0.15 s; RFC 3164 + key=value
+  1.9 s -> 0.19 s and 2.7 s -> 0.17 s; CEF with 200 pairs 1.4 s -> 0.82 s and 1.9 s -> 0.67 s; CSV with BMP
+  cells 0.38 s -> 0.10 s; JSON 0.33 s -> 0.22 s and 0.73 s -> 0.19 s. Resident memory after 42 such events
+  on Ruby 3.2.11, in MB: 83 -> 65 (key=value), 64 -> 76 (RFC 3164 + key=value), 110 -> 118 (CEF), 124 -> 49
+  (CSV), 29 -> 40 (JSON); the rows that grow are H2.
+- Large events of ASCII text, where no unit array is built (CPU time, best of 7, Ruby 2.4.9, `f54ef8c` /
+  `c3e7b1b` / `129d2d3`): CEF with 200 pairs 417 / 433 / 414 ms, RFC 3164 + CEF 372 / 365 / 363 ms, JSON
+  92 / 89 / 93 ms, key=value 280 / 11 / 11 ms; a CSV row of quoted cells with 10,000 doubled quotes 81 / 94 /
+  93 ms (the piecewise reading of `c3e7b1b` costs 15% there).
+- Per-event cost of the 26 downloaded parsers that have a counterpart from `main` (whole `parse`, CPU time,
+  Ruby 2.4.9, measured while other jobs ran): 2.0 times `main` in the median (1.3 to 5.0), as before; their
+  logs are short and mostly ASCII, where these fixes do not act. The same artifacts at `c3e7b1b` and at `129d2d3`, alternating, best of three, on a quiet host (38 parsers): `129d2d3` takes 0.93 to 1.05 times the CPU time of `c3e7b1b`, 1.00 in the median.
 
 ## Rules for adding or changing a grammar or a mapping
 
