@@ -104,7 +104,7 @@ const FORTINET_FALSE_FRIENDS=new Set([
 /** One rule for every consumer (automatic candidates and reviewed ChatGPT proposals): a FortiOS field whose name
  * equals a Stellar field of another meaning or unit. */
 export function fortiGateFalseFriend(source:string,events:readonly Record<string,unknown>[]):boolean{
-  const leaf=(source.split('.').at(-1)??source).toLowerCase();
+  const leaf=source.slice(source.lastIndexOf('.')+1).toLowerCase();
   return FORTINET_FALSE_FRIENDS.has(leaf)&&events.some(fields=>fortiGateRecord(fields,source));
 }
 // The official action field describes enforcement/response, not arbitrary
