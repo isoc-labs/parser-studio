@@ -12,8 +12,12 @@ import type {MultiPassSourcePreview} from './multipassPreviewClient';
 const MAX_EXPLICIT_MAPPINGS=100;
 /** A new Generic Structural parser reads CEF/LEEF lines with the dedicated grammar or declines them (D-2). */
 const FAMILY_GRAMMAR='dedicated' as const;
+// What the reading says about itself, not a value of the event: which grammar route read the line, with which
+// separator and profile, which Syslog header variant matched and how strictly. These stay in the source container
+// (parserstudio_source) and never become a vendor field: `variant="rfc3164"` or `confidence="strict"` beside the
+// fields of a firewall record would be output the device did not send.
 const NON_DATA_PATHS=new Set([
-  'generic.mode','generic.delimiter',
+  'generic.mode','generic.delimiter','generic.profile','syslog.variant','syslog.confidence',
 ]);
 
 function sourcePaths(source:string,draft:ParserDraft):{paths:string[];profile?:GenericStructuralProfile}|null{

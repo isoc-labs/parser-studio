@@ -10,8 +10,12 @@ describe('published PAN-OS positional traffic source: semantic dictionary safety
     const result=buildAutomaticGenericStructuralDraft(raw,createDraft());
     expect(result).not.toBeNull();
     const draft=result!.draft;
-    expect(draft.mappings).toHaveLength(97);
     const mapping=(source:string)=>draft.mappings.find(x=>x.source===source);
+    // 97 until 2026-11-16. syslog.variant, syslog.confidence and generic.profile say how the line was read; they
+    // are not values of the event and are no longer mapped to vendor fields.
+    expect(draft.mappings).toHaveLength(94);
+    for(const descriptor of ['syslog.variant','syslog.confidence','generic.profile','generic.mode','generic.delimiter'])
+      expect(mapping(descriptor),descriptor).toBeUndefined();
     expect(mapping('syslog.severity')).toBeDefined();
     expect(draft.guided?.groups[mapping('syslog.severity')!.id]).toBe('vendor_fields');
     expect(mapping('generic.fields.type')).toBeDefined();

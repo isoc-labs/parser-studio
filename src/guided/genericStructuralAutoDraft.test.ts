@@ -84,6 +84,9 @@ describe('beginner automatic Generic Structural handoff',()=>{
       const {draft,suite}=result!;
       const produced=new Set(suite.events.flatMap(event=>listSafeLeafPaths(event.fields)));
       expect(draft.mappings.filter(mapping=>!produced.has(mapping.source)).map(mapping=>mapping.source)).toEqual([]);
+      // What the reading says about itself is not a vendor field: no mapping emits a value the device did not send.
+      expect(draft.mappings.map(mapping=>mapping.source).filter(source=>
+        ['generic.mode','generic.delimiter','generic.profile','syslog.variant','syslog.confidence'].includes(source))).toEqual([]);
       const left=suggestNormalizationCandidatesFromSuite(suite,draft.mappings,draft.guided!.groups)
         .filter(candidate=>candidate.confidence==='HIGH'&&candidate.safeForBulk);
       expect(left.map(candidate=>candidate.source+' -> '+candidate.target)).toEqual([]);
