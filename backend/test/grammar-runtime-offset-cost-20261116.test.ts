@@ -81,14 +81,17 @@ test('a short piece far into a text beyond ASCII is put together from the units,
     "  text.define_singleton_method(:[]) { |*_at| raise IndexError, 'the text was read by walking' }",
     '  far = begin; [parser.send(:psg_slice, text, 4000, 4008), parser.send(:psg_slice, text, 2048, 2080), parser.send(:psg_substring, text, 4900, 4899)]; rescue IndexError => error; error.message; end',
     '  long = begin; parser.send(:psg_slice, text, 4000, 4033); rescue IndexError => error; error.message; end',
-    '  [far, long]',
+    '  near = begin; parser.send(:psg_slice, text, 2047, 2050); rescue IndexError => error; error.message; end',
+    '  [far, long, near]',
     'end',
-    'STDOUT.write(JSON.generate(pieces))'], {texts}) as Array<[string[] | string, string]>;
+    'STDOUT.write(JSON.generate(pieces))'], {texts}) as Array<[string[] | string, string, string]>;
   texts.forEach((text, index) => {
     assert.deepEqual(out[index]![0], [text.slice(4000, 4008), text.slice(2048, 2080), text.substring(4900, 4899)]);
     // The other path is the one that walks; a piece of 33 units takes it. This holds the test itself: if the
     // refusal did not work, the assertion above would prove nothing.
     assert.equal(out[index]![1], 'the text was read by walking');
+    // One unit before the border the walk is the cheaper way, and is taken.
+    assert.equal(out[index]![2], 'the text was read by walking');
   });
 });
 
@@ -112,10 +115,13 @@ test('the kept unit arrays are bounded, and small texts never push out the text 
     'parser.send(:psg_unit_to_char, ninth, 900)',
     'kept_long = units.call.keys.select { |text| units.call[text].length >= 1024 }',
     'first_kept = units.call.key?(eight[0]); second_kept = units.call.key?(eight[1])',
+    // 1,023 units is a short text and leaves the long ones alone; 1,024 units is a long one
+    "parser.send(:psg_len, \"\\u00e9\" * 1023); below_border = units.call.key?(eight[1])",
+    "parser.send(:psg_len, \"\\u00e9\" * 1024); at_border = units.call.key?(eight[1])",
     // a stream of large texts beyond the BMP and of small ones
     "peak_entries = 0; 60.times { |i| parser.send(:psg_unit_to_char, \"\\u{1F600}\" * (30000 + i), 5000); 9.times { |j| parser.send(:psg_len, \"s#{i}-#{j}\\u00e9\") }; peak_entries = [peak_entries, units.call.length].max }",
     "STDOUT.write(JSON.generate({'longBuilds' => long_builds, 'afterSmall' => after_small, 'eightBuilds' => eight_builds, 'keptLong' => kept_long.length,",
-    "  'firstKept' => first_kept, 'secondKept' => second_kept, 'peakEntries' => peak_entries, 'entries' => units.call.length,",
+    "  'firstKept' => first_kept, 'secondKept' => second_kept, 'belowBorder' => below_border, 'atBorder' => at_border, 'peakEntries' => peak_entries, 'entries' => units.call.length,",
     "  'longNow' => units.call.values.count { |array| array.length >= 1024 }, 'shortNow' => units.call.values.count { |array| array.length < 1024 },",
     "  'tables' => offsets.call.length, 'strangers' => offsets.call.keys.count { |text| !units.call.key?(text) }}))"], {});
   assert.equal(out.longBuilds, 1, 'the long text is built once while 500 small texts pass');
@@ -124,6 +130,8 @@ test('the kept unit arrays are bounded, and small texts never push out the text 
   assert.equal(out.keptLong, 8);
   assert.equal(out.firstKept, false, 'the ninth long text pushes out the oldest long one');
   assert.equal(out.secondKept, true);
+  assert.equal(out.belowBorder, true, 'a text of 1,023 units does not take the place of a long one');
+  assert.equal(out.atBorder, false, 'a text of 1,024 units does');
   assert.ok(out.peakEntries <= 72, `kept texts at the highest point: ${out.peakEntries}`);
   assert.equal(out.longNow, 8);
   assert.equal(out.shortNow, 64);
@@ -142,8 +150,10 @@ test('events with text beyond ASCII build the units of each text once: per match
     'warnings = StringIO.new; stderr = $stderr; verbose = $VERBOSE; $stderr = warnings; $VERBOSE = true',
     "status = parser.send(:psg_read_event, parser.send(:psg_text, texts[0]), settings)['status']",
     "plain_end = parser.send(:psg_match_end, /\\u00e9+/.match(\"a\\u00e9\\u00e9b\")); plain_index = parser.send(:psg_match_index, /\\u00e9+/.match(\"\\u{1F600}a\\u00e9\\u00e9b\"))",
+    "fresh = \"\\u{1F600}\" + \"a\\u00e9\" * 600; before = built.length",
+    "made = parser.send(:psg_match_at, /\\u00e9+/, fresh, 3); made_at = [parser.send(:psg_match_index, made), parser.send(:psg_match_end, made)]; made_builds = built.length - before",
     '$stderr = stderr; $VERBOSE = verbose',
-    "STDOUT.write(JSON.generate({'status' => status, 'built' => built.inject(0, :+), 'length' => texts[0].length, 'plainEnd' => plain_end, 'plainIndex' => plain_index,",
+    "STDOUT.write(JSON.generate({'status' => status, 'built' => built.inject(0, :+), 'length' => texts[0].length, 'plainEnd' => plain_end, 'plainIndex' => plain_index, 'madeAt' => made_at, 'madeBuilds' => made_builds,",
     "  'warnings' => warnings.string.lines.grep(/@psg_/)}))"], {texts: [text]});
   for (const [label, out] of [['RFC 3164 + key=value', run({format: 'syslog_rfc3164', syslogBodyFormat: 'kv'}, scan)], ['LEEF with 1,500 small values', run({format: 'leef'}, many)]] as const) {
     assert.equal(out.status, 'FULL', label);
@@ -151,6 +161,8 @@ test('events with text beyond ASCII build the units of each text once: per match
     assert.ok(out.built <= 4 * out.length, `${label}: units built for one event of ${out.length} characters: ${out.built}`);
     assert.equal(out.plainEnd, 3);
     assert.equal(out.plainIndex, 3);
+    assert.deepEqual(out.madeAt, [3, 4]);
+    assert.equal(out.madeBuilds, 1, 'start and end of a match are read from the text it was made on, not from a copy');
     assert.deepEqual(out.warnings, [], 'no warning about a state variable of the runtime under $VERBOSE');
   }
 });
