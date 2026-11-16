@@ -1905,7 +1905,7 @@
     {
       "id": "json-decimal-with-more-digits-than-a-double-holds",
       "raw": "{\"ratio\":0.1234567890123456789,\"ok\":true}",
-      "provenance": "RFC 8259 section 6: implementations that use IEEE 754 binary64 are interoperable only for numbers within its precision. A decimal with more than 15 significant digits is not the value a double holds; reporting the rounded double as the value of the event would be reporting a number the event does not contain, so no engine may report the event as parsed (src/jsonNumberSafety.ts). Found on 2026-11-15 by the three-way comparison: the Python preview reported the rounded value.",
+      "provenance": "RFC 8259 section 6: implementations that use IEEE 754 binary64 are interoperable only for numbers within its precision. This decimal has more digits than a double identifies: the double nearest to it prints as 0.12345678901234568, another number; reporting the rounded double as the value of the event would be reporting a number the event does not contain, so no engine may report the event as parsed (src/jsonNumberSafety.ts). Found on 2026-11-15 by the three-way comparison: the Python preview reported the rounded value.",
       "expect": {
         "status": "UNKNOWN"
       }
@@ -1930,6 +1930,27 @@
       "id": "json-nine-nested-levels",
       "raw": "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":{\"f\":{\"g\":{\"h\":{\"i\":1}}}}}}}},\"ok\":true}",
       "provenance": "RFC 8259 section 9: an implementation may set limits on the maximum depth of nesting. The JSON source contract of the product is eight nested levels (src/jsonSourceSafety.ts, enforced by the browser and by the generated Ruby); a value at the ninth level declines the event in every engine. Found on 2026-11-15 by the three-way comparison: the Python preview read forty levels.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-decimal-printed-from-a-double",
+      "raw": "{\"ts\":1731719701.123456,\"uid\":\"CHhAvVGS1DHFjwGM9\",\"ok\":true}",
+      "provenance": "Zeek JSON writer, conn.log: ts is the time in seconds, a double printed with six fractional digits (sixteen significant digits). IEEE 754 binary64 and RFC 8259 section 6: a number is interoperable when a double holds it; the shortest decimal that identifies the double nearest to 1731719701.123456 is that text itself, so the double stands for exactly the number written and the event is parsed with it. Found on 2026-11-16 with a holdout Zeek record: the rule 'more than 15 significant digits' declined every Zeek JSON record.",
+      "expect": {
+        "status": "FULL",
+        "values": {
+          "ts": 1731719701.123456,
+          "uid": "CHhAvVGS1DHFjwGM9",
+          "ok": true
+        }
+      }
+    },
+    {
+      "id": "json-decimal-one-digit-beyond-a-double",
+      "raw": "{\"ts\":1731719701.12345678,\"ok\":true}",
+      "provenance": "IEEE 754 binary64: near 1.7e9 neighbouring doubles are about 2.4e-7 apart. 1731719701.12345678 is not a double; the nearest one prints as 1731719701.1234567. Reporting that as the value of the event would be reporting a number the event does not contain, so no engine may report the event as parsed (src/jsonNumberSafety.ts).",
       "expect": {
         "status": "UNKNOWN"
       }

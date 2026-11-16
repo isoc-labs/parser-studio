@@ -987,6 +987,10 @@ const TS_JSON_MUTANTS: Mutant[] = [
   { id: 'ts-json-repeated-name-accepted', file: 'src/grammar/extractEvent.ts', find: "if (hasDuplicateJsonObjectKeys(raw)) return failure(", replace: "if (false) return failure(" },
   // Without the guard JSON.parse rounds 12345678901234567890 to 12345678901234567000.
   { id: 'ts-json-large-integer-rounded', file: 'src/grammar/extractEvent.ts', find: "if (hasUnsafeJsonNumbers(raw)) return failure(", replace: "if (false) return failure(" },
+  // Without the comparison 0.1234567890123456789 is reported as 0.12345678901234568.
+  { id: 'ts-json-inexact-decimal-read', file: 'src/jsonNumberSafety.ts', find: "if (decimalIdentity(token) !== decimalIdentity(String(value))) return true;", replace: "if (false) return true;" },
+  // Counting digits instead of comparing declines 1731719701.123456, the ts of a Zeek record.
+  { id: 'ts-json-decimal-declined-by-digit-count', file: 'src/jsonNumberSafety.ts', find: "if (decimalIdentity(token) !== decimalIdentity(String(value))) return true;", replace: "if (token.replace(/[^0-9]/gu, '').length > 15) return true;" },
 ];
 
 async function runJsonTs(): Promise<{ ok: boolean; summary: string }> {
@@ -1612,7 +1616,10 @@ function formatConfigs(): FormatConfig[] {
   const jsonNumberSeeds = ['{"id":9007199254740991,"n":-9007199254740991}', '{"id":9007199254740992}', '{"id":9007199254740993}', '{"id":-9007199254740993}',
     '{"id":18446744073709551615}', '{"id":-9223372036854775808}', '{"n":123456789012345678901234567890}', '{"n":1e21}', '{"n":1E400}', '{"n":-1e400}',
     '{"n":0.1234567890123456789}', '{"n":-0}', '{"n":-0.0}', '{"n":1.0}', '{"n":1e2}', '{"n":4.9e-324}', '{"n":1.7976931348623157e308}', '{"n":9007199254740993.0}',
-    '{"a":[9007199254740993,1]}', '{"a":{"b":12345678901234567890}}', '{"s":"9007199254740993"}', '{"n":9.007199254740993e15}', '{"n":1e16}', '{"n":10000000000000001}'];
+    '{"a":[9007199254740993,1]}', '{"a":{"b":12345678901234567890}}', '{"s":"9007199254740993"}', '{"n":9.007199254740993e15}', '{"n":1e16}', '{"n":10000000000000001}',
+    // Decimals at the edge of what a double identifies: printed from a double (read) and one digit beyond (declined).
+    '{"n":1731719701.123456}', '{"n":1731719701.1234567}', '{"n":1731719701.12345678}', '{"n":0.30000000000000004}', '{"n":1.0000000000000002}',
+    '{"n":0.1000000000000000055511151231257827}', '{"n":123456789012345.6}', '{"n":1.5e-7}', '{"n":5e-324}', '{"n":2.5e-324}'];
   // The JSON source contract: eight nested levels are an event, nine are not. (An unpaired surrogate escape, the
   // other half of that contract, is also declined by the loss accounting, which cannot read it a second time.)
   const nested = (levels: number): string => '{"k":'.repeat(levels) + '1' + '}'.repeat(levels);
