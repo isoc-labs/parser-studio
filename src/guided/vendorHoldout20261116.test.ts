@@ -22,6 +22,7 @@ const READING:Record<string,string>={
   h_checkpoint_logexporter:'generic',
   h_cloudtrail_line:'json',
   h_fortigate_mixed:'generic',
+  h_fortigate_webfilter:'generic',
   h_imperva_cef:'cef',
   h_okta_system_log:'json',
   h_panos_threat_url:'generic',
@@ -30,6 +31,7 @@ const READING:Record<string,string>={
   h_sophos_xg_fw:'kv',
   h_srx_sd_close_deny:'syslog_rfc5424',
   h_stormshield_filter:'kv',
+  h_suricata_rfc5424:'syslog_rfc5424',
   // Free text: a parsing rule is needed (ChatGPT Assisted Parser). Declined with a diagnosis, never guessed.
   h_cisco_asa_mixed:'declined',
   h_nginx_combined:'declined',

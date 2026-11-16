@@ -1,0 +1,62 @@
+{
+ "vendor": "Fortinet FortiGate 7.x",
+ "family": "syslog PRI + kv, one record type (web filter)",
+ "provenance": "AUTHORED_FROM_VENDOR_GRAMMAR",
+ "expect": "PARSE",
+ "events": 2,
+ "unit": "line",
+ "note": "the wire form of FortiGate: hostname= is the requested web host, devname= the device; direction is the direction of the request, not a Stellar flow direction",
+ "oracle": [
+  {
+   "canon": {
+    "srcip": "10.1.10.31",
+    "dstip": "198.51.100.80",
+    "srcport": 50211,
+    "dstport": 80,
+    "action": "blocked",
+    "url": "http://bad1.example.net/dl/a.exe"
+   },
+   "values": {
+    "hostname": "bad1.example.net",
+    "devname": "FGT60F-HQ",
+    "direction": "outgoing",
+    "user": "mlee"
+   },
+   "forbid": [
+    [
+     "hostname",
+     "bad1.example.net"
+    ],
+    [
+     "direction",
+     "outgoing"
+    ]
+   ]
+  },
+  {
+   "canon": {
+    "srcip": "10.1.10.32",
+    "dstip": "198.51.100.80",
+    "srcport": 50212,
+    "dstport": 80,
+    "action": "blocked",
+    "url": "http://bad2.example.net/dl/a.exe"
+   },
+   "values": {
+    "hostname": "bad2.example.net",
+    "direction": "outgoing"
+   },
+   "forbid": [
+    [
+     "hostname",
+     "bad2.example.net"
+    ],
+    [
+     "direction",
+     "outgoing"
+    ]
+   ]
+  }
+ ],
+ "raw_sha256": "112bf804918b0fc9663b479a9735c1380e8a6e4073c49cd37df05ad233631e52"
+}
