@@ -1096,12 +1096,22 @@ def _generic_event(raw:str,start:int,outer:SourceEvent|None,syntax:str,
     return out
 
 
-# The whole message of the adjacent form: name="value" pairs joined by a comma (F5 documentation prints some
-# of them with blanks after the comma), every value in double quotes without a quote or a backslash inside,
-# every name one plain word. Nothing looser is this form: a word before the first name would become part of
+# The whole message of the adjacent form: name="value" pairs joined by a comma, with nothing but blanks after
+# it (the F5 documentation wraps the record after some commas), every name one plain word, every value in
+# double quotes. A value holds no quote. It may hold a backslash, which is text (F5 writes the line breaks of
+# a request as the four characters `\r\n`), except directly before a quote: whether `\"` ends the value is
+# not for this route to decide. Nothing looser is this form: a word before the first name would become part of
 # that name, and an apostrophe in an unquoted value would be read as an opening quote that swallows the pairs
 # up to the next apostrophe.
-_ADJACENT_COMMA_RECORD=re.compile(r'[A-Za-z_][A-Za-z0-9_]*="[^"\\]*"(?:, *[A-Za-z_][A-Za-z0-9_]*="[^"\\]*")+\Z')
+_ADJACENT_VALUE=r'"(?:[^"\\]|\\(?!"))*"'
+# Names every JavaScript object already has. The browser reading does not hold such a name as a plain field
+# (src/genericStructural.ts declines some and fails on others), so a record with one keeps its earlier verdict.
+_JS_OBJECT_MEMBERS=frozenset((
+    '__proto__','constructor','prototype','toString','toLocaleString','valueOf','hasOwnProperty',
+    'isPrototypeOf','propertyIsEnumerable','__defineGetter__','__defineSetter__','__lookupGetter__',
+    '__lookupSetter__'))
+_ADJACENT_COMMA_RECORD=re.compile(
+    r'[A-Za-z_][A-Za-z0-9_]*='+_ADJACENT_VALUE+r'(?:, *[A-Za-z_][A-Za-z0-9_]*='+_ADJACENT_VALUE+r')+\Z')
 
 
 def _adjacent_tag_comma_kv(raw:str,recipe:StructuralRecipe|None)->SourceEvent|None:
@@ -1137,6 +1147,8 @@ def _adjacent_tag_comma_kv(raw:str,recipe:StructuralRecipe|None)->SourceEvent|No
     generic=candidate.vendor_fields.get('generic')
     fields=generic.get('fields') if isinstance(generic,dict) else None
     if not isinstance(fields,dict) or any(isinstance(value,list) for value in fields.values()):
+        return None
+    if not _JS_OBJECT_MEMBERS.isdisjoint(fields):
         return None
     # The record starts directly after the colon: text between the tag and the first name is not this form.
     if generic.get('prefix_tokens'):

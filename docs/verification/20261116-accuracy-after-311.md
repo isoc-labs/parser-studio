@@ -31,7 +31,7 @@ that need a template change are prepared separately and wait for the approval of
 | 2 | A field that is empty in one event was dropped for every event | `prepareAutoParserDraft` kept a field only when no event carried it empty | Sophos Firewall sample: `user_name`, the NAT address and the outgoing interface of the allowed connection were not in the output (these formats keep no other copy of the source) | every value of every event is in the output |
 | 3 | A vendor field mapped to a Stellar field of another meaning when the record was read inside a container | The vendor-meaning guards looked for their evidence at the root of the event only | FortiGate wire form (`<PRI>date=... logid=...`): the requested web host mapped to `hostname`, `direction` to `direction`. Suricata alert inside RFC 5424: the 1-4 alert priority mapped to `severity` | the guards answer the same for every reading of one record |
 | 4 | Imperva Cloud WAF: `srcport` held the server port | CEF names `spt` the source port; Imperva writes the client port as `cpt` and uses `spt` for the server port | `srcip` 203.0.113.77 with `srcport` 443 | `spt` beside `cpt` stays a vendor field |
-| 5 | F5 ASM key-value record blocked on Add Logs ("kv token unrecognized") | The Python source preview asked for a blank after the RFC 3164 tag; the browser grammar, which builds the parser, does not. The step needs both to agree | no parser for `... ASM:unit_hostname="...",...` | parser downloaded; all fields read |
+| 5 | F5 ASM key-value record blocked on Add Logs ("kv token unrecognized") | The Python source preview asked for a blank after the RFC 3164 tag; the browser grammar, which builds the parser, does not. The step needs both to agree | no parser for `... ASM:unit_hostname="...",...` | parser downloaded; all fields read, also for the complete record of the F5 documentation (31 pairs, the request with its line breaks written as `\r\n`) |
 | 6 | No reason shown for a JSON number the grammar declines | The step reported "parser rule needs review" and pointed to ChatGPT, which cannot repair it | - | the number is named; nothing is said to be repairable by a rule |
 | 7 | What a reading says about itself was written to the output as if the vendor had sent it | The automatic Generic Structural draft mapped every discovered path, also `syslog.variant`, `syslog.confidence` and `generic.profile` | F5 line: the vendor namespace held `variant:"rfc3164"`, `confidence:"strict"`; PAN-OS TRAFFIC sample: 97 automatic mappings | these three are not mapped (PAN-OS: 94). `syslog.facility` and `syslog.severity` stay: they are the PRI of the line, decoded |
 
@@ -118,7 +118,7 @@ records of the next section.
 
 Each needs a change of the grammar or of the Ruby operators, and therefore of the approved template hashes. The
 first seven are vendor records the automatic journey does not read; they are pinned as `declined` in the holdout
-test so that a later change shows up. The last three are readings that main has as well and that this change does
+test so that a later change shows up. The last four are readings that main has as well and that this change does
 not touch.
 
 | Record | Why it is declined | Size of the fix |
@@ -130,8 +130,9 @@ not touch.
 | Cisco FTD 430003 (`Key: value, Key: value`) | no grammar for a colon list | new grammar |
 | PAN-OS THREAT | read as positional columns (`column_7`...); only TRAFFIC has column names | column table for THREAT |
 | `CEF:1`, a trailing LEEF delimiter | grammar contract | contract change |
-| A mapped value that is only white space (`user=" "`) | the run time skips the exact strings `""`, `N/A`, `-`; a blank-only value reaches the conversion, which rejects it, and the event takes the field-error path (source text kept, `parser_err_msg` set). Before defect 2 was fixed the sample hid this by dropping the field for every event; a parser built from a sample without the blank fails the same way on main | small: a blank-only value is a missing value in the browser and in the Ruby operators (template change) |
-| Comma-separated pairs behind `TAG: ` with words before the first name, or with an apostrophe in an unquoted value (`myapp: Login failed user=bob,src=...`; `user=o'brien,...,dept=o'neil`) | the comma-record grammar takes the words into the first name and reads an apostrophe as an opening quote; the browser grades the first PARTIAL and still adopts the draft. The values stay in `message_raw` and `parserstudio_source`; no Stellar field is wrong. On main as well | grammar change: a name is one word; a quote opens a value only at its start |
+| A mapped value that is only white space (`user=" "`) | the run time skips the exact strings `""`, `N/A`, `-`; a blank-only value reaches the conversion, which rejects it, and the event takes the field-error path (its other mapped fields and the `parser_err_*` keys are written, the blank value is not). Before defect 2 was fixed the sample hid this by dropping the field for every event; a parser built from a sample without the blank fails the same way on main. In Chromium, for `user="bob"` / `user=" "` / `user="eve"`: main downloads a parser that writes no `user` for any event; with this change the Map Fields step stops at "a sample value does not fit the selected value type" for the second event | small: a blank-only value is a missing value in the browser and in the Ruby operators (template change) |
+| Comma-separated pairs behind `TAG: ` with words before the first name, or with an apostrophe in an unquoted value (`myapp: Login failed user=bob,src=...`; `user=o'brien,...,dept=o'neil`) | the comma-record grammar takes the words into the first name and reads an apostrophe as an opening quote; the browser grades the first PARTIAL and still adopts the draft. The values stay in `parserstudio_source`; no Stellar field is wrong. On main as well | grammar change: a name is one word; a quote opens a value only at its start |
+| A key=value record with a field named `toString`, `valueOf` or `hasOwnProperty` behind `TAG: ` | building the browser draft fails (`DataCloneError`): in Chromium the Add Logs step shows no result and no parser is built. On main as well | `src/genericStructural.ts`: fields in an object without a prototype |
 | RFC 3164 tag directly followed by space-separated pairs (`kernel:IN=eth0 OUT=eth1 ...`) | the browser grammar glues the tag and the first pair into one positional token (`prefix_005:"kernel:IN=eth0"`, no `IN`); the Python preview reads `IN`. On main as well | grammar change (`priSpaceKv`) |
 
 ## Mapping left to the user on purpose
@@ -149,18 +150,18 @@ An independent auditor read and ran the first version of this change (8803471) a
 
 | Finding | Disposition |
 |---|---|
-| P1-1 The Python preview no longer refused a tag without a blank; the later fallbacks re-read the line from the PRI and 189 of 4,789 adversarial lines went from partial to parsed, the first pair glued into a positional token | Fixed. The guard is back; one narrow route reads the tag directly followed by a complete comma-separated record of `name="value"` pairs that repeats no name (narrowed once more after the second audit, below). Over the auditor's 7,238 lines 12 verdicts change, all of them that F5 record |
+| P1-1 The Python preview no longer refused a tag without a blank; the later fallbacks re-read the line from the PRI and 189 of 4,789 adversarial lines went from partial to parsed, the first pair glued into a positional token | Fixed. The guard is back; one narrow route reads the tag directly followed by a complete comma-separated record of `name="value"` pairs that repeats no name (narrowed once more after the second audit, below). Only records of that form change verdict (counts under the second audit) |
 | P2-1 Malformed or unsupported CEF/LEEF behind an adjacent tag came back as parsed | Fixed by the same change: CEF and LEEF are never taken through the adjacent route |
 | P2-2 A repeated name in the F5 form was adopted automatically (owner policy D-1) | Fixed: a repeated name keeps its earlier verdict |
-| P2-3 For the F5 key-value form `hostname` is taken from the Syslog header although `unit_hostname` is in the record | Not changed. The header host is the sender named by the transport; `unit_hostname` stays in the output under its own name. The rule that an applied target is not offered again is older than this change and PAN-OS depends on it (removing it loses `syslog.hostname -> hostname` there). Listed as a review item for the candidate logic |
+| P2-3 For the F5 key-value form `hostname` is taken from the Syslog header although `unit_hostname` is in the record | Not changed. The header host is the sender named by the transport; `unit_hostname` stays in the output under its own name. The rule that an applied target is not offered again is older than this change and in a trial without it the PAN-OS sample lost `syslog.hostname -> hostname`. Listed as a review item for the candidate logic |
 | P2-4 A value that is only white space now makes its event take the field-error path | Not changed here; see "Not fixed". The earlier behaviour dropped the field for every event of the sample, which lost values. The repair is in the run-time operators and needs new template hashes |
 | P2-5 Descriptors of the reading were written as vendor fields | Fixed for `syslog.variant`, `syslog.confidence`, `generic.profile` (defect 7). `syslog.facility`/`syslog.severity` are the decoded PRI and stay; `message_raw` is a copy of source text and stays |
-| P2-6 The "loses nothing" half of the holdout test could not fail for Generic Structural drafts | Fixed: the copies of the whole source text are ignored, every automatic mapping must read a field some event has, and the number of correct Stellar meanings is pinned per sample |
+| P2-6 The "loses nothing" half of the holdout test could not fail for Generic Structural drafts | Partly fixed: the copies of the whole source text are ignored, every automatic mapping must read a field some event has, and the number of correct Stellar meanings is pinned per sample. Removing vendor-only mappings is still invisible to this test; 17 other tests hold it |
 | P2-7 No test held the text of the Add Logs panel | Fixed: component test |
 | P3-1 Vendor evidence was combined across container levels | Fixed: all evidence must be in one container |
 | P3-2 Imperva rule keyed on `cpt` anywhere | Partly: `cpt` must be beside `spt`. A record without `cpt` is not recognised |
 | P3-3 Only the FortiGate rule is shared with the review of ChatGPT proposals | Not changed; proposals for Imperva `spt` and Suricata `alert.severity` come back as "Check first", not applied |
-| P3-4 Wording of the number explanation; object behind structured data not found | Fixed |
+| P3-4 Wording of the number explanation; object behind structured data not found | Partly fixed: the wording and the search for the object. The summary sentence still names the number whenever the selected event holds one |
 | P3-5 Fixture epochs (2024) do not match the text dates (2026) | Not changed; nothing asserts the pair. The fixtures are frozen with the measurements of this document |
 | P3-6 Two new tests were red on the old code for a missing function, not for the behaviour | Not changed; the behaviour is held by the other tests of the same files |
 
@@ -173,24 +174,38 @@ kept. P2-3 was regraded P3: the Syslog header host is one of two defensible sour
 
 | Finding of the second audit | Disposition |
 |---|---|
-| N1 (P2) The adjacent route also took words before the first name: `myapp:Login failed user=bob,src=...` came back as parsed with a field named "Login failed user" | Fixed. The route now takes only a message that is, from the colon to the end, two or more `name="value"` pairs joined by a comma and nothing but blanks after it (the F5 documentation prints `", `): every name one plain word, every value in double quotes |
+| N1 (P2) The adjacent route also took words before the first name: `myapp:Login failed user=bob,src=...` came back as parsed with a field named "Login failed user" | Fixed. The route now takes only a message that is, from the colon to the end, two or more `name="value"` pairs joined by a comma and nothing but blanks after it (the F5 documentation wraps the record after some commas): every name one plain word, every value in double quotes |
 | N2 (P2) Two apostrophes in unquoted values swallowed the pairs between them into one value | Fixed by the same rule: a value outside double quotes is not this form |
 | N3 (P3) Names that are not a safe path (`bytes(in)`) were read and not mapped | No longer reached through this route (plain names only) |
 | N4 (P3) In the F5 record `severity="Informational"` is written under a path-qualified vendor name because the decoded PRI severity keeps the short name | Not changed; both values are right. Follows from keeping `syslog.severity` |
 | N5 (P3) Four mutations survived | A test now holds the shared FortiGate rule in the review of ChatGPT proposals (red with the old copy). The `+COMMA_KV` and status checks stand behind the new rule as a second line. Removing vendor-only mappings is caught by 17 other tests |
 | N6 (P3) This document did not exist | It does now |
 
+A third pass of the same auditor on the narrowed rule (4,200 more crafted lines, twelve weakenings of the rule,
+seven lines through Ruby 2.4.9) found no wrong, glued, truncated, invented or mixed value and one more P2:
+
+| Finding of the third pass | Disposition |
+|---|---|
+| R1 (P2) The record as F5 documents it ends with `request="GET / HTTP/1.0\r\n..."`, the line breaks written as backslash sequences. The rule excluded every backslash, so the complete record was still declined; the corpus sample and the test were both cut before `request` | Fixed. A backslash inside a value is text, except directly before a quote. The complete record of the documentation is a test and a Chromium journey (downloaded; 2 events, 136 values, each text of its own line; blocked on main) |
+| R2 (P3) Three weakenings of the rule survived the tests (backslash allowed, a blank before `=`, a single pair) | Tests added for the first two; a single pair changes no verdict (the check behind the rule declines it) |
+| R3 (P3) A field named `toString`, `valueOf` or `hasOwnProperty` makes the browser reading fail, on main as well; the Python preview newly called such an adjacent record parsed | A record with a name every JavaScript object has keeps its earlier verdict. The browser failure itself is in `src/genericStructural.ts`: see "Not fixed here" |
+| R4 (P3) Statements of this document that the evidence contradicted or did not support | Corrected: the complete F5 record, the count for the first audit's lines, what a field-error record holds, where the values of the `TAG: ` form stay, P2-6 and P3-4 as partly fixed, the wording about the F5 documentation and PAN-OS |
+
 Both readings mis-segment the same two inputs when a blank follows the tag (`myapp: Login failed user=bob,...`), on
 main as well: see "Not fixed".
 
-Over the 9,306 lines of both audits, the Python preview of this tree differs from main for 270: each is a record of
-double-quoted pairs behind an adjacent tag, went from partial to parsed, and its fields are exactly the pairs
-written.
+Over the 9,306 lines of both audits, the Python preview of this tree differs from main for 304: each is a record of
+double-quoted pairs behind an adjacent tag that went from partial to parsed, with fields exactly the pairs written
+(34 hold a backslash). The browser reads 272 of them to the same fields and declines the other 32, which are
+longer than its 8 KiB bound. Over the 4,200 lines of the third pass 1,427 differ, all that record with the fields
+written; the browser reads 1,421 identically and declines 6. Of 2,605 further lines built around backslashes 105
+differ, all read identically by both.
 
 ## Verification
 
 Chromium journeys: code of 86415a6. The later commits change one Playwright expectation, the Python preview
-rule for the adjacent tag (second audit; the journeys of the F5 samples were run again on it) and tests.
+rule for the adjacent tag (second and third audit; the journeys of the F5 samples and of the complete F5 record
+were run again on the final rule) and tests.
 
 **Real Chromium journey, downloaded Ruby under Ruby 2.4.9** (92 samples, local stack of this tree):
 
@@ -215,7 +230,7 @@ descriptors that are no longer written for Generic Structural samples.
 **Gates run locally on this tree**: TypeScript build; vitest 235 files, 1,998 tests; Python suite 184 tests;
 grammar and generated-Ruby generators `--verify` (no generated file changes); duplication ratchet 45 of 45;
 candidate mutation gate 92.44% with the 8 reviewed equivalents; Python preview over the 9,306 lines of both audits:
-270 verdicts change, all the record of double-quoted pairs. On c6ae049 (before the audit fixes, which touch no grammar):
+304 verdicts change, all the record of double-quoted pairs. On c6ae049 (before the audit fixes, which touch no grammar):
 translation conformance 19 of 19, semantic oracle (browser, native Ruby 2.4.9, Python), browser/Ruby
 differential 44,858 cases with 0 differences, backend 771 of 775 (4 need Drain3 or a Ruby runner the host lacks).
 

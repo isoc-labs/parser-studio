@@ -15,6 +15,16 @@ BODY=('unit_hostname="bigip-4.pme-ds.f5.com",management_ip_address="172.16.73.34
       'http_class_name="/Common/topaz4-web4",policy_name="topaz4-web4",request_status="passed",'
       'response_code="200",ip_client="10.4.1.101",method="GET",protocol="HTTP",severity="Informational"')
 HEAD='<134>Sep 19 13:40:27 bigip-4.pme-ds.f5.com ASM:'
+# The example of the F5 documentation (BIG-IP ASM, remote logging, key-value pairs), complete.
+F5_DOCUMENTED=('<134>Sep 19 13:40:27 bigip-4.pme-ds.f5.com ASM:unit_hostname="bigip-4.pme-ds.f5.com", management'
+              '_ip_address="172.16.73.34",http_class_name="/Common/topaz4-web4", policy_name="topaz4-web4",poli'
+              'cy_apply_date="2012-09-19 11:38:36", violations="",support_id="18205860747014045701",request_sta'
+              'tus="passed", response_code="200",ip_client="10.4.1.101",route_domain="0",method="GET",protocol='
+              '"HTTP",query_string="",x_forwarded_for_header_value="N/A", sig_ids="",sig_names="",date_time="20'
+              '12-09-19 13:40:27",severity="Informational",attack_type="",geo_location="N/A",ip_address_intelli'
+              'gence="N/A",username="N/A",session_id="3c4ecb8d6ed32d1e",src_port="52974",dest_port="80",dest_ip'
+              '="10.4.1.200",sub_violations="",virus_name="N/A",uri="/",request="GET / HTTP/1.0\\r\\nUser-Agent: '
+              'Wget/1.12 (linux-gnu)\\r\\nAccept: */*\\r\\nHost: 10.4.1.200\\r\\nConnection: Keep-Alive\\r\\n\\r\\n"')
 EXPECTED={'unit_hostname':'bigip-4.pme-ds.f5.com','management_ip_address':'172.16.73.34',
           'http_class_name':'/Common/topaz4-web4','policy_name':'topaz4-web4','request_status':'passed',
           'response_code':'200','ip_client':'10.4.1.101','method':'GET','protocol':'HTTP',
@@ -93,6 +103,18 @@ class Rfc3164AdjacentTag(unittest.TestCase):
             head+'portal:user="bob",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok",',
             head+'portal:user="bob",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok" trailing words',
             head+'portal:user="bob"',
+            # a name every JavaScript object has: the browser reading does not hold it as a plain field
+            head+'portal:toString="x",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok"',
+            head+'portal:user="bob",constructor="203.0.113.5",dst="10.1.1.9",port="443",result="ok"',
+            head+'portal:user="bob",src="203.0.113.5",dst="10.1.1.9",port="443",hasOwnProperty="ok"',
+            head+'portal:__proto__="bob",src="203.0.113.5",dst="10.1.1.9",port="443",valueOf="ok"',
+            # a blank around the equals sign
+            head+'portal:user ="bob",src ="203.0.113.5",dst ="10.1.1.9",port ="443",result ="ok"',
+            head+'portal:user= "bob",src= "203.0.113.5",dst= "10.1.1.9",port= "443",result= "ok"',
+            # a backslash directly before a quote, in the middle of a value and at its end
+            head+'portal:user="bo\\"b",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok"',
+            head+'portal:path="C:\\",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok"',
+            head+'portal:path="C:\\\\",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok"',
         )
         for raw in not_this_form:
             # Whatever an older route makes of the line (some read it as one pair), it is not this record.
@@ -115,6 +137,17 @@ class Rfc3164AdjacentTag(unittest.TestCase):
             'policy_apply_date':'2012-09-19 11:38:36','violations':'','support_id':'18205860747014045701',
             'request_status':'passed','response_code':'200','ip_client':'10.4.1.101',
             'x_forwarded_for_header_value':'N/A','sig_ids':''})
+        # The whole record of the F5 documentation. F5 writes the line breaks of the request as backslash r backslash n
+        # (found by the third audit pass: the value class excluded every backslash and the record was declined).
+        result=preview(F5_DOCUMENTED)
+        self.assertEqual(result['status'],'SOURCE_PARSED')
+        self.assertEqual(result['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV')
+        fields=result['fields']['generic']['fields']
+        self.assertEqual(len(fields),31)
+        self.assertEqual(fields['request'],'GET / HTTP/1.0\\r\\nUser-Agent: Wget/1.12 (linux-gnu)\\r\\nAccept: */*'
+                         '\\r\\nHost: 10.4.1.200\\r\\nConnection: Keep-Alive\\r\\n\\r\\n')
+        self.assertEqual((fields['src_port'],fields['dest_port'],fields['dest_ip'],fields['uri'],fields['geo_location']),
+                         ('52974','80','10.4.1.200','/','N/A'))
         # The form itself, with an empty value and a comma, an equals sign and an apostrophe inside the quotes.
         raw=head+'portal:user="o\'brien",note="a,b=c",empty="",src="203.0.113.5",dst="10.1.1.9"'
         result=preview(raw)
