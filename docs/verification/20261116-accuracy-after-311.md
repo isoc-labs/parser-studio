@@ -173,7 +173,7 @@ kept. P2-3 was regraded P3: the Syslog header host is one of two defensible sour
 
 | Finding of the second audit | Disposition |
 |---|---|
-| N1 (P2) The adjacent route also took words before the first name: `myapp:Login failed user=bob,src=...` came back as parsed with a field named "Login failed user" | Fixed. The route now takes only a message that is, from the colon to the end, two or more `name="value"` pairs joined by commas: every name one plain word, every value in double quotes |
+| N1 (P2) The adjacent route also took words before the first name: `myapp:Login failed user=bob,src=...` came back as parsed with a field named "Login failed user" | Fixed. The route now takes only a message that is, from the colon to the end, two or more `name="value"` pairs joined by a comma and nothing but blanks after it (the F5 documentation prints `", `): every name one plain word, every value in double quotes |
 | N2 (P2) Two apostrophes in unquoted values swallowed the pairs between them into one value | Fixed by the same rule: a value outside double quotes is not this form |
 | N3 (P3) Names that are not a safe path (`bytes(in)`) were read and not mapped | No longer reached through this route (plain names only) |
 | N4 (P3) In the F5 record `severity="Informational"` is written under a path-qualified vendor name because the decoded PRI severity keeps the short name | Not changed; both values are right. Follows from keeping `syslog.severity` |
@@ -183,7 +183,7 @@ kept. P2-3 was regraded P3: the Syslog header host is one of two defensible sour
 Both readings mis-segment the same two inputs when a blank follows the tag (`myapp: Login failed user=bob,...`), on
 main as well: see "Not fixed".
 
-Over the 9,306 lines of both audits, the Python preview of this tree differs from main for 252: each is a record of
+Over the 9,306 lines of both audits, the Python preview of this tree differs from main for 270: each is a record of
 double-quoted pairs behind an adjacent tag, went from partial to parsed, and its fields are exactly the pairs
 written.
 
@@ -215,7 +215,7 @@ descriptors that are no longer written for Generic Structural samples.
 **Gates run locally on this tree**: TypeScript build; vitest 235 files, 1,998 tests; Python suite 184 tests;
 grammar and generated-Ruby generators `--verify` (no generated file changes); duplication ratchet 45 of 45;
 candidate mutation gate 92.44% with the 8 reviewed equivalents; Python preview over the 9,306 lines of both audits:
-252 verdicts change, all the record of double-quoted pairs. On c6ae049 (before the audit fixes, which touch no grammar):
+270 verdicts change, all the record of double-quoted pairs. On c6ae049 (before the audit fixes, which touch no grammar):
 translation conformance 19 of 19, semantic oracle (browser, native Ruby 2.4.9, Python), browser/Ruby
 differential 44,858 cases with 0 differences, backend 771 of 775 (4 need Drain3 or a Ruby runner the host lacks).
 

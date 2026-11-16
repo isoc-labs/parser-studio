@@ -87,7 +87,9 @@ class Rfc3164AdjacentTag(unittest.TestCase):
             head+'portal:user="bob",src=203.0.113.5,dst="10.1.1.9",port="443",result="ok"',
             head+'portal:bytes(in)="10",sig#="7",user="bob",src="203.0.113.5",dst="10.1.1.9"',
             head+'portal:user="bo\\"b",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok"',
-            head+'portal:user="bob", src="203.0.113.5", dst="10.1.1.9", port="443", result="ok"',
+            head+'portal:user="bob" ,src="203.0.113.5" ,dst="10.1.1.9" ,port="443" ,result="ok"',
+            head+'portal:user="bob",\tsrc="203.0.113.5",\tdst="10.1.1.9",\tport="443",\tresult="ok"',
+            head+'portal:user="bob" src="203.0.113.5" dst="10.1.1.9" port="443" result="ok"',
             head+'portal:user="bob",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok",',
             head+'portal:user="bob",src="203.0.113.5",dst="10.1.1.9",port="443",result="ok" trailing words',
             head+'portal:user="bob"',
@@ -98,6 +100,21 @@ class Rfc3164AdjacentTag(unittest.TestCase):
             self.assertNotIn('GENERIC_RFC3164_BODY',result.get('syntax') or '',raw)
             names=list((result.get('fields',{}).get('generic') or {}).get('fields',{}))
             self.assertEqual([name for name in names if ' ' in name],[],raw)
+        # The record as the F5 documentation prints it: some pairs follow the comma after a blank.
+        documented=('<134>Sep 19 13:40:27 bigip-4.pme-ds.f5.com ASM:unit_hostname="bigip-4.pme-ds.f5.com", '
+                    'management_ip_address="172.16.73.34",http_class_name="/Common/topaz4-web4", '
+                    'policy_name="topaz4-web4",policy_apply_date="2012-09-19 11:38:36", violations="",'
+                    'support_id="18205860747014045701",request_status="passed", response_code="200",'
+                    'ip_client="10.4.1.101",x_forwarded_for_header_value="N/A", sig_ids=""')
+        result=preview(documented)
+        self.assertEqual(result['status'],'SOURCE_PARSED')
+        self.assertEqual(result['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV')
+        self.assertEqual(result['fields']['generic']['fields'],{
+            'unit_hostname':'bigip-4.pme-ds.f5.com','management_ip_address':'172.16.73.34',
+            'http_class_name':'/Common/topaz4-web4','policy_name':'topaz4-web4',
+            'policy_apply_date':'2012-09-19 11:38:36','violations':'','support_id':'18205860747014045701',
+            'request_status':'passed','response_code':'200','ip_client':'10.4.1.101',
+            'x_forwarded_for_header_value':'N/A','sig_ids':''})
         # The form itself, with an empty value and a comma, an equals sign and an apostrophe inside the quotes.
         raw=head+'portal:user="o\'brien",note="a,b=c",empty="",src="203.0.113.5",dst="10.1.1.9"'
         result=preview(raw)
