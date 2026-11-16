@@ -6,6 +6,7 @@ from __future__ import annotations
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import socket
 import ssl
@@ -50,6 +51,9 @@ class SecurePreviewHost(unittest.TestCase):
             self.assertNotIn(credential, installer)
 
     def test_nginx_public_no_login_https_and_post_origin_gate(self):
+        # This test starts the system nginx binary. As root that binary acts on the host with root's rights (it
+        # creates its state directories and hands them to its worker user), so the test refuses before starting it.
+        self.assertNotEqual(os.geteuid(),0,'run this suite as an unprivileged user, never as root')
         with tempfile.TemporaryDirectory(prefix='parser-studio-vhost-') as temp:
             root=Path(temp)
             static=root/'www'
@@ -94,7 +98,14 @@ class SecurePreviewHost(unittest.TestCase):
                     f'daemon off; pid {root}/nginx.pid;\n'
                     f'error_log {root}/error.log notice;\n'
                     'events { worker_connections 256; }\n'
-                    f'http {{ access_log {root}/access.log; include /etc/nginx/mime.types;\n'+site+'\n}\n'
+                    f'http {{ access_log {root}/access.log; include /etc/nginx/mime.types;\n'
+                    # Every state directory of this nginx is inside the fixture. Without these lines nginx uses its
+                    # compiled-in paths (/var/lib/nginx/body, ...) and, when the suite runs as root, hands them to its
+                    # default user. That happened on the Development Preview host on 2026-11-14: the real nginx could
+                    # no longer store a request body above its memory buffer and answered 500.
+                    f'client_body_temp_path {root}/tmp-body; proxy_temp_path {root}/tmp-proxy;\n'
+                    f'fastcgi_temp_path {root}/tmp-fastcgi; uwsgi_temp_path {root}/tmp-uwsgi; scgi_temp_path {root}/tmp-scgi;\n'
+                    +site+'\n}\n'
                 )
                 check=subprocess.run(['/usr/sbin/nginx','-t','-p',str(root),
                     '-c',str(config)],stdout=subprocess.PIPE,
@@ -139,11 +150,13 @@ class SecurePreviewHost(unittest.TestCase):
                         '--max-time','6'],
                         capture_output=True,text=True,timeout=9)
                     self.assertEqual(wrong_host.returncode,60,wrong_host.stderr)
-                    def request(path,method='GET',origin=None):
+                    def request(path,method='GET',origin=None,size=0):
                         headers={'Host':'app.parser.xdr.ooo'}
                         if origin is not None:
                             headers['Origin']=origin
                         raw=b'{"raw":"{\"action\":\"allow\"}"}' if method=='POST' else None
+                        if size:
+                            raw=json.dumps({'raw':'x'*size}).encode()
                         req=Request(base+path,headers=headers,data=raw,method=method)
                         try:
                             with client.open(req,timeout=5) as response:
@@ -160,6 +173,11 @@ class SecurePreviewHost(unittest.TestCase):
                     self.assertEqual(request('/api/v1/multipass/preview','POST','https://app.parser.xdr.ooo')[0],200)
                     self.assertEqual(request('/api/v1/parser-pairs/capabilities')[0],200)
                     self.assertEqual(request('/api/v1/parser-pairs/generate','POST','https://app.parser.xdr.ooo')[0],200)
+                    # A generated parser is above nginx's memory buffer for a request body (16 KB): the body goes
+                    # through the temporary directory, which must be the fixture's own.
+                    self.assertEqual(request('/api/v1/parser-pairs/package','POST','https://app.parser.xdr.ooo',size=200_000)[0],200)
+                    for name in ('body','proxy','fastcgi','uwsgi','scgi'):
+                        self.assertTrue((root/f'tmp-{name}').is_dir(),f'nginx did not keep its {name} directory inside the fixture')
                 finally:
                     process.terminate()
                     process.wait(timeout=8)
