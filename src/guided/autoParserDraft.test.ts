@@ -3,6 +3,7 @@ import {createDraft} from '../model';
 import {preview} from '../parser';
 import {toBackendProject} from './backendAdapter';
 import {prepareAutoParserDraft} from './autoParserDraft';
+import {validateNormalizationMappings,isBlockingNormalizationFinding} from './normalizationValidation';
 import {analyzeLogEnvelopes,assessEnvelopeCompilation} from './autoParserEnvelope';
 import type {BackendCapabilities} from './backendCapabilities';
 
@@ -200,6 +201,9 @@ describe('AP2 zero-forced-format guided novice mapping handoff',()=>{
      expect(JSON.stringify(events[0]!.normalized)).toContain('"bob"');
      expect(JSON.stringify(events[1]!.normalized)).not.toContain('user');
      expect(JSON.stringify(events[1]!.normalized)).toContain('"10.1.1.2"');
+     // The Map Fields step checks every sample event with the same rule and has nothing to fix.
+     expect(validateNormalizationMappings(preview(sample,result.draft),result.draft.mappings,result.draft.guided!.groups)
+       .filter(finding=>isBlockingNormalizationFinding(finding.code)),sample).toEqual([]);
    }
  });
 });

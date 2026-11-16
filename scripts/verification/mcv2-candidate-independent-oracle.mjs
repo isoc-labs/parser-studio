@@ -229,6 +229,13 @@ assert.equal(row({src_ip:'192.0.2.1'},'src_ip')?.method,
 assert.equal(multi.paths.length,0,'aggregate-overflow candidates unavailable');
 assert.equal(mod.valueFitsMappingType('integer','N/A'),true);
 assert.equal(mod.valueFitsMappingType('ip',null),true);
+// A blank-only string is a missing value for the run time, so it fits every type; NBSP is a value.
+assert.equal(mod.valueFitsMappingType('ip','  '),true);
+assert.equal(mod.valueFitsMappingType('integer','\t \r\n'),true);
+assert.equal(mod.valueFitsMappingType('ip',undefined),true);
+assert.equal(mod.valueFitsMappingType('ip','\u00a0'),false);
+assert.equal(mod.valueFitsNormalizationTarget('srcport','integer',' '),true);
+assert.equal(mod.valueFitsNormalizationTarget('srcport','integer','\u00a0'),false);
 // Per-container protocol evidence must not disappear when root fields differ.
 review({flow:{spt:443,'protocol-id':1}},'flow.spt','srcport');
 review({flow:{spt:443,proto:1}},'flow.spt','srcport');
