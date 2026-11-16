@@ -80,23 +80,24 @@ function unsupportedPortProtocolInEvent(
 // meanings from Stellar's context-specific names or require unit conversion.
 // Restrict the guard to records with FortiOS's recognizable field family so
 // Windows/EDR payloads with independently supported semantics stay unaffected.
-/** A field of the record that `source` belongs to. One vendor record is read at the root by the KV and JSON formats
- * and inside a container by others (generic.kv.*, body.*, a Syslog-wrapped JSON body). What a record is does not
- * depend on which reading produced it, so the evidence is looked up beside the source and in every container
- * around it, the root last. Looking at the root only left the guards below silent for the same record behind a PRI:
- * a FortiGate web-filter line read by Generic Structural had its requested web host mapped to Stellar hostname. */
-function recordField(fields:Record<string,unknown>,source:string,name:string):ReturnType<typeof lookupFieldValue>{
-  const parts=source.split('.');
-  for(let depth=parts.length-1;depth>0;depth--){
-    const found=lookupFieldValue(fields,parts.slice(0,depth).join('.')+'.'+name);
-    if(found.found)return found;
-  }
-  return lookupFieldValue(fields,name);
+/** The containers around a source field as path prefixes, innermost first, the root ('') last.
+ * One vendor record is read at the root by the KV and JSON formats and inside a container by others
+ * (generic.kv.*, body.*, a Syslog-wrapped JSON body). What a record is does not depend on which reading produced
+ * it, so the evidence that names the record is looked for in each container around the field - all of it in the
+ * same container, never pieced together from different levels. Looking at the root only left the guards below
+ * silent for the same record behind a PRI: a FortiGate web-filter line read by Generic Structural had its
+ * requested web host mapped to Stellar hostname. */
+function recordPrefixes(source:string):string[]{
+  const prefixes:string[]=[];
+  for(let end=source.lastIndexOf('.');end>0;end=source.lastIndexOf('.',end-1))prefixes.push(source.slice(0,end+1));
+  prefixes.push('');
+  return prefixes;
 }
 function fortiGateRecord(fields:Record<string,unknown>,source:string):boolean{
-  return recordField(fields,source,'logid').found&&
-    (recordField(fields,source,'vd').found||recordField(fields,source,'srcintf').found)&&
-    recordField(fields,source,'type').found;
+  return recordPrefixes(source).some(prefix=>
+    lookupFieldValue(fields,prefix+'logid').found&&
+    (lookupFieldValue(fields,prefix+'vd').found||lookupFieldValue(fields,prefix+'srcintf').found)&&
+    lookupFieldValue(fields,prefix+'type').found);
 }
 const FORTINET_FALSE_FRIENDS=new Set([
   'type','eventtype','event_type','direction','duration','hostname',
@@ -116,9 +117,11 @@ function windowsAgentEvidence(fields:Record<string,unknown>):boolean{
     lookupFieldValue(fields,name).found);
 }
 function suricataAlertEvidence(fields:Record<string,unknown>,source:string):boolean{
-  const kind=recordField(fields,source,'event_type');
-  return kind.found&&String(kind.value).toLowerCase()==='alert'&&
-    recordField(fields,source,'alert.signature_id').found;
+  return recordPrefixes(source).some(prefix=>{
+    const kind=lookupFieldValue(fields,prefix+'event_type');
+    return kind.found&&String(kind.value).toLowerCase()==='alert'&&
+      lookupFieldValue(fields,prefix+'alert.signature_id').found;
+  });
 }
 function incompatibleVendorMeaning(
   source:string,target:string,events:Record<string,unknown>[],
@@ -146,7 +149,8 @@ function incompatibleVendorMeaning(
   // SERVER port (its log file structure reference), with src still the client address: spt mapped to srcport would
   // pair the client address with the server port. A record that carries cpt beside spt follows that usage.
   if(target==='srcport'&&leaf==='spt'&&events.some(fields=>
-    lookupFieldValue(fields,source).found&&recordField(fields,source,'cpt').found))return true;
+    lookupFieldValue(fields,source).found&&
+    lookupFieldValue(fields,source.slice(0,source.lastIndexOf('.')+1)+'cpt').found))return true;
   // RFC3164 PRI severity 0-7 is a Syslog facility code component, not
   // Stellar's 0-100 security severity score. Never silently relabel it.
   if(source.toLowerCase().endsWith('syslog.severity'))return true;

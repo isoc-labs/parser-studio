@@ -49,6 +49,10 @@ describe('vendor meaning is the same for every reading of one record',()=>{
     // Not a FortiGate record: no logid beside the field.
     expect(fortiGateFalseFriend('generic.kv.hostname',[{generic:{kv:{hostname:'web01',type:'x'}}}])).toBe(false);
     expect(fortiGateFalseFriend('generic.kv.srcip',[{generic:{kv:record}}])).toBe(false);
+    // The evidence of a record is in one container; pieces at different levels are not a FortiGate record.
+    expect(fortiGateFalseFriend('agent.hostname',[{type:'alert',agent:{logid:'0316013056',vd:'root',hostname:'h'}}])).toBe(false);
+    // A FortiGate record without vd is named by its source interface.
+    expect(fortiGateFalseFriend('generic.kv.hostname',[{generic:{kv:{logid:'1',type:'utm',srcintf:'internal',hostname:'h'}}}])).toBe(true);
   });
   it('Suricata: the 1-4 alert priority is not the Stellar severity, as JSON and inside an RFC 5424 message',()=>{
     const root=official(EVE),wrapped=official(EVE_IN_RFC5424);
