@@ -163,7 +163,18 @@ curl -s -o /dev/null -w '%{http_code}\n' https://app.parser.xdr.ooo/assets/index
 systemctl is-active parser-studio-preview-authoring.service parser-studio-preview-multipass.service
 systemctl show parser-studio-preview-multipass.service -p MainPID --value     # unchanged unless Multi-Pass was deployed
 curl -fsS http://127.0.0.1:4305/health; curl -fsS http://127.0.0.1:4304/health
+# a request body above nginx's memory buffer (16 KB) must reach the backend: 422 from the backend, not 500 from nginx
+python3 -c "import urllib.request as u,json;r=u.Request('https://app.parser.xdr.ooo/api/v1/parser-pairs/package',data=json.dumps({'x':'a'*60000}).encode(),headers={'Content-Type':'application/json','Origin':'https://app.parser.xdr.ooo'});
+try: print(u.urlopen(r,timeout=10).status)
+except u.HTTPError as e: print(e.code)"
 ```
+
+If that request answers 500 and `/var/log/nginx/error.log` shows `open() "/var/lib/nginx/body/..." failed (13: Permission denied)`,
+the temporary directories of nginx no longer belong to its worker user. This happened on 2026-11-14: the Python suite
+(`tests/test_preview_nginx_routing_20261019.py` starts its own nginx) was run as root, and that nginx handed the
+compiled-in directories to its default user `nobody`. Every download of a parser package and every recipe check then
+failed for all users until 2026-11-16. Repair: `chown www-data /var/lib/nginx/{body,proxy,fastcgi,scgi,uwsgi}` (the
+user of `user` in `/etc/nginx/nginx.conf`). The fixture keeps its directories to itself since then.
 
 Then run a real-browser check on the public URL (Playwright CLI), as a beginner would use it:
 
@@ -217,6 +228,8 @@ customer logs in it.
   Pruning old rollback material is a separate decision for the owner.
 - Do not restart a service that did not change, and do not deploy untested or unmerged code.
 - Do not run an old pinned rollout script against a new version.
+- Do not run the repository's test suites as root on `dev-atlas` (use `runuser -u aella -- ...`): a test that starts a
+  system binary acts on the host with root's rights.
 - Do not describe the Development Preview as production, and do not claim Stellar Cyber or native Fluentd
   compatibility from a deploy check: those remain NOT VERIFIED.
 
