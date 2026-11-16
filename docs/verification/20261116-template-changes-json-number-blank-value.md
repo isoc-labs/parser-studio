@@ -50,7 +50,9 @@ path: `parser_err_msg` in the generated Ruby, a failed event in the browser prev
 it (P2-4) after the automatic draft stopped dropping a field that is empty in one event.
 
 A string of nothing but ASCII white space - the trim the typed conversion already uses, equal to Ruby
-`String#strip` - is now skipped like the empty string, in the browser and in the Ruby operators.
+`String#strip` - is now skipped like the empty string, in the browser and in the Ruby operators. The check of the Map Fields
+step (`valueFitsMappingType`, `valueFitsNormalizationTarget`) asks the same contract, so the sample is not
+stopped there either; that part changes no template.
 
 | Mapped value | Before | Now |
 |---|---|---|
@@ -61,7 +63,16 @@ A string of nothing but ASCII white space - the trim the typed conversion alread
 
 Verification: four cases in the operator matrix (`contracts/operator-conformance.v1.json`: string, ip, integer,
 NBSP), each run ordinary and as an event family in the browser and in native Ruby; with either half reverted alone
-the matrix fails. The audit's sample (`user="bob"` / `user=" "`, key=value and JSON) normalizes 2 of 2.
+the matrix fails. The audit's sample (`user="bob"` / `user=" "`, key=value and JSON) normalizes 2 of 2 and
+has no finding on Map Fields (red with the check reverted).
+
+In Chromium, for `user="bob"` / `user=" "` / `user="eve"`:
+
+| Tree | Journey | Downloaded parser under Ruby 2.4.9 |
+|---|---|---|
+| main before the accuracy work (949c474) | completes | 3 events, no `user` in any of them |
+| main with the accuracy work | stops on Map Fields: "a sample value does not fit the selected value type" | - |
+| this change | completes | 3 events, 0 error records, `user` bob and eve, none for the blank one |
 
 Changes `backend/src/canonical-operator-contract.ts` and `backend/templates/canonical-operators.rb.tpl`.
 
@@ -81,14 +92,16 @@ The two changes are separate commits, so either state can be approved.
 
 ## Verification of the head (both changes)
 
-- TypeScript build; vitest 236 files, 2,027 tests; Python suite; grammar generators in sync.
+- TypeScript build; vitest 236 files, 2,028 tests; Python suite 190 tests; grammar generators in sync;
+  candidate mutation gate 92.31% with the 8 reviewed equivalents.
 - Translation conformance; semantic oracle in the browser, in native Ruby 2.4.9 and in Python, with its mutants.
 - Browser/Ruby format differential: 44,948 cases, 0 differences, 15 of 15 injected faults detected.
 - Operator matrix: 113 compiled pairs, 226 native records, equal to the independent truth.
 - Backend suite: 759 of 775. The 16 failures are the 12 tests that compare against the approved hashes and 4 that
   need Drain3 or a Ruby runner the development host does not have.
-- Real Chromium journey with the downloaded Ruby under 2.4.9, change 1 (before change 2 was written): the Zeek
-  sample is downloaded, `ts` is kept as `1731719701.123456`, 0 wrong and 0 lost; the 68 earlier samples give the
-  same result as without the change.
+- Real Chromium journey with the downloaded Ruby under 2.4.9, 92 samples and three probes, both changes:
+  the Zeek sample is downloaded with `ts` kept as `1731719701.123456`; 24 holdouts: 14 downloaded, 78 correct
+  Stellar meanings, 0 mapped to a forbidden field, 0 lost; the 68 earlier samples give exactly the result of the
+  tree without the changes (43 downloaded, 99 events, 0 error records, 2,425 values each text of its own line).
 
 Not verified: a real Stellar Cyber 7.0 sensor, loader, import or indexing; production.
