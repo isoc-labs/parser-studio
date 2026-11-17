@@ -577,7 +577,7 @@ def psg_enveloped_json_declined(raw)
     return false
   end
   message = envelope['message']
-  if (!/\A\{[ \t]*"(?:[^"\\]|\\[^\n\r\u2028\u2029])*"[ \t]*:/.match?(message) || !message.end_with?('}'))
+  if (!/\A\{[ \t]*"(?:[^"\\]|\\[^\n\r\u2028\u2029])*"[ \t]*:/.match?(message) || !/\}[ \t\n\r]*\z/.match?(message))
     return false
   end
   return psg_bounded_envelope_json(message).equal?(:psg_null)

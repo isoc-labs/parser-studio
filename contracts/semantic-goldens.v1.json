@@ -1313,6 +1313,15 @@
       "expect": {
         "reject": true
       }
+    },
+    {
+      "id": "generic-bsd-envelope-json-trailing-blank-declined",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":9007199254740993,\"m\":{\"x\":2.5},\"t\":\"x\"} \t",
+      "familyGrammar": "dedicated",
+      "provenance": "Second audit of the template change (N1). RFC 8259 2: white space may follow the value. The claim of a JSON object allows it after the closing brace, as the JSON reader does; before, a trailing blank kept the line on the free-text route.",
+      "expect": {
+        "reject": true
+      }
     }
   ],
   "ownerPolicies": {

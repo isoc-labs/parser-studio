@@ -306,6 +306,11 @@
       "id": "audit-bsd-tagged-brace-text",
       "mode": "bsd_tagged_message",
       "raw": "<134>Nov 16 10:15:04 fw01 app: {not json} started job 7"
+    },
+    {
+      "id": "audit-bsd-tagged-json-unsafe-integer-trailing-blank",
+      "mode": "declined (dedicated) / bsd_tagged_message (legacy)",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":9007199254740993} "
     }
   ]
 }

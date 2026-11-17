@@ -1073,7 +1073,7 @@ export function envelopedFamilyClaim(raw:string):'CEF'|'LEEF'|null{
  * A message of a Syslog envelope that claims to be a JSON object is JSON: it is read under the JSON body
  * contract or declined, like a CEF or LEEF claim. The claim is lexical, so that the browser and the generated
  * Ruby cannot disagree about it: an opening brace, a member name in quotes with its colon, and a closing brace
- * at the end of the message. True when the contract does not read such a message (not JSON after all, a
+ * at the end of the message (JSON white space may follow it). True when the contract does not read such a message (not JSON after all, a
  * repeated member name, a number that cannot be kept exactly, the bounded depth or size). Before this the
  * free-text message profiles took the line and emitted the header and the raw message as a complete event,
  * with no field of the body and no error.
@@ -1082,7 +1082,8 @@ export function envelopedJsonDeclined(raw:string):boolean{
   const envelope=parseSyslogEnvelope(raw);
   if(!envelope||envelope.variant==='colon_date')return false;
   const message=envelope.message;
-  if(!/^\{[ \t]*"(?:[^"\\]|\\.)*"[ \t]*:/u.test(message)||!message.endsWith('}'))return false;
+  // The closing brace may be followed by JSON white space, which the JSON reader accepts as well.
+  if(!/^\{[ \t]*"(?:[^"\\]|\\.)*"[ \t]*:/u.test(message)||!/\}[ \t\n\r]*$/u.test(message))return false;
   return boundedEnvelopeJson(message)===null;
 }
 /** Modes that read a CEF/LEEF event with the CEF/LEEF grammar. */

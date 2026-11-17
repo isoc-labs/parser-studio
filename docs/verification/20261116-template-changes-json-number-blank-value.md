@@ -113,9 +113,14 @@ Browser and generated Ruby emitted the header and the raw message as a complete 
 | text that does not make the claim (`{not json} started job 7`, `{"k":"a"} trailing words`) | tagged message | the same |
 
 The claim is lexical - an opening brace, a member name in quotes with its colon, a closing brace at the end of
-the message - so that the browser and the generated Ruby cannot disagree about it (the first version asked each
+the message, optionally followed by JSON white space - so that the browser and the generated Ruby cannot disagree about it (the first version asked each
 JSON library whether the text parses; the differential showed the two differ on an escape that names no
 character).
+
+Boundaries: free text that happens to start like an object member and end with a brace (`{"user": alice}`) is
+now declined on new parsers and PARTIAL on existing ones; main wrote it as a complete free-text event. A `@cee:`
+message is not an envelope JSON message for this rule and stays the free text of a tagged message, as on main. On
+the legacy route the PARTIAL verdict is shown in the browser; the generated record is the one main writes.
 
 Not covered: a key=value body with a tab inside a quoted value takes the same fallback to a tagged message (on
 main as well); a key=value "claim" has no syntax that would tell it from free text.
@@ -137,19 +142,35 @@ come out the same under both).
 | approved today (main) | `a829026d948b8a492db534ddf50e9009a8686f6a3a642abccaecb7f332bed246` | `3bd3172b620f0c09f87d5b8d9df548b2c187048b451a0cde7cf95cf287421936` |
 | change 1 alone (`0dda714`) | `be0005935032cc9fe2e4dadfeda01c6dd94f824cbdaacd576b71fcffe30750ce` | `7919a4437d83f99aaac18ec6443da1e7531dd50d9654e3e7b16fd7ae13e614e5` |
 | changes 1 and 2 (`6449387`) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `c74c2d82d28447efafc5035327810d0ca3a461f5ab20cb3fdf0baa04d8cdec2d` |
-| changes 1, 2 and 3 (head) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `49dd3680c8dea6f0b12fef9bf95c5f1ff3fd0cfde5628bf684990311fc8be411` |
+| changes 1, 2 and 3 as first audited (`26ed1cb`) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `49dd3680c8dea6f0b12fef9bf95c5f1ff3fd0cfde5628bf684990311fc8be411` |
+| changes 1, 2 and 3 (head) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `16824f8e1201e8c1bb2a2244baa4516db75546caa6d3fdddff8abb1575b4c7e4` |
 
 The POC template reads JSON and does not hold the Generic Structural grammar, so change 3 leaves its hash as it
 is. The changes are separate commits, so each state can be approved.
 
+## Confirmation audit of the fixes
+
+The same auditor examined 26ed1cb (change 3 and the P3 fixes): browser and Ruby 2.4.9 equal on 13,040 lines of
+the claim (80 messages behind 15 header forms, 5,000 random messages, both routes) and on the 3,132 lines of the
+first audit; no regression against main; F1, F2, F7 and M3 confirmed fixed; the hashes and the template diff as
+stated. One P2 remained:
+
+| Finding | Disposition |
+|---|---|
+| N1 (P2, on main, inside change 3) an object followed by a blank (`{...} `) did not make the claim and stayed a complete free-text event | Fixed: JSON white space may follow the closing brace; golden and seed added |
+| N2 (P3, on main) `@cee:` messages are never read as JSON | Boundary stated above |
+| N3 (P3) free text that starts `{"name":` and ends with `}` is declined (new parsers) or PARTIAL | Boundary stated above |
+| N4 (P3) on the legacy route the PARTIAL verdict is visible only in the browser | Owner policy D-2; stated above |
+| N5 (P3) mutation gaps: an escaped quote in the first name, the PARTIAL reason, the M3 fix | Tests added; each of the three mutants and a revert of N1 now fail a vitest test. H2 (the apply step's own ignore list) is a second guard behind the review and stays |
+
 ## Verification of the head (all three changes)
 
-- TypeScript build; vitest 236 files, 2,042 tests; Python suite 191 tests; grammar generators in sync;
+- TypeScript build; vitest 236 files, 2,043 tests; Python suite 191 tests; grammar generators in sync;
   candidate mutation gate 92.31% with the 8 reviewed equivalents.
-- Translation conformance; semantic oracle in the browser, in native Ruby 2.4.9 (Generic Structural goldens 48 of
-  48) and in Python, with its mutants (the two new TypeScript mutants are killed).
+- Translation conformance; semantic oracle in the browser, in native Ruby 2.4.9 (Generic Structural goldens 49 of
+  49) and in Python, with its mutants (the two new TypeScript mutants are killed).
 - Browser/Ruby differential: formats 44,948 cases, 0 differences, 15 of 15 injected faults detected; Generic
-  Structural 23,486 cases from 109 seeds and 27,000 random cases, 0 differences.
+  Structural 24,042 cases from 111 seeds and 27,000 random cases, 0 differences.
 - Operator matrix: 115 compiled pairs, 230 native records, equal to the independent truth.
 - Backend suite: 759 of 775; the failures are the 12 tests that compare against the approved hashes and 4 that need Drain3 or
   a Ruby runner the development host does not have.
@@ -162,6 +183,7 @@ is. The changes are separate commits, so each state can be approved.
 |---|---|---|
 | `user="bob"` / `user=" "` / `user="eve"` | stops on Map Fields | downloaded; 3 events, 0 error records, `user` bob and eve |
 | BSD syslog + JSON, one event with the integer 9007199254740993 | downloaded; that event is written as a tagged message with the JSON text as `message`, no member, no error | stops on Add Logs and names the number |
+| the same with a blank after each object | as the row above | as the row above |
 | the same with safe numbers | downloaded, read member by member | the same |
 
 ## Independent audit
@@ -177,7 +199,7 @@ An independent auditor examined 6449387 (changes 1 and 2) with his own generator
 
 | Finding | Disposition |
 |---|---|
-| M1 (class P2, on main) BSD syslog + JSON with a declined number is emitted as a complete tagged message | Fixed: change 3 |
+| M1 (class P2, on main) BSD syslog + JSON with a declined number is emitted as a complete tagged message | Fixed: change 3 (completed after the confirmation audit, below) |
 | F1 (P3) the review of ChatGPT proposals kept its own list of ignored values | Fixed |
 | F2 (P3) the review of event types stopped a blank-only typed value | Fixed |
 | F3 (P3) "browser = Ruby = Python for 31,168 spellings" was not measured for integer spellings | Statement corrected (section 1); the Python reading of integers beyond 2^53 is on main and is not changed |

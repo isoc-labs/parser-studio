@@ -206,4 +206,15 @@ describe('AP2 zero-forced-format guided novice mapping handoff',()=>{
        .filter(finding=>isBlockingNormalizationFinding(finding.code)),sample).toEqual([]);
    }
  });
+  it('a field whose sample values are all NBSP is a field with values, as the run time sees it',()=>{
+    // Audit of 2026-11-17 (M3): the draft called a value blank by Unicode trim(), the run time by six ASCII
+    // characters, so the field was left out and a later event with a real value for it lost that value.
+    for(const space of ['\u00a0','\u3000']){
+      const sample=[1,2].map(n=>JSON.stringify({action:'allow',srcip:'10.1.1.'+n,u:space})).join('\n');
+      const result=prepare(sample);
+      expect(result,JSON.stringify(space)).toMatchObject({ok:true});
+      if(!result.ok)return;
+      expect(result.draft.mappings.map(mapping=>mapping.source),JSON.stringify(space)).toContain('u');
+    }
+  });
 });
