@@ -60,6 +60,20 @@ class JsonNumberExactness(unittest.TestCase):
             self.assertEqual(_unsafe_json_float(token,value),not exact(token),token)
         self.assertGreater(checked,7000)
 
+    def test_an_exponent_of_any_length_is_judged_not_refused(self):
+        """Audit of 2026-11-17 (F7): int() refuses a text of more than 4,300 digits, so an exponent that long made
+        the whole event a syntax error. Zero with any exponent is zero; leading zeros of an exponent are no value."""
+        nines='9'*5000; zeros='0'*5000
+        self.assertEqual(_decimal_identity('0e'+nines),'0')
+        self.assertEqual(_decimal_identity('1.5e'+zeros+'1'),_decimal_identity('15.0'))
+        self.assertFalse(_unsafe_json_float('0e'+nines,0.0))
+        self.assertFalse(_unsafe_json_float('1.5e'+zeros+'1',15.0))
+        self.assertTrue(_unsafe_json_float('1.5e-'+nines,0.0))
+        for raw in ('{"n":0e'+nines+'}','{"n":1.5e'+zeros+'1}'):
+            self.assertEqual(preview(raw)['status'],'SOURCE_PARSED',raw[:20])
+        self.assertIn('JSON_NUMBER_PRECISION_UNSAFE',str(preview('{"n":1.5e-'+nines+'}')['issues']))
+        self.assertIn('JSON_NUMBER_RANGE_OR_CONSTANT_UNSUPPORTED',str(preview('{"n":1.5e'+nines+'}')['issues']))
+
     def test_identity_of_a_spelling(self):
         self.assertEqual(_decimal_identity('1731719701.123456'),'1731719701123456e-6')
         self.assertEqual(_decimal_identity('1.731719701123456e9'),'1731719701123456e-6')

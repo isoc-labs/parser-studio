@@ -17,6 +17,13 @@ describe('a JSON number is read when a double stands for exactly what was writte
     ['an exponent spelling of an integer','1e2'],
     ['negative zero','-0.0'],
     ['a small number','1.5e-7'],
+    // Audit of 2026-11-17: no test held a capital E, an exponent form between 1e-6 and 1, or leading zeros.
+    ['a capital exponent mark','1E5'],
+    ['a capital exponent mark with a sign','1.5E+3'],
+    ['an exponent form of one half','5e-1'],
+    ['an exponent form between 1e-6 and 1','1.2e-4'],
+    ['leading zeros after the point','0.00012'],
+    ['a zero with a huge exponent','0e999999999999999999999'],
   ])('reads %s: %s',(_name,number)=>{
     expect(hasUnsafeJsonNumbers('{"n":'+number+'}')).toBe(false);
   });
@@ -30,6 +37,10 @@ describe('a JSON number is read when a double stands for exactly what was writte
     ['overflow','1e309'],
     ['underflow to zero','1e-400'],
     ['below the smallest step of a double','4.9e-324'],
+    // The 17-digit form of a shorter double names another decimal number than the one the double prints.
+    ['the seventeen-digit form of 0.1','0.10000000000000001'],
+    ['the seventeen-digit form of 0.3','0.29999999999999999'],
+    ['an exponent beyond every double','1.5e999999999999999999999'],
   ])('declines %s: %s',(_name,number)=>{
     expect(hasUnsafeJsonNumbers('{"n":'+number+'}')).toBe(true);
   });

@@ -98,4 +98,20 @@ describe('vendor meaning is the same for every reading of one record',()=>{
         .toEqual([['BLOCKED','FortiOS semantics or measurement units differ from the Stellar field.']]);
     }
   });
+  it('a ChatGPT proposal whose every sample value is blank is blocked like one whose every value is empty',async()=>{
+    // Audit of 2026-11-17 (F1): the review kept its own list of ignored values, so a blank counted as informative
+    // and, once a blank fits every type, the proposal could be applied.
+    for(const value of ['',' ','\t ']){
+      const sample=[1,2].map(n=>JSON.stringify({f:value,action:'allow',n})).join('\n');
+      const draft={...createDraft(),format:'json' as const};
+      const suite=preview(sample,draft);
+      const prepared=await createJsonataMappingPrompt(suite,draft);
+      const reviewed=await reviewJsonataMapping(JSON.stringify({contract:JSONATA_MAPPING_CONTRACT,
+        sample:{sha256:prepared.sha256,events:2},mappings:[{expression:'f',target:'dstip'}]}),suite,draft,prepared.sha256);
+      expect(reviewed,JSON.stringify(value)).toMatchObject({ok:true});
+      if(!reviewed.ok)return;
+      expect(reviewed.rows.map(row=>[row.status,row.reason]),JSON.stringify(value))
+        .toEqual([['BLOCKED','No informative source values observed.']]);
+    }
+  });
 });

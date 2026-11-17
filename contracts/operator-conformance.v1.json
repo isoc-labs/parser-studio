@@ -1174,6 +1174,28 @@
       }
     },
     {
+      "id": "typed-nul-is-a-value",
+      "raw": "{\"value\":\"\\u0000\",\"action\":\"allow\"}",
+      "mappings": [
+        {
+          "source": "value",
+          "target": "custom.value",
+          "type": "string"
+        },
+        {
+          "source": "action",
+          "target": "action",
+          "type": "string"
+        }
+      ],
+      "expected": {
+        "action": "allow",
+        "custom": {
+          "value": "\u0000"
+        }
+      }
+    },
+    {
       "id": "typed-scientific-predicate",
       "raw": "{\"kindnum\":1e-7,\"value\":\"allow\"}",
       "mappings": [

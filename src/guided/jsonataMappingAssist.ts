@@ -3,7 +3,7 @@ import {hasAmbiguousFieldPath,hasAmbiguousSourceFields,listSafeLeafPaths,lookupF
 import {sha256Utf8Hex} from '../sha256';
 import {defaultGuidedOptions,type FieldGroup} from './contract';
 import {findStellarMetadataField,STELLAR_METADATA_CATALOG_PROVENANCE} from './stellarMetadataCatalog';
-import {explicitPortSourceAlias,fortiGateFalseFriend,sourceHasExcludedPortSegment,valueFitsNormalizationTarget} from './normalizationCandidates';
+import {explicitPortSourceAlias,fortiGateFalseFriend,ignored,sourceHasExcludedPortSegment,valueFitsNormalizationTarget} from './normalizationCandidates';
 import {createCanonicalMappingPlan} from './canonicalMappingPlan';
 import {validateNormalizationMappings,isBlockingNormalizationFinding} from './normalizationValidation';
 import {toBackendProject} from './backendAdapter';
@@ -213,7 +213,7 @@ export async function reviewJsonataMapping(
       const v=source?lookupFieldValue(e.fields,source,sourceKind):{found:false as const};
       return v.found?[v.value]:[];
     });
-    const useful=values.filter(v=>v!==null&&v!==undefined&&!['','N/A','-'].includes(String(v)));
+    const useful=values.filter(v=>!ignored(v));
     let status:ReviewedJsonataMapping['status']='READY',reason='Verified selector, observed type and dictionary destination.';
     // A locally derived, bounded predicate permits eligible transport values
     // without promoting ICMP pseudo-ports to official Layer 4 fields.
@@ -283,9 +283,8 @@ export function applyReviewedJsonataMapping(draft:ParserDraft,suite:SuiteResult,
     });
     if(!metadata?.mappable||metadata.mappingType!==row.type||metadata.group!==row.group||
       row.total!==suite.events.length||row.observed!==values.length||
-      !values.some(value=>value!==null&&value!==undefined&&!['','N/A','-'].includes(String(value)))||
-      values.some(value=>value!==null&&value!==undefined&&
-        !['','N/A','-'].includes(String(value))&&
+      !values.some(value=>!ignored(value))||
+      values.some(value=>!ignored(value)&&
         !valueFitsNormalizationTarget(row.target,row.type!,value))||
       (!row.when&&semanticConflict(row.source,row.target,suite)))
       return {ok:false as const,reason:'The selected mapping failed local semantic or type verification.'};

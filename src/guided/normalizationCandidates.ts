@@ -42,7 +42,7 @@ function overlaps(a:string,b:string):boolean{
 }
 /** A value the run time does not map and does not count as an error: absent, a blank-only string
  * (canonicalIgnoreSourceValue), or a placeholder. The review of a sample must agree with the run time. */
-function ignored(value:unknown):boolean{
+export function ignored(value:unknown):boolean{
   return canonicalIgnoreSourceValue(value,[])||['','N/A','-'].includes(String(value));
 }
 
