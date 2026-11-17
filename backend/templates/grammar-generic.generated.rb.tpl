@@ -332,6 +332,9 @@ def psg_classify_generic_structural(raw, outcome)
   if (psg_t(claim) && !psg_k_generic_family_modes.include?(mode))
     reasons.push((((('the line claims to be ' + claim) + ' but was read as generic key=value (legacy compatibility route): its ') + claim) + ' header is not parsed'))
   end
+  if psg_enveloped_json_declined(raw)
+    reasons.push('the message claims to be a JSON object that the JSON body contract does not read, but was read as free text (legacy compatibility route): its members are not parsed')
+  end
   leaves = []
   psg_collect_fields(outcome['fields'], leaves)
   lostPairs = psg_filter(psg_independent_key_value_pairs(raw), lambda { |pair| !psg_accounted(pair, leaves) })
@@ -566,6 +569,20 @@ def psg_enveloped_family_claim(raw)
   return ((psg_t(envelope) && (envelope['variant'] != 'colon_date')) ? psg_structured_family_claim(envelope['message']) : :psg_null)
 end
 
+# src/genericStructural.ts: envelopedJsonDeclined
+def psg_enveloped_json_declined(raw)
+  envelope = message = nil
+  envelope = psg_parse_syslog_envelope(raw)
+  if (!psg_t(envelope) || (envelope['variant'] == 'colon_date'))
+    return false
+  end
+  message = envelope['message']
+  if (!/\A\{[ \t]*"(?:[^"\\]|\\[^\n\r\u2028\u2029])*"[ \t]*:/.match?(message) || !/\}[ \t\n\r]*\z/.match?(message))
+    return false
+  end
+  return psg_bounded_envelope_json(message).equal?(:psg_null)
+end
+
 # src/genericStructural.ts: extractGenericStructural
 def psg_extract_generic_structural(raw, profile = nil, familyGrammar = nil)
   unsupportedVersion = includesLeef = includesSyslog = fields = claim = parsed = enveloped = fields_2 = generic = fields_3 = nil
@@ -598,6 +615,9 @@ def psg_extract_generic_structural(raw, profile = nil, familyGrammar = nil)
       return {'fields' => fields_2, 'errors' => []}
     end
     return {'fields' => {}, 'errors' => [(((('The event claims to be ' + enveloped) + ' inside a Syslog envelope but does not match the ') + enveloped) + ' grammar; it is not read as generic key=value')]}
+  end
+  if ((familyGrammar == 'dedicated') && psg_enveloped_json_declined(raw))
+    return {'fields' => {}, 'errors' => ['The message claims to be a JSON object but the JSON body contract does not read it (not valid JSON, a repeated member name, a number that cannot be kept exactly, or the bounded size); it is not read as free text']}
   end
   fields_3 = (psg_null?(psg_t3 = (psg_null?(psg_t4 = (psg_null?(psg_t5 = (psg_null?(psg_t6 = (psg_null?(psg_t7 = (psg_null?(psg_t8 = (psg_null?(psg_t9 = (psg_null?(psg_t10 = (psg_null?(psg_t11 = (psg_null?(psg_t12 = (psg_null?(psg_t13 = (psg_null?(psg_t14 = (psg_null?(psg_t15 = (psg_null?(psg_t16 = (psg_null?(psg_t17 = (psg_null?(psg_t18 = (psg_null?(psg_t19 = (psg_null?(psg_t20 = (psg_null?(psg_t21 = (psg_null?(psg_t22 = (psg_null?(psg_t23 = (psg_null?(psg_t24 = psg_short_rfc5424_structured(raw)) ? psg_short_rfc5424_json(raw) : psg_t24)) ? psg_prefixed_json(raw) : psg_t23)) ? psg_iso_pri_mixed(raw) : psg_t22)) ? psg_iso_pri_positional(raw) : psg_t21)) ? psg_asa(raw) : psg_t20)) ? psg_watchguard_profile(raw) : psg_t19)) ? psg_watchguard_message_profile(raw) : psg_t18)) ? psg_dual_timestamp_session_profile(raw) : psg_t17)) ? psg_bsd_bracket_pid_message_profile(raw) : psg_t16)) ? psg_juniper_legacy_profile(raw) : psg_t15)) ? psg_junos_rfc5424_sd(raw) : psg_t14)) ? psg_bracket_colon_kv(raw) : psg_t13)) ? psg_rfc3164_delimited_comma_kv(raw) : psg_t12)) ? psg_rfc3164_positional_csv(raw) : psg_t11)) ? psg_pri_space_kv(raw) : psg_t10)) ? psg_syslog_envelope_structured_fallback(raw) : psg_t9)) ? psg_comma_kv(raw) : psg_t8)) ? psg_delimited_comma_kv(raw) : psg_t7)) ? psg_space_kv(raw) : psg_t6)) ? psg_bsd_classic_pid_message_profile(raw) : psg_t5)) ? psg_bsd_tagged_message_profile(raw) : psg_t4)) ? (includesSyslog ? psg_syslog_prefixed_key_values(raw) : :psg_null) : psg_t3)
   return (psg_t(fields_3) ? {'fields' => fields_3, 'errors' => []} : {'fields' => {}, 'errors' => ['Event does not match the bounded Generic Structural compiler grammar']})

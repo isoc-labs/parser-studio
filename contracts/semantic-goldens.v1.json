@@ -1246,6 +1246,82 @@
           "syslog.hostname": "PA01"
         }
       }
+    },
+    {
+      "id": "generic-bsd-envelope-json-read",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":42,\"m\":{\"x\":2.5},\"t\":\"x\"}",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. A message the contract accepts is read member by member. (The numbers of the body are left to the JSON cases: the native run reports them as text.)",
+      "expect": {
+        "fields": {
+          "syslog.hostname": "fw01",
+          "generic.mode": "syslog_envelope_json",
+          "body.k": "a",
+          "body.t": "x"
+        },
+        "status": "FULL"
+      }
+    },
+    {
+      "id": "generic-bsd-envelope-json-integer-beyond-2-53-declined",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":9007199254740993,\"m\":{\"x\":2.5},\"t\":\"x\"}",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. An integer beyond 2^53 declines the event; before, the tagged-message profile emitted the header and the raw text as a complete event without k, n, m.x or t.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-bsd-envelope-json-repeated-name-declined",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"k\":\"b\",\"n\":1}",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. A repeated member name declines the event (owner policy D-1).",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-bsd-tagged-message-brace-text",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {not json} started job 7",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. Text that only starts with a brace is not JSON and stays the free text of an RFC 3164 tagged message.",
+      "expect": {
+        "fields": {
+          "syslog.app_tag": "app",
+          "generic.mode": "bsd_tagged_message",
+          "generic.message": "{not json} started job 7"
+        },
+        "status": "FULL"
+      }
+    },
+    {
+      "id": "generic-bsd-envelope-json-declined-legacy-route-partial",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":9007199254740993,\"m\":{\"x\":2.5},\"t\":\"x\"}",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. Existing projects without the dedicated grammar keep reading the line as a tagged message (owner policy D-2); the verdict is PARTIAL, never FULL, because the members are not parsed.",
+      "expect": {
+        "fields": {
+          "generic.mode": "bsd_tagged_message"
+        },
+        "status": "PARTIAL"
+      }
+    },
+    {
+      "id": "generic-bsd-envelope-json-claim-not-json-declined",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",}",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 4: no comma follows the last member. A message that claims to be a JSON object (a brace, a member name in quotes with its colon, a closing brace at the end) and is not JSON is declined, like a CEF claim that is not CEF; it is not the free text of a tagged message.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-bsd-envelope-json-trailing-blank-declined",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":9007199254740993,\"m\":{\"x\":2.5},\"t\":\"x\"} \t",
+      "familyGrammar": "dedicated",
+      "provenance": "Second audit of the template change (N1). RFC 8259 2: white space may follow the value. The claim of a JSON object allows it after the closing brace, as the JSON reader does; before, a trailing blank kept the line on the free-text route.",
+      "expect": {
+        "reject": true
+      }
     }
   ],
   "ownerPolicies": {
@@ -1905,7 +1981,7 @@
     {
       "id": "json-decimal-with-more-digits-than-a-double-holds",
       "raw": "{\"ratio\":0.1234567890123456789,\"ok\":true}",
-      "provenance": "RFC 8259 section 6: implementations that use IEEE 754 binary64 are interoperable only for numbers within its precision. A decimal with more than 15 significant digits is not the value a double holds; reporting the rounded double as the value of the event would be reporting a number the event does not contain, so no engine may report the event as parsed (src/jsonNumberSafety.ts). Found on 2026-11-15 by the three-way comparison: the Python preview reported the rounded value.",
+      "provenance": "RFC 8259 section 6: implementations that use IEEE 754 binary64 are interoperable only for numbers within its precision. This decimal has more digits than a double identifies: the double nearest to it prints as 0.12345678901234568, another number; reporting the rounded double as the value of the event would be reporting a number the event does not contain, so no engine may report the event as parsed (src/jsonNumberSafety.ts). Found on 2026-11-15 by the three-way comparison: the Python preview reported the rounded value.",
       "expect": {
         "status": "UNKNOWN"
       }
@@ -1930,6 +2006,27 @@
       "id": "json-nine-nested-levels",
       "raw": "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":{\"f\":{\"g\":{\"h\":{\"i\":1}}}}}}}},\"ok\":true}",
       "provenance": "RFC 8259 section 9: an implementation may set limits on the maximum depth of nesting. The JSON source contract of the product is eight nested levels (src/jsonSourceSafety.ts, enforced by the browser and by the generated Ruby); a value at the ninth level declines the event in every engine. Found on 2026-11-15 by the three-way comparison: the Python preview read forty levels.",
+      "expect": {
+        "status": "UNKNOWN"
+      }
+    },
+    {
+      "id": "json-decimal-printed-from-a-double",
+      "raw": "{\"ts\":1731719701.123456,\"uid\":\"CHhAvVGS1DHFjwGM9\",\"ok\":true}",
+      "provenance": "Zeek JSON writer, conn.log: ts is the time in seconds, a double printed with six fractional digits (sixteen significant digits). IEEE 754 binary64 and RFC 8259 section 6: a number is interoperable when a double holds it; the shortest decimal that identifies the double nearest to 1731719701.123456 is that text itself, so the double stands for exactly the number written and the event is parsed with it. Found on 2026-11-16 with a holdout Zeek record: the rule 'more than 15 significant digits' declined every Zeek JSON record.",
+      "expect": {
+        "status": "FULL",
+        "values": {
+          "ts": 1731719701.123456,
+          "uid": "CHhAvVGS1DHFjwGM9",
+          "ok": true
+        }
+      }
+    },
+    {
+      "id": "json-decimal-one-digit-beyond-a-double",
+      "raw": "{\"ts\":1731719701.12345678,\"ok\":true}",
+      "provenance": "IEEE 754 binary64: near 1.7e9 neighbouring doubles are about 2.4e-7 apart. 1731719701.12345678 is not a double; the nearest one prints as 1731719701.1234567. Reporting that as the value of the event would be reporting a number the event does not contain, so no engine may report the event as parsed (src/jsonNumberSafety.ts).",
       "expect": {
         "status": "UNKNOWN"
       }

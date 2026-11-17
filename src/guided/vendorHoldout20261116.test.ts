@@ -35,6 +35,7 @@ const READING:Record<string,[string,number]>={
   h_srx_sd_close_deny:['syslog_rfc5424',13],
   h_stormshield_filter:['kv',6],
   h_suricata_rfc5424:['syslog_rfc5424',10],
+  h_zeek_conn_json:['json',0],         // read since a number is judged by its value, not its digit count
   // Free text: a parsing rule is needed (ChatGPT Assisted Parser). Declined with a diagnosis, never guessed.
   h_cisco_asa_mixed:['declined',0],
   h_nginx_combined:['declined',0],
@@ -47,7 +48,6 @@ const READING:Record<string,[string,number]>={
   h_meraki_urls_flows:['declined',0],  // a urls record has fewer than five key=value pairs
   h_trendmicro_ds_leef:['declined',0], // LEEF 2.0 without a delimiter field behind a Syslog header
   h_win4625_nxlog_json:['declined',0], // Keywords is a 64-bit integer
-  h_zeek_conn_json:['declined',0],     // ts has sixteen significant digits
 };
 
 function automaticDraft(raw:string):ParserDraft|null{

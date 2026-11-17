@@ -33,6 +33,11 @@ const KNOWN_TEMPLATES=new Set([
   // The extraction grammar of this template is generated from the browser TypeScript.
   // Approval remains synthetic POC-only; no target import or general writes.
   "a829026d948b8a492db534ddf50e9009a8686f6a3a642abccaecb7f332bed246",
+  // Owner-approved 2026-11-17: exact template of PR #314 at 3e1fd49 (JSON numbers read when the double stands
+  // for exactly the number written; a blank-only mapped value is a missing value), after its independent audits
+  // (docs/verification/20261117-owner-template-approval.md). Approval remains synthetic POC-only; no target
+  // import or general writes.
+  "4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8",
   // Reviewed current compiler: fixed Unicode case-fold map embedded as a second
   // Base64 literal. Its exact bytes remain covered by the normalized template SHA.
   "439b1c9f31e827ad6ff92746ef9309f8ad5f2dbaa7952cdb77118f00e0a9f5f7",

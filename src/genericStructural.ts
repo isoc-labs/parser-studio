@@ -1069,6 +1069,23 @@ export function envelopedFamilyClaim(raw:string):'CEF'|'LEEF'|null{
   const envelope=parseSyslogEnvelope(raw);
   return envelope&&envelope.variant!=='colon_date'?structuredFamilyClaim(envelope.message):null;
 }
+/**
+ * A message of a Syslog envelope that claims to be a JSON object is JSON: it is read under the JSON body
+ * contract or declined, like a CEF or LEEF claim. The claim is lexical, so that the browser and the generated
+ * Ruby cannot disagree about it: an opening brace, a member name in quotes with its colon, and a closing brace
+ * at the end of the message (JSON white space may follow it). True when the contract does not read such a message (not JSON after all, a
+ * repeated member name, a number that cannot be kept exactly, the bounded depth or size). Before this the
+ * free-text message profiles took the line and emitted the header and the raw message as a complete event,
+ * with no field of the body and no error.
+ */
+export function envelopedJsonDeclined(raw:string):boolean{
+  const envelope=parseSyslogEnvelope(raw);
+  if(!envelope||envelope.variant==='colon_date')return false;
+  const message=envelope.message;
+  // The closing brace may be followed by JSON white space, which the JSON reader accepts as well.
+  if(!/^\{[ \t]*"(?:[^"\\]|\\.)*"[ \t]*:/u.test(message)||!/\}[ \t\n\r]*$/u.test(message))return false;
+  return boundedEnvelopeJson(message)===null;
+}
 /** Modes that read a CEF/LEEF event with the CEF/LEEF grammar. */
 export const GENERIC_FAMILY_MODES:readonly string[]=['structured_family_cef','structured_family_leef','syslog_envelope_cef','syslog_envelope_leef','leef2_implicit_tab'];
 
@@ -1116,6 +1133,9 @@ export function extractGenericStructural(raw:string,profile?:GenericStructuralPr
     if(fields&&typeof generic?.mode==='string'&&GENERIC_FAMILY_MODES.includes(generic.mode))return {fields,errors:[]};
     return {fields:{},errors:['The event claims to be '+enveloped+' inside a Syslog envelope but does not match the '+enveloped+' grammar; it is not read as generic key=value']};
   }
+  // The JSON message of an envelope is held to its contract the same way (new parsers only, like the claims above).
+  if(familyGrammar==='dedicated'&&envelopedJsonDeclined(raw))
+    return {fields:{},errors:['The message claims to be a JSON object but the JSON body contract does not read it (not valid JSON, a repeated member name, a number that cannot be kept exactly, or the bounded size); it is not read as free text']};
   const fields=shortRfc5424Structured(raw)??shortRfc5424Json(raw)??prefixedJson(raw)??isoPriMixed(raw)??isoPriPositional(raw)??asa(raw)??watchguardProfile(raw)??watchguardMessageProfile(raw)??dualTimestampSessionProfile(raw)??bsdBracketPidMessageProfile(raw)??
     juniperLegacyProfile(raw)??junosRfc5424Sd(raw)??bracketColonKv(raw)??
     rfc3164DelimitedCommaKv(raw)??rfc3164PositionalCsv(raw)??priSpaceKv(raw)??

@@ -52,4 +52,23 @@ describe('reviewed event-family typed sample evidence',()=>{
     suite.events[1]!.fields={action:'login'};
     expect(inspectReviewedEventValues(suite,draft).ok).toBe(false);
   });
+  it('skips a blank-only typed value as the run time does',()=>{
+    // Audit of 2026-11-17 (F2): the run time skips a blank-only value; this review still stopped at it.
+    const draft={...createDraft(),format:'json' as const};
+    const sample=[
+      '{"event_type":"threat","srcip":"203.0.113.9","action":"deny"}',
+      '{"event_type":"threat","srcip":" ","action":"allow"}',
+      '{"event_type":"user","username":"alice","action":"login"}',
+    ].join('\n');
+    const suite=preview(sample,draft);
+    const plan=planReviewedEventFamilyDraft(suite,draft,'event_type');
+    expect(plan.ok).toBe(true);
+    if(!plan.ok)return;
+    const mapping=plan.candidate.eventProfiles!.variants.find(x=>x.name==='threat')!.mappings.find(x=>x.source==='srcip')!;
+    // The user maps the field to the official srcip, typed ip.
+    mapping.target='srcip';mapping.type='ip';plan.candidate.guided!.groups[mapping.id]='top_fields';
+    const evidence=inspectReviewedEventValues(suite,plan.candidate);
+    expect(evidence.ok?'':evidence.reason).toBe('');
+    if(evidence.ok)expect(evidence.skipped).toBeGreaterThan(0);
+  });
 });

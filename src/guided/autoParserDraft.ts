@@ -10,6 +10,7 @@ import {createCanonicalMappingPlan} from './canonicalMappingPlan';
 import {defaultGuidedOptions} from './contract';
 import {toBackendProject} from './backendAdapter';
 import {validManufacturerNamespace} from '../../backend/src/vendor-namespace';
+import {canonicalIgnoreSourceValue} from '../../backend/src/canonical-operator-contract';
 import {selectDraftFormat} from './draftFormatTransition';
 import {analyzeLogEnvelopes,type EnvelopeLedger,type CompilerAssessment}
   from './autoParserEnvelope';
@@ -107,8 +108,7 @@ export function prepareAutoParserDraft(
           const found=lookupFieldValue(event.fields,suggestion.source);
           if(!found.found)return false;
           const value=found.value;
-          return value!==undefined&&value!==null&&
-            !(typeof value==='string'&&value.trim()==='');
+          return !canonicalIgnoreSourceValue(value,['']);
         }));
     // Source values outside the normalized field-path grammar (for example,
     // nested arrays and intentionally empty CSV cells) remain explicitly

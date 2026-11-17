@@ -291,6 +291,26 @@
       "id": "audit-positional-csv-quoted",
       "mode": "rfc3164_positional_csv",
       "raw": "<14>Oct 16 15:44:21 PA01 1,2026/10/16 15:44:21,012345678901,TRAFFIC,end,2561,2026/10/16 15:44:20,10.0.0.1,198.51.100.1,203.0.113.1,198.51.100.1,\"rule \"\"A\"\", east\""
+    },
+    {
+      "id": "audit-bsd-tagged-json-unsafe-integer",
+      "mode": "declined (dedicated) / bsd_tagged_message (legacy)",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":9007199254740993,\"m\":{\"x\":2.5},\"t\":\"x\"}"
+    },
+    {
+      "id": "audit-bsd-tagged-json-repeated-name",
+      "mode": "declined (dedicated) / bsd_tagged_message (legacy)",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"k\":\"b\",\"n\":1}"
+    },
+    {
+      "id": "audit-bsd-tagged-brace-text",
+      "mode": "bsd_tagged_message",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {not json} started job 7"
+    },
+    {
+      "id": "audit-bsd-tagged-json-unsafe-integer-trailing-blank",
+      "mode": "declined (dedicated) / bsd_tagged_message (legacy)",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":9007199254740993} "
     }
   ]
 }

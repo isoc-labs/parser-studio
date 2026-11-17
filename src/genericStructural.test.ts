@@ -1,5 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {extractGenericStructural} from './genericStructural';
+import {classifyGenericStructural} from './grammar/genericParseStatus';
 import {preview} from './parser';
 import {createDraft} from './model';
 import {validateReviewableRecipe} from './guided/parserRecipeV2';
@@ -425,5 +426,50 @@ describe('bounded Generic Structural browser compiler twin',()=>{
       targetVerified:false,
     };
     expect(validateReviewableRecipe(recipe)).toBe(true);
+  });
+  it('a JSON message of a Syslog envelope is read under the JSON contract or declined, never as free text',()=>{
+    // Independent audit of 2026-11-17 (M1): when the JSON body contract declined the message, the tagged-message
+    // profile took the line and emitted the header and the raw text as a complete event - no k, no n, no error.
+    const head='<134>Nov 16 10:15:04 fw01 app: ';
+    const read=(message:string)=>extractGenericStructural(head+message,undefined,'dedicated');
+    const good=read('{"k":"a","n":42,"m":{"x":2.5},"t":"x"}');
+    expect(good.errors).toEqual([]);
+    // A valid object followed by blanks is still read member by member.
+    expect(read('{"k":"a","n":42} \t').fields).toMatchObject({generic:{mode:'syslog_envelope_json'},body:{k:'a',n:42}});
+    expect(good.fields).toMatchObject({generic:{mode:'syslog_envelope_json'},body:{k:'a',n:42,m:{x:2.5},t:'x'}});
+    for(const declined of [
+      '{"k":"a","n":9007199254740993,"m":{"x":2.5},"t":"x"}',   // an integer a double cannot hold
+      '{"k":"a","n":0.1234567890123456789}',                    // a decimal a double cannot hold
+      '{"k":"a","k":"b","n":1}',                                // a repeated member name
+      '{"a":{"b":{"c":{"d":{"e":{"f":{"g":{"h":{"i":{"j":1}}}}}}}}}}', // deeper than the contract reads
+      '{"k":"a",}',                                             // claims an object and is not JSON
+      '{"x":"\\ud83d","k":"a"}',                                 // an escape that names no character
+      '{ "k" : "a", "n": 1e400 }',                              // blanks around the first name; overflow
+      '{"k":"a","n":9007199254740993} ',                       // second audit: blanks after the closing brace
+      '{"k":"a","n":9007199254740993}\t \t',
+      '{"a\\"b":"x","n":9007199254740993}',                     // an escaped quote inside the first name
+    ]){
+      const result=read(declined);
+      expect(result.fields,declined).toEqual({});
+      expect(result.errors.join(' '),declined).toContain('JSON body contract does not read it');
+    }
+    // Text that does not make the claim is still the free text of a tagged message.
+    for(const text of ['{not json} started job 7','{"k":"a"} trailing words','{E3B1A2C4-GUID}','{k:"a"}','{"k" "a"}']){
+      const result=read(text);
+      expect(result.errors,text).toEqual([]);
+      expect((result.fields.generic as {mode:string}).mode,text).toBe('bsd_tagged_message');
+    }
+    // An array is not an object message, and the same line without a header is not an envelope.
+    expect((read('[1,9007199254740993]').fields.generic as {mode:string}).mode).toBe('bsd_tagged_message');
+    // Existing projects without the dedicated grammar keep their reading (owner policy D-2).
+    const legacy=extractGenericStructural(head+'{"k":"a","n":9007199254740993}');
+    expect(legacy.errors).toEqual([]);
+    expect((legacy.fields.generic as {mode:string}).mode).toBe('bsd_tagged_message');
+    // ... and its verdict says the members are not parsed, while the same line with safe numbers is complete.
+    const verdict=classifyGenericStructural(head+'{"k":"a","n":9007199254740993}',legacy);
+    expect(verdict.status).toBe('PARTIAL');
+    expect(verdict.reasons.join(' ')).toContain('its members are not parsed');
+    const safe=extractGenericStructural(head+'{"k":"a","n":42}');
+    expect(classifyGenericStructural(head+'{"k":"a","n":42}',safe).status).toBe('FULL');
   });
 });

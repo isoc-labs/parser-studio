@@ -435,6 +435,23 @@ def psg_csv_row_unaccounted(text, delimiter, cells)
   return psg_row_unaccounted(text, delimiter, cells, (delimiter != "\u{9}"))
 end
 
+# src/jsonNumberSafety.ts: decimalIdentity
+def psg_decimal_identity(spelling)
+  parts = mantissa = exponent = point = whole = fraction = digits = trimmed = nil
+  parts = psg_split(spelling, /[eE]/)
+  mantissa = psg_replace(parts[0], /\A[+\-]/, false, '')
+  exponent = ((parts.length > 1) ? psg_num(parts[1]) : 0)
+  point = psg_index(mantissa, '.')
+  whole = ((point < 0) ? mantissa : psg_slice(mantissa, 0, point))
+  fraction = ((point < 0) ? '' : psg_slice(mantissa, (point + 1)))
+  digits = psg_replace((whole + fraction), /\A0+/, false, '')
+  trimmed = psg_replace(digits, /0+\z/, false, '')
+  if (trimmed == '')
+    return '0'
+  end
+  return ((trimmed + 'e') + psg_str(((exponent - psg_len(fraction)) + (psg_len(digits) - psg_len(trimmed)))))
+end
+
 # src/structuredFamilies.ts: decodeCefValue
 def psg_decode_cef_value(raw)
   psg_replace(raw, /\\[^ \t]/, true, lambda { |pair| (psg_k_cef_escapes_2.key?(psg_at(pair, 1)) ? psg_k_cef_escapes_2[psg_at(pair, 1)] : pair) })
@@ -776,7 +793,7 @@ end
 
 # src/jsonNumberSafety.ts: hasUnsafeJsonNumbers
 def psg_has_unsafe_json_numbers(source)
-  index = current = match = token = value = mantissa = significant = nil
+  index = current = match = token = value = mantissa = nil
   index = 0
   while (index < psg_len(source))
     current = psg_at(source, index)
@@ -808,8 +825,7 @@ def psg_has_unsafe_json_numbers(source)
       end
       if /[.eE]/.match?(token)
         mantissa = psg_split(token, /[eE]/, 1)[0]
-        significant = psg_replace(psg_replace(psg_replace(mantissa, /\A[+\-]?0*/, false, ''), '.', false, ''), /0+\z/, false, '')
-        if (psg_len(significant) > 15)
+        if (psg_decimal_identity(token) != psg_decimal_identity(psg_str(value)))
           return true
         end
         if ((value == 0) && /[1-9]/.match?(mantissa))

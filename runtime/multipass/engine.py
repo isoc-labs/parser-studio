@@ -112,14 +112,33 @@ class ParseResult:
         }
 
 
+def _decimal_identity(spelling:str) -> str:
+    """decimalIdentity of src/jsonNumberSafety.ts: the digits of a decimal spelling and the power of ten of the last."""
+    parts=re.split("[eE]",spelling,maxsplit=1)
+    mantissa=re.sub(r"^[+-]","",parts[0],count=1)
+    whole,_,fraction=mantissa.partition(".")
+    digits=re.sub(r"^0+","",whole+fraction,count=1)
+    trimmed=re.sub(r"0+$","",digits,count=1)
+    if trimmed=="":
+        return "0"
+    # int() refuses a text of more than 4,300 digits. An exponent of more than 18 digits is beyond every double,
+    # so any such magnitude keeps the identity apart from the one of the parsed value.
+    exponent=0
+    if len(parts)>1:
+        magnitude=parts[1].lstrip("+-").lstrip("0")
+        exponent=(10**18 if len(magnitude)>18 else int(magnitude or "0"))*(-1 if parts[1].startswith("-") else 1)
+    return trimmed+"e"+str(exponent-len(fraction)+(len(digits)-len(trimmed)))
+
+
 def _unsafe_json_float(token:str,value:float) -> bool:
     """The rule of hasUnsafeJsonNumbers (src/jsonNumberSafety.ts) for a number in decimal or exponent spelling."""
     # An integer beyond 2^53 - 1, whatever its spelling, is not a number a double identifies.
     if value==math.floor(value) and abs(value)>2**53-1:
         return True
     mantissa=re.split("[eE]",token,maxsplit=1)[0]
-    significant=re.sub(r"0+$","",re.sub(r"^[+-]?0*","",mantissa,count=1).replace(".","",1))
-    if len(significant)>15:
+    # The double must stand for exactly the number that was written: printed in its shortest form it gives the
+    # same decimal number (1731719701.123456 does, 0.1234567890123456789 does not).
+    if _decimal_identity(token)!=_decimal_identity(repr(value)):
         return True
     # A nonzero decimal that underflows is not zero.
     return value==0 and re.search("[1-9]",mantissa) is not None

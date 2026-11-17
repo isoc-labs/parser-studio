@@ -1,6 +1,7 @@
 import type {MappingRule,MappingWhen,SuiteResult} from '../model';
 import {listSafeLeafPaths,lookupFieldValue} from '../fieldPaths';
 import {convertValue} from '../parser';
+import {canonicalIgnoreSourceValue} from '../../backend/src/canonical-operator-contract';
 import {meetsStellar7ValueConstraints} from '../stellar7ValueConstraints';
 import semanticPolicy from '../../runtime/multipass/semantic-policy.v1.json';
 import {sourceHasExcludedPortSegment,explicitPortSourceAlias} from './sourcePortPolicy';
@@ -39,8 +40,10 @@ function firstAtomKeyOf(source:string):string|undefined{
 function overlaps(a:string,b:string):boolean{
   return a===b||a.startsWith(b+'.')||b.startsWith(a+'.');
 }
-function ignored(value:unknown):boolean{
-  return value===null||value===undefined||['','N/A','-'].includes(String(value));
+/** A value the run time does not map and does not count as an error: absent, a blank-only string
+ * (canonicalIgnoreSourceValue), or a placeholder. The review of a sample must agree with the run time. */
+export function ignored(value:unknown):boolean{
+  return canonicalIgnoreSourceValue(value,[])||['','N/A','-'].includes(String(value));
 }
 
 // Published 7.0 proto_name is a transport protocol, not a vendor application

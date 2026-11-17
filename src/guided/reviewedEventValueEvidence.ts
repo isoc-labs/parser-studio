@@ -3,7 +3,7 @@ import {convertValue} from '../parser';
 import {lookupFieldValue} from '../fieldPaths';
 import {inspectEventProfile} from './multiEventRouting';
 import {findStellarMetadataField} from './stellarMetadataCatalog';
-import {valueFitsNormalizationTarget} from './normalizationCandidates';
+import {ignored,valueFitsNormalizationTarget} from './normalizationCandidates';
 
 export type ReviewedEventValueEvidence=
   | {ok:true;skipped:number}
@@ -20,7 +20,6 @@ export function inspectReviewedEventValues(
   if(!suite||!suite.events.length||!draft.eventProfiles)
     return {ok:false,reason:'Review source events and explicit type rules first.'};
   let skipped=0;
-  const ignored=new Set(['','N/A','-']);
   for(const event of suite.events){
     if(!event.extracted)return {ok:false,reason:
       'Some source events remain unparsed. Review them before approving event types.'};
@@ -38,8 +37,7 @@ export function inspectReviewedEventValues(
           'Event type '+selected.name+': field '+mapping.source+
           ' is not an eligible typed Stellar 7.0 dictionary mapping.'};
       const found=lookupFieldValue(event.fields,mapping.source);
-      if(!found.found||found.value===null||found.value===undefined||
-        ignored.has(String(found.value))){
+      if(!found.found||ignored(found.value)){
         skipped++;
         continue;
       }
