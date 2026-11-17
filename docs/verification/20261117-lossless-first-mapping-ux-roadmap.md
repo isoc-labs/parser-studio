@@ -1,0 +1,58 @@
+# Lossless-first parsing and progressive mapping — Codex isolated engineering roadmap
+
+Status: ACTIVE EXPERIMENT, 2026-11-17; owner authorized Codex in an isolated clone only.
+Baseline: xdr-labs/parser-studio main af7de35; experiment begins after isolated LEEF improvement 20a700f.
+Reference UI: read-only clone of datarelay-labs/datarelay-control main-v2 d909b32.
+Scope: Auto Parser -> existing Review Fields and Map Fields, and existing ChatGPT Assisted Parser. The product continues to have only TWO top-level modes. No Wizard/Workbench restoration.
+Do not push/merge/deploy, do not touch public preview, dev-atlas, original repo or managed DP, do not change known template approval constants. No new dependence on Control runtime/services.
+
+## Owner acceptance hierarchy
+
+1. P0 structural extraction correctness comes first. Preserve ALL source records and byte content, and account for every decoded value, delimiter, field and unparsed span. Merely retaining the raw line is NOT proof of full parsing. Never relabel unknown/partial as FULL without matching actual structured evidence.
+2. Mapping cannot recover data lost by extraction. After extraction qualifies, apply safe, evidence-based Stellar Cyber 7.0 dictionary mappings. The goal is not artificial 100% automatic mapping rate.
+3. For remaining source paths, offer optional ChatGPT suggestions (manual copy/paste with explicit privacy review, deterministic JSONata subset only), then user-directed searchable Stellar field selection and vendor field preservation.
+4. User-selected mappings override AI/automatic proposals. Never let automated suggestions silently overwrite manually approved mappings. Do not invent Stellar fields, coerce incompatible types or hide duplicates/collisions.
+5. Unmapped values are never silently discarded. Their original field names are shown to the user (leaf name where unique; full path retained internally to distinguish collisions), and their output disposition is visible. No artificial vendor or project prefixes in displayed leaf names. For unsafe/unaddressable paths, show preserved raw source + explicit mapping limitation. Explicit user opt-out for particular output field is deliberate mapping decision, not parser evidence.
+6. Target Ruby 2.4.9, native Fluentd and real Stellar Cyber 7.0 import/indexing are distinct verification levels. Never claim release PASS from browser-only evidence.
+
+## Execution roadmap (strict dependency order)
+
+### LF-0 — Baseline and source/value accounting contract [P0]
+- [ ] Identify and log examples of source completeness vs structured FULL vs output presence. Inspect classifyGenericStructural, lossGuard, fieldPaths, mapping-plan and every parser family involved.
+- [ ] Produce independent deterministic field/value accounting proof on vendor-derived and adversarial fixtures (nested arrays/null/dotted keys, UTF-8, quoted CSV, CEF/LEEF, syslog, duplicates, >100/1024 fields, unsupported records). For each classify exactly FULL, PARTIAL or UNKNOWN; report bytes, events, leaves and residuals; never call synthetic data "real vendor".
+- [ ] Add RED tests for actual reproducible gaps, not superficial assertions that raw text survived. Treat nonmappable paths and false success separately. If nothing fails, document honestly and do not change working core code.
+Acceptance: no unaccounted event silently promoted to FULL; raw source hashes and data boundaries preserved; no regression of previously supported families; no change merely to improve percentage.
+
+### LF-1 — Loss guard and mapping eligibility [P0]
+- [ ] Fix confirmed generalizable extraction/coverage defects only. Byte-accurate residuals remain visible and repairable; no vendor-specific patchwork.
+- [ ] Surface independent statuses "Raw retained", "Structurally extracted", "Mapped output coverage" without conflating them. Source-only can be retained without mapping eligible; PARTIAL/UNKNOWN must show exact unresolved spans and recovery path.
+- [ ] If unmapped parsed leaf cannot be emitted by native compiler, mark unsupported/blocked and retain raw; never count leaf as emitted. User selection to omit field must be explicit and previewed; cannot bypass parsing safety.
+Acceptance: positive/negative evidence, sample fingerprint, omission/collision tests, browser+generated Ruby parity whenever native runner available.
+
+### MAP-1 — DR Control-style in-place three-column mapping UI [P1, after LF-0/1]
+- [ ] In existing Auto Parser "Map Fields" render "Source fields" (Tree/JSON, click to select, event tabs, original value + path + status), "Mapping rules" (source -> destination catalog search/selector, value type, origin, conflicts, user override), "Final event" (normalized preview, raw-vs-output diff, unmapped/omitted and residual warnings).
+- [ ] Borrow interaction principles, NOT Control runtime dependencies or dropping semantics: frontend/src/components/streams/wizard/wizard-basic-mapping-panel.tsx, mapping-json-tree.tsx, wizard-mapping-output-aside.tsx.
+- [ ] Field leaf display: source-port remains source-port (internal syslog_sd.element_1.params.source-port), recommended srcport. Likewise destination-port->dstport, raw values/path preserved.
+- [ ] Field-array/null/ambiguous-path choices are not phantom selectable: retain tree data and show NOT MAPPABLE / REVIEW guidance and safe recovery.
+Acceptance: novice Chromium path from raw vendor log to source path, manually selected Stellar 7.0 field, preview, DRAFT Ruby/.conf download, accessibility/keyboard; no new top-level mode.
+
+### MAP-2 — Progressive mapping: auto -> ChatGPT -> manual [P1, after MAP-1]
+- [ ] On first entry run existing deterministic official suggestions without overwriting approved mapping; show confidence, provenance, warnings and counts.
+- [ ] One contextual "Improve with ChatGPT" for remaining/ambiguous fields reuses JsonataMappingAssistant, manual privacy-reviewed copy/paste, fingerprint, local checks and explicit approval; never auto-send customer logs or run arbitrary JSONata.
+- [ ] Every original source path, including non-mappable, stays reviewable. Users click source, search Stellar 7.0 field name/description, select or keep original vendor name; manual has highest precedence.
+- [ ] Recompute output preview and collision/type checks on each change; do not drop values, replace source labels with vendor/path prefixes or misreport target compatibility.
+Acceptance: mapping-origin precedence and negative tests for injection, approval bypass, conflicts, auto-overriding manual mapping and stale sample/response.
+
+### QUAL-1 — Exact candidate verification [P2, after above]
+- [ ] All existing Vitest/Python/backend tests, generated grammar TS->Ruby in sync, semantic oracle, negative corpus and targeted regressions.
+- [ ] Real Chromium novice E2E: Auto parsing -> automatic mapping -> optional ChatGPT-assisted mapping -> manual fallback -> preview -> DRAFT Ruby/.conf; mixed/multi-event, partial/unknown, unmapped and UTF-8 cases.
+- [ ] Native Ruby 2.4.9/Fluentd parity and no value loss from generated files if isolated runner available; otherwise report UNVERIFIED. Never conflate candidate DRAFT and real DP7 ingress/index proof.
+- [ ] Independent review, clean local commits and evidence receipt. No push, merge, preview rollout, production or target import without owner authorization.
+
+## Current code and risk pointers
+
+- Existing mapping UI: src/guided/NormalizationMappingReview.tsx (suggestions, Stellar catalog lookup, manual edit); src/guided/JsonataMappingAssistant.tsx (manual AI copy/paste + local review). Reuse; don't write a greenfield mapper.
+- Existing mapping UI has "Left out of output", "Unmappable source values", omitSourceRaw and fieldPaths bounds (8 levels, normally 100 paths). These are NOT necessarily extractor loss, but they MUST be visibly distinguished and accounted.
+- Existing src/grammar/genericParseStatus.ts has FULL/PARTIAL/UNKNOWN and src/grammar/lossGuard.ts. Do not bypass refusal or count source_raw as extracted leaf.
+- Preserve every event, vendor field values, exact UTF-8 spans and residuals. Keep native export constraints, SC7-only mapping catalog. Separate source preservation from optional normalization.
+- Work in locally committed units, tests before patch; don't assert complete without evidence.
