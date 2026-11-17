@@ -305,6 +305,10 @@ const TS_GENERIC_MUTANTS: Mutant[] = [
   { id: 'ts-generic-message-stops-at-u2028', file: 'src/genericStructural.ts', find: "+([^ \\t\\n\\r\\f\\v]{1,255}) +([A-Za-z0-9_.-]{1,128}): +([^\\n]+)$`,'u');", replace: "+([^ \\t\\n\\r\\f\\v]{1,255}) +([A-Za-z0-9_.-]{1,128}): +(.+)$`,'u');" },
   { id: 'ts-generic-any-rfc5424-version', file: 'src/syslogEnvelope.ts', find: 'if(!isSupportedRfc5424Version(version))return null;', replace: '' },
   { id: 'ts-generic-version-gate-removed', file: 'src/genericStructural.ts', find: 'if(unsupportedVersion!==null)', replace: 'if(false)' },
+  // A JSON message the contract declines is read as the free text of a tagged message again (new parsers).
+  { id: 'ts-generic-envelope-json-claim-removed', file: 'src/genericStructural.ts', find: "if(familyGrammar==='dedicated'&&envelopedJsonDeclined(raw))", replace: 'if(false)' },
+  // ... and on the legacy route its verdict is shown as a complete parse.
+  { id: 'ts-generic-envelope-json-verdict-full', file: 'src/grammar/genericParseStatus.ts', find: 'if (envelopedJsonDeclined(raw))', replace: 'if (false)' },
 ];
 
 async function runTs(): Promise<number> {

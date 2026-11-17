@@ -1,8 +1,8 @@
-# Two template changes after the accuracy work of 2026-11-16: they need new approved hashes
+# Three template changes after the accuracy work of 2026-11-16: they need new approved hashes
 
-Both repairs were found by the accuracy work recorded in `20261116-accuracy-after-311.md` and could not be part
-of it: each changes text of the generated Ruby, and with it the reviewed POC template hash and the template-set
-hash. The approval constants are **not** changed by this change. Until the owner approves the new values, the
+The first two repairs were found by the accuracy work recorded in `20261116-accuracy-after-311.md`, the third by
+the independent audit of this change. None could be part of that work: each changes text of the generated Ruby,
+and with it the template-set hash (the first two also the reviewed POC template hash). The approval constants are **not** changed by this change. Until the owner approves the new values, the
 approval tests fail by design and the change is not merged.
 
 ## 1. JSON numbers: read when a double stands for exactly what was written
@@ -31,8 +31,11 @@ and `1731719701.1234560` are one number.
 Verification of the rule itself:
 
 - 31,168 spellings (random decimals of 1 to 21 digits with and without exponents, shortest forms of random
-  doubles, epoch times with 0 to 9 fractional digits, the edge values): browser, generated Ruby on 2.4.9 and on
-  3.2.11, and the Python preview give the same verdict for every one (0 differences).
+  doubles, epoch times with 0 to 9 fractional digits, the edge values): browser and generated Ruby on 2.4.9 and
+  on 3.2.11 give the same verdict for every one; the Python rule was compared on the 29,942 decimal and exponent
+  spellings (0 differences). For an integer spelling beyond 2^53 the Python preview reads the integer exactly
+  while browser and Ruby decline it, on main as well; the Add Logs step needs both readings, so such an event is
+  not adopted.
 - The verdict equals exact decimal arithmetic (Python `Decimal`, used by none of the three) for every spelling;
   7,838 of the 18,787 accepted decimals have more than 15 digits and were declined before.
 - Goldens `json-decimal-printed-from-a-double` (read, value checked) and `json-decimal-one-digit-beyond-a-double`
@@ -49,8 +52,8 @@ that list, reached the typed conversion, was rejected there as "Missing value", 
 path: `parser_err_msg` in the generated Ruby, a failed event in the browser preview. An independent audit found
 it (P2-4) after the automatic draft stopped dropping a field that is empty in one event.
 
-A string of nothing but ASCII white space - the trim the typed conversion already uses, equal to Ruby
-`String#strip` - is now skipped like the empty string, in the browser and in the Ruby operators. The check of the Map Fields
+A string of nothing but ASCII white space - the six characters space, tab, LF, CR, FF and VT that the typed
+conversion already trims; NUL, NBSP and the other Unicode spaces stay values - is now skipped like the empty string, in the browser and in the Ruby operators. The check of the Map Fields
 step (`valueFitsMappingType`, `valueFitsNormalizationTarget`) asks the same contract, so the sample is not
 stopped there either; that part changes no template.
 
@@ -66,6 +69,17 @@ NBSP), each run ordinary and as an event family in the browser and in native Rub
 the matrix fails. The audit's sample (`user="bob"` / `user=" "`, key=value and JSON) normalizes 2 of 2 and
 has no finding on Map Fields (red with the check reverted).
 
+What follows from the skip, each equal to the behaviour for `""`: a blank official `timestamp`, `srcip` or
+`dstport` gives an ordinary record without that field (it was an error record); a blank discriminator of a `when`
+condition also leaves out the fields conditioned on it; an enrichment that reads a field whose source was blank
+fails the event at the enrichment stage. The value itself is not written; formats with a source copy (Generic
+Structural) keep it there.
+
+The review of ChatGPT proposals and the review of event types ask the same rule: a proposal whose every sample
+value is blank is blocked like one whose every value is empty, and a blank-only typed value does not stop the
+event-type review. The automatic draft calls a value blank by the same six characters, so a field whose samples
+are all NBSP is mapped.
+
 In Chromium, for `user="bob"` / `user=" "` / `user="eve"`:
 
 | Tree | Journey | Downloaded parser under Ruby 2.4.9 |
@@ -76,21 +90,52 @@ In Chromium, for `user="bob"` / `user=" "` / `user="eve"`:
 
 Changes `backend/src/canonical-operator-contract.ts` and `backend/templates/canonical-operators.rb.tpl`.
 
+## 3. A JSON message of a Syslog envelope is read as JSON or declined, never as free text
+
+Found by the independent audit of this change; on main as well. Behind an RFC 3164 header, a message that is the
+text of a JSON object and that the JSON body contract declines - a number that cannot be kept exactly, a repeated
+member name, the bounded depth - fell through to the tagged-message profile:
+
+```
+<134>Nov 16 10:15:04 fw01 app: {"k":"a","n":9007199254740993,"m":{"x":2.5},"t":"x"}
+```
+
+Browser and generated Ruby emitted the header and the raw message as a complete event: none of `k`, `n`, `m.x`,
+`t`, no `parser_err_msg`, verdict FULL. RFC 5424 + JSON and prefix + JSON already declined the same event.
+
+| Parser | Before | Now |
+|---|---|---|
+| new (dedicated grammar, as for the CEF/LEEF claims of owner policy D-2) | tagged message, FULL | declined with the reason |
+| existing project (no dedicated grammar) | tagged message, FULL | tagged message, PARTIAL: the members are not parsed |
+| a message the contract accepts | read member by member | the same |
+| text that only starts with a brace (`{not json} started job 7`) | tagged message | the same |
+
+Not covered: a key=value body with a tab inside a quoted value takes the same fallback to a tagged message (on
+main as well); a key=value "claim" has no syntax that would tell it from free text.
+
+Changes `src/genericStructural.ts` (`envelopedJsonDeclined`), `src/grammar/genericParseStatus.ts` and the
+generated `grammar-generic.generated.rb.tpl`. Goldens for both routes, two TypeScript mutants, three seeds of the
+browser/Ruby differential.
+
 ## Hashes
 
 Recalculated independently of the project code from the artifacts the compiler emits (Ruby text with the project
 literal replaced; digest over the template files and the 102 artifacts), equal to the manifest written by
-`scripts/verification/ruby-template-set.ts`:
+`scripts/verification/ruby-template-set.ts`. The independent auditor recalculated the first three rows with his
+own code. Computed under Node 24; CI pins Node 22 (the digest depends on the zlib of Node; main's approved values
+come out the same under both).
 
 | State | Reviewed POC template SHA-256 | Template-set SHA-256 |
 |---|---|---|
 | approved today (main) | `a829026d948b8a492db534ddf50e9009a8686f6a3a642abccaecb7f332bed246` | `3bd3172b620f0c09f87d5b8d9df548b2c187048b451a0cde7cf95cf287421936` |
-| change 1 alone (first commit) | `be0005935032cc9fe2e4dadfeda01c6dd94f824cbdaacd576b71fcffe30750ce` | `7919a4437d83f99aaac18ec6443da1e7531dd50d9654e3e7b16fd7ae13e614e5` |
-| changes 1 and 2 (head) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `c74c2d82d28447efafc5035327810d0ca3a461f5ab20cb3fdf0baa04d8cdec2d` |
+| change 1 alone (`0dda714`) | `be0005935032cc9fe2e4dadfeda01c6dd94f824cbdaacd576b71fcffe30750ce` | `7919a4437d83f99aaac18ec6443da1e7531dd50d9654e3e7b16fd7ae13e614e5` |
+| changes 1 and 2 (`6449387`) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `c74c2d82d28447efafc5035327810d0ca3a461f5ab20cb3fdf0baa04d8cdec2d` |
+| changes 1, 2 and 3 (head) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `191b3dd015010b5b2aba82750cc13762869796edabca7b6d9c94a25c8c8b2124` |
 
-The two changes are separate commits, so either state can be approved.
+The POC template reads JSON and does not hold the Generic Structural grammar, so change 3 leaves its hash as it
+is. The changes are separate commits, so each state can be approved.
 
-## Verification of the head (both changes)
+## Verification of the head (all three changes)
 
 - TypeScript build; vitest 236 files, 2,028 tests; Python suite 190 tests; grammar generators in sync;
   candidate mutation gate 92.31% with the 8 reviewed equivalents.

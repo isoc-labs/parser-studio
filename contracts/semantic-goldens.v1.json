@@ -1246,6 +1246,73 @@
           "syslog.hostname": "PA01"
         }
       }
+    },
+    {
+      "id": "generic-bsd-envelope-json-read",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":42,\"m\":{\"x\":2.5},\"t\":\"x\"}",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. A message the contract accepts is read member by member. (The numbers of the body are left to the JSON cases: the native run reports them as text.)",
+      "expect": {
+        "fields": {
+          "syslog.hostname": "fw01",
+          "generic.mode": "syslog_envelope_json",
+          "body.k": "a",
+          "body.t": "x"
+        },
+        "status": "FULL"
+      }
+    },
+    {
+      "id": "generic-bsd-envelope-json-integer-beyond-2-53-declined",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":9007199254740993,\"m\":{\"x\":2.5},\"t\":\"x\"}",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. An integer beyond 2^53 declines the event; before, the tagged-message profile emitted the header and the raw text as a complete event without k, n, m.x or t.",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-bsd-envelope-json-repeated-name-declined",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"k\":\"b\",\"n\":1}",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. A repeated member name declines the event (owner policy D-1).",
+      "expect": {
+        "reject": true
+      }
+    },
+    {
+      "id": "generic-bsd-tagged-message-brace-text",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {not json} started job 7",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. Text that only starts with a brace is not JSON and stays the free text of an RFC 3164 tagged message.",
+      "expect": {
+        "fields": {
+          "syslog.app_tag": "app",
+          "generic.mode": "bsd_tagged_message",
+          "generic.message": "{not json} started job 7"
+        },
+        "status": "FULL"
+      }
+    },
+    {
+      "id": "generic-bsd-envelope-json-declined-legacy-route-partial",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",\"n\":9007199254740993,\"m\":{\"x\":2.5},\"t\":\"x\"}",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 and the JSON body contract: a message of a Syslog envelope that is the text of a JSON object is JSON. Existing projects without the dedicated grammar keep reading the line as a tagged message (owner policy D-2); the verdict is PARTIAL, never FULL, because the members are not parsed.",
+      "expect": {
+        "fields": {
+          "generic.mode": "bsd_tagged_message"
+        },
+        "status": "PARTIAL"
+      }
+    },
+    {
+      "id": "generic-bsd-envelope-json-claim-not-json-declined",
+      "raw": "<134>Nov 16 10:15:04 fw01 app: {\"k\":\"a\",}",
+      "familyGrammar": "dedicated",
+      "provenance": "Independent audit of 2026-11-17 (M1). RFC 8259 4: no comma follows the last member. A message that claims to be a JSON object (a brace, a member name in quotes with its colon, a closing brace at the end) and is not JSON is declined, like a CEF claim that is not CEF; it is not the free text of a tagged message.",
+      "expect": {
+        "reject": true
+      }
     }
   ],
   "ownerPolicies": {

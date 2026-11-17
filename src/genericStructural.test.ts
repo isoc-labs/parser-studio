@@ -426,4 +426,38 @@ describe('bounded Generic Structural browser compiler twin',()=>{
     };
     expect(validateReviewableRecipe(recipe)).toBe(true);
   });
+  it('a JSON message of a Syslog envelope is read under the JSON contract or declined, never as free text',()=>{
+    // Independent audit of 2026-11-17 (M1): when the JSON body contract declined the message, the tagged-message
+    // profile took the line and emitted the header and the raw text as a complete event - no k, no n, no error.
+    const head='<134>Nov 16 10:15:04 fw01 app: ';
+    const read=(message:string)=>extractGenericStructural(head+message,undefined,'dedicated');
+    const good=read('{"k":"a","n":42,"m":{"x":2.5},"t":"x"}');
+    expect(good.errors).toEqual([]);
+    expect(good.fields).toMatchObject({generic:{mode:'syslog_envelope_json'},body:{k:'a',n:42,m:{x:2.5},t:'x'}});
+    for(const declined of [
+      '{"k":"a","n":9007199254740993,"m":{"x":2.5},"t":"x"}',   // an integer a double cannot hold
+      '{"k":"a","n":0.1234567890123456789}',                    // a decimal a double cannot hold
+      '{"k":"a","k":"b","n":1}',                                // a repeated member name
+      '{"a":{"b":{"c":{"d":{"e":{"f":{"g":{"h":{"i":{"j":1}}}}}}}}}}', // deeper than the contract reads
+      '{"k":"a",}',                                             // claims an object and is not JSON
+      '{"x":"\\ud83d","k":"a"}',                                 // an escape that names no character
+      '{ "k" : "a", "n": 1e400 }',                              // blanks around the first name; overflow
+    ]){
+      const result=read(declined);
+      expect(result.fields,declined).toEqual({});
+      expect(result.errors.join(' '),declined).toContain('JSON body contract does not read it');
+    }
+    // Text that does not make the claim is still the free text of a tagged message.
+    for(const text of ['{not json} started job 7','{"k":"a"} trailing words','{E3B1A2C4-GUID}','{k:"a"}','{"k" "a"}']){
+      const result=read(text);
+      expect(result.errors,text).toEqual([]);
+      expect((result.fields.generic as {mode:string}).mode,text).toBe('bsd_tagged_message');
+    }
+    // An array is not an object message, and the same line without a header is not an envelope.
+    expect((read('[1,9007199254740993]').fields.generic as {mode:string}).mode).toBe('bsd_tagged_message');
+    // Existing projects without the dedicated grammar keep their reading (owner policy D-2).
+    const legacy=extractGenericStructural(head+'{"k":"a","n":9007199254740993}');
+    expect(legacy.errors).toEqual([]);
+    expect((legacy.fields.generic as {mode:string}).mode).toBe('bsd_tagged_message');
+  });
 });

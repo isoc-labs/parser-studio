@@ -3,7 +3,8 @@
  *
  *   FULL     every key=value pair of the original line is an extracted field, or is inside a text field the
  *            mode keeps (a message, a prefix); and the line was read by the grammar it claims
- *   PARTIAL  a pair is in no field at all, or a line that claims to be CEF/LEEF was read as generic
+ *   PARTIAL  a pair is in no field at all, a JSON message the contract declines was read as free text,
+ *            or a line that claims to be CEF/LEEF was read as generic
  *            key=value (its header is not parsed): the original text is kept, the result is not complete
  *   UNKNOWN  the bounded grammar declined the line; nothing is parsed
  *   ERROR    the extractor raised
@@ -14,7 +15,7 @@
  * with one of those names is.
  */
 import { independentKeyValuePairs, type ParseVerdict, type RawPair, type StructuredOutcome } from './parseStatus';
-import { GENERIC_FAMILY_MODES, envelopedFamilyClaim, structuredFamilyClaim } from '../genericStructural';
+import { GENERIC_FAMILY_MODES, envelopedFamilyClaim, envelopedJsonDeclined, structuredFamilyClaim } from '../genericStructural';
 import { cefEventUnaccounted, jsonTextUnaccounted, leefEventUnaccounted, positionalCsvUnaccounted } from './lossGuard';
 import { getTag } from './primitives';
 
@@ -84,6 +85,8 @@ export function classifyGenericStructural(raw: string, outcome: StructuredOutcom
   const claim = structuredFamilyClaim(raw) ?? envelopedFamilyClaim(raw);
   if (claim && !GENERIC_FAMILY_MODES.includes(mode))
     reasons.push('the line claims to be ' + claim + ' but was read as generic key=value (legacy compatibility route): its ' + claim + ' header is not parsed');
+  if (envelopedJsonDeclined(raw))
+    reasons.push('the message claims to be a JSON object that the JSON body contract does not read, but was read as free text (legacy compatibility route): its members are not parsed');
   const leaves: Array<[string, string]> = [];
   collectFields(outcome.fields, leaves);
   const lostPairs = independentKeyValuePairs(raw).filter(pair => !accounted(pair, leaves));
