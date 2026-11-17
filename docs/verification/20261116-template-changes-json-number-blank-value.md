@@ -92,9 +92,10 @@ Changes `backend/src/canonical-operator-contract.ts` and `backend/templates/cano
 
 ## 3. A JSON message of a Syslog envelope is read as JSON or declined, never as free text
 
-Found by the independent audit of this change; on main as well. Behind an RFC 3164 header, a message that is the
-text of a JSON object and that the JSON body contract declines - a number that cannot be kept exactly, a repeated
-member name, the bounded depth - fell through to the tagged-message profile:
+Found by the independent audit of this change; on main as well. Behind an RFC 3164 header, a message that
+claims to be a JSON object and that the JSON body contract does not read - a number that cannot be kept exactly,
+a repeated member name, the bounded depth, or text that is not JSON after all - fell through to the tagged-message
+profile:
 
 ```
 <134>Nov 16 10:15:04 fw01 app: {"k":"a","n":9007199254740993,"m":{"x":2.5},"t":"x"}
@@ -107,8 +108,14 @@ Browser and generated Ruby emitted the header and the raw message as a complete 
 |---|---|---|
 | new (dedicated grammar, as for the CEF/LEEF claims of owner policy D-2) | tagged message, FULL | declined with the reason |
 | existing project (no dedicated grammar) | tagged message, FULL | tagged message, PARTIAL: the members are not parsed |
+| a message that claims an object and is not JSON (`{"k":"a",}`) | tagged message, FULL | as the first two rows |
 | a message the contract accepts | read member by member | the same |
-| text that only starts with a brace (`{not json} started job 7`) | tagged message | the same |
+| text that does not make the claim (`{not json} started job 7`, `{"k":"a"} trailing words`) | tagged message | the same |
+
+The claim is lexical - an opening brace, a member name in quotes with its colon, a closing brace at the end of
+the message - so that the browser and the generated Ruby cannot disagree about it (the first version asked each
+JSON library whether the text parses; the differential showed the two differ on an escape that names no
+character).
 
 Not covered: a key=value body with a tab inside a quoted value takes the same fallback to a tagged message (on
 main as well); a key=value "claim" has no syntax that would tell it from free text.
@@ -130,23 +137,54 @@ come out the same under both).
 | approved today (main) | `a829026d948b8a492db534ddf50e9009a8686f6a3a642abccaecb7f332bed246` | `3bd3172b620f0c09f87d5b8d9df548b2c187048b451a0cde7cf95cf287421936` |
 | change 1 alone (`0dda714`) | `be0005935032cc9fe2e4dadfeda01c6dd94f824cbdaacd576b71fcffe30750ce` | `7919a4437d83f99aaac18ec6443da1e7531dd50d9654e3e7b16fd7ae13e614e5` |
 | changes 1 and 2 (`6449387`) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `c74c2d82d28447efafc5035327810d0ca3a461f5ab20cb3fdf0baa04d8cdec2d` |
-| changes 1, 2 and 3 (head) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `191b3dd015010b5b2aba82750cc13762869796edabca7b6d9c94a25c8c8b2124` |
+| changes 1, 2 and 3 (head) | `4efddd8b5446799c0173788a8ef913fa393162cf18c1e1463e7e3e2e338bbfb8` | `49dd3680c8dea6f0b12fef9bf95c5f1ff3fd0cfde5628bf684990311fc8be411` |
 
 The POC template reads JSON and does not hold the Generic Structural grammar, so change 3 leaves its hash as it
 is. The changes are separate commits, so each state can be approved.
 
 ## Verification of the head (all three changes)
 
-- TypeScript build; vitest 236 files, 2,028 tests; Python suite 190 tests; grammar generators in sync;
+- TypeScript build; vitest 236 files, 2,042 tests; Python suite 191 tests; grammar generators in sync;
   candidate mutation gate 92.31% with the 8 reviewed equivalents.
-- Translation conformance; semantic oracle in the browser, in native Ruby 2.4.9 and in Python, with its mutants.
-- Browser/Ruby format differential: 44,948 cases, 0 differences, 15 of 15 injected faults detected.
-- Operator matrix: 113 compiled pairs, 226 native records, equal to the independent truth.
-- Backend suite: 759 of 775. The 16 failures are the 12 tests that compare against the approved hashes and 4 that
-  need Drain3 or a Ruby runner the development host does not have.
-- Real Chromium journey with the downloaded Ruby under 2.4.9, 92 samples and three probes, both changes:
-  the Zeek sample is downloaded with `ts` kept as `1731719701.123456`; 24 holdouts: 14 downloaded, 78 correct
-  Stellar meanings, 0 mapped to a forbidden field, 0 lost; the 68 earlier samples give exactly the result of the
-  tree without the changes (43 downloaded, 99 events, 0 error records, 2,425 values each text of its own line).
+- Translation conformance; semantic oracle in the browser, in native Ruby 2.4.9 (Generic Structural goldens 48 of
+  48) and in Python, with its mutants (the two new TypeScript mutants are killed).
+- Browser/Ruby differential: formats 44,948 cases, 0 differences, 15 of 15 injected faults detected; Generic
+  Structural 23,486 cases from 109 seeds and 27,000 random cases, 0 differences.
+- Operator matrix: 115 compiled pairs, 230 native records, equal to the independent truth.
+- Backend suite: 759 of 775; the failures are the 12 tests that compare against the approved hashes and 4 that need Drain3 or
+  a Ruby runner the development host does not have.
+- Real Chromium journey with the downloaded Ruby under 2.4.9, 92 samples and five probes, all three changes:
+  the Zeek sample is downloaded with `ts` written as `1731719701.123456`; 24 holdouts: 14 downloaded, 78 correct
+  Stellar meanings, 0 mapped to a forbidden field, 0 lost; the 68 earlier samples give exactly the result of main
+  (43 downloaded, 99 events, 0 error records, 2,425 values each text of its own line).
+
+| Probe | main (c5f1a1b, Development Preview) | this change |
+|---|---|---|
+| `user="bob"` / `user=" "` / `user="eve"` | stops on Map Fields | downloaded; 3 events, 0 error records, `user` bob and eve |
+| BSD syslog + JSON, one event with the integer 9007199254740993 | downloaded; that event is written as a tagged message with the JSON text as `message`, no member, no error | stops on Add Logs and names the number |
+| the same with safe numbers | downloaded, read member by member | the same |
+
+## Independent audit
+
+An independent auditor examined 6449387 (changes 1 and 2) with his own generators: **0 P1 and 0 P2 introduced**.
+
+- Change 1: 85,573 spellings; the browser verdict equals exact arithmetic (39,278 read, 45,863 declined); the
+  generated Ruby on 2.4.9 and 3.2.11 equals the browser; none of the 39,278 read numbers is emitted as another
+  number; 0 regressions against main, 1,174 numbers main emitted as another number are now declined.
+- Change 2: 1,607 one-event lines through 17 scenarios; browser preview and Ruby 2.4.9 agree record for record;
+  660 events that failed on main now pass, only for the six ASCII blanks.
+- All six hashes of the first three rows recalculated with his own code.
+
+| Finding | Disposition |
+|---|---|
+| M1 (class P2, on main) BSD syslog + JSON with a declined number is emitted as a complete tagged message | Fixed: change 3 |
+| F1 (P3) the review of ChatGPT proposals kept its own list of ignored values | Fixed |
+| F2 (P3) the review of event types stopped a blank-only typed value | Fixed |
+| F3 (P3) "browser = Ruby = Python for 31,168 spellings" was not measured for integer spellings | Statement corrected (section 1); the Python reading of integers beyond 2^53 is on main and is not changed |
+| F4 (P3) wording of the title and of the blank test | Corrected |
+| F5 (P3) mutations no test killed: capital exponent mark, leading zeros, the 17-digit form, NUL in the operator matrix | Tests added |
+| F6 (P3) consequences of the skip not stated | Stated in section 2 |
+| F7 (P3) Python preview failed on an exponent of more than 4,300 digits | Fixed |
+| M3 (P3, on main) the automatic draft called a value blank by Unicode `trim()` | Fixed for the automatic draft; `sampleUnionSchema.ts` still uses `trim()` |
 
 Not verified: a real Stellar Cyber 7.0 sensor, loader, import or indexing; production.
