@@ -842,7 +842,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     await analyzeAndReview(page);
     await page.getByLabel('Review Fields stage').getByRole('button',{name:'Map Fields'}).click();
     const map=page.getByLabel('Map Fields stage');
-    await expect(map.getByLabel('Source fields')).toBeVisible();
+    await expect(map.getByRole('region',{name:'Source fields'})).toBeVisible();
     await map.getByRole('button',{name:'src_ip',exact:true}).click();
     const row=map.locator('[data-source-path="src_ip"]');
     await expect(row).toHaveClass(/selected-source/);
