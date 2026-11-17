@@ -18,7 +18,7 @@ Do not push/merge/deploy, do not touch public preview, dev-atlas, original repo 
 ## Execution roadmap (strict dependency order)
 
 ### LF-0 — Baseline and source/value accounting contract [P0]
-- [ ] Identify and log examples of source completeness vs structured FULL vs output presence. Inspect classifyGenericStructural, lossGuard, fieldPaths, mapping-plan and every parser family involved.
+- [x] Identify and log examples of source completeness vs structured FULL vs output presence. Inspect classifyGenericStructural, lossGuard, fieldPaths, mapping-plan and every parser family involved. Evidence: [LF-0 baseline census](20261117-lossless-first-baseline.md).
 - [ ] Produce independent deterministic field/value accounting proof on vendor-derived and adversarial fixtures (nested arrays/null/dotted keys, UTF-8, quoted CSV, CEF/LEEF, syslog, duplicates, >100/1024 fields, unsupported records). For each classify exactly FULL, PARTIAL or UNKNOWN; report bytes, events, leaves and residuals; never call synthetic data "real vendor".
 - [ ] Add RED tests for actual reproducible gaps, not superficial assertions that raw text survived. Treat nonmappable paths and false success separately. If nothing fails, document honestly and do not change working core code.
 Acceptance: no unaccounted event silently promoted to FULL; raw source hashes and data boundaries preserved; no regression of previously supported families; no change merely to improve percentage.

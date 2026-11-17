@@ -217,7 +217,7 @@ describe('unmappable source field disclosure',()=>{
     const suite=preview(sample,draft);
     render(<NormalizationMappingReview draft={draft} setDraft={vi.fn()} suite={suite}
       selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>);
-    expect(screen.getByLabelText('Field mapping summary')).toHaveTextContent('Unmappable source values2');
-    expect(screen.getByLabelText('Field mapping summary')).toHaveTextContent('Left out of output3');
+    expect(screen.getByLabelText('Field mapping summary')).toHaveTextContent('Unmappable source values3');
+    expect(screen.getByLabelText('Field mapping summary')).toHaveTextContent('Left out of output4');
   });
 });
