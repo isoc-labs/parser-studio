@@ -1087,7 +1087,7 @@ export function envelopedJsonDeclined(raw:string):boolean{
   return boundedEnvelopeJson(message)===null;
 }
 /** Modes that read a CEF/LEEF event with the CEF/LEEF grammar. */
-export const GENERIC_FAMILY_MODES:readonly string[]=['structured_family_cef','structured_family_leef','syslog_envelope_cef','syslog_envelope_leef','leef2_implicit_tab'];
+export const GENERIC_FAMILY_MODES:readonly string[]=['structured_family_cef','structured_family_leef','syslog_envelope_cef','syslog_envelope_leef','syslog_envelope_leef2_implicit_tab','leef2_implicit_tab'];
 
 /**
  * familyGrammar (owner policy D-2): 'dedicated' is set for every newly created Generic Structural parser; a
@@ -1114,6 +1114,23 @@ export function extractGenericStructural(raw:string,profile?:GenericStructuralPr
     const fields=extractLeef2ImplicitTab(raw);
     return fields?{fields,errors:[]}:
       {fields:{},errors:['Event does not match the bounded Generic Structural compiler grammar']};
+  }
+  // LEEF 2.0 also permits the default TAB separator to be implicit. The
+  // standalone helper owns only that narrow body grammar; preserve the
+  // validated Syslog envelope separately and never reinterpret other LEEF
+  // versions or explicit delimiter slots through this route.
+  if(includesLeef&&familyGrammar==='dedicated'){
+    const envelope=parseSyslogEnvelope(raw);
+    if(envelope&&envelope.variant!=='colon_date'&&envelope.message.startsWith('LEEF:2.0|')){
+      const parsed=extractLeef2ImplicitTab(envelope.message);
+      if(parsed){
+        const body={leef_header:parsed.leef_header,leef_extension:parsed.leef_extension};
+        return {fields:{syslog:envelopeToSyslogFields(envelope),body,
+          generic:{mode:'syslog_envelope_leef2_implicit_tab',source_raw:raw,message_raw:envelope.message}},errors:[]};
+      }
+      // An explicit valid delimiter belongs to the existing LEEF grammar;
+      // malformed messages are refused by that same dedicated family route.
+    }
   }
   const claim=familyGrammar==='dedicated'?structuredFamilyClaim(raw):null;
   if(claim){

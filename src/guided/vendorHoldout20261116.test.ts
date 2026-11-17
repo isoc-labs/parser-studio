@@ -46,7 +46,7 @@ const READING:Record<string,[string,number]>={
   h_cisco_ftd_430003:['declined',0],   // "Key: value, Key: value" list behind %FTD-n-nnnnnn:
   h_cloudflare_http:['declined',0],    // nanosecond integers above 2^53
   h_meraki_urls_flows:['declined',0],  // a urls record has fewer than five key=value pairs
-  h_trendmicro_ds_leef:['declined',0], // LEEF 2.0 without a delimiter field behind a Syslog header
+  h_trendmicro_ds_leef:['generic',5], // repository-authored Trend Micro grammar shape: implicit-TAB LEEF 2.0 behind RFC 3164
   h_win4625_nxlog_json:['declined',0], // Keywords is a 64-bit integer
 };
 
