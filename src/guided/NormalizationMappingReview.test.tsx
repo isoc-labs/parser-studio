@@ -32,6 +32,27 @@ function Harness(){
 }
 
 describe('normalization mapping review UI',()=>{
+  it('shows safe source paths with leaf labels, retains selected vendor fields, and keeps arrays not mappable',()=>{
+    const raw='{"vendor":{"source-port":443},"evidence":["ioc-1","ioc-2"],"empty":null}';
+    function SourceTreeHarness(){
+      const [draft,setDraft]=useState<ParserDraft>({...createDraft(),vendor:'DeviceX',format:'json',mappings:[]});
+      const suite=preview(raw,draft);
+      return <><NormalizationMappingReview draft={draft} setDraft={setDraft} suite={suite}
+        selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>
+        <output aria-label="source path output">{JSON.stringify(suite.events[0]?.normalized)}</output>
+      </>;
+    }
+    render(<SourceTreeHarness/>);
+    expect(screen.getByLabelText('Independent parsing and output coverage')).toHaveTextContent('Raw events retained1 / 1');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NOT MAPPABLE · arrays need a supported native selector');
+    expect(screen.getByRole('button',{name:'source-port'})).toHaveAttribute('title','Full source path: vendor.source-port');
+    fireEvent.click(screen.getByRole('button',{name:'source-port'}));
+    expect(screen.getAllByText('vendor.source-port').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button',{name:'Keep as vendor field'}));
+    expect(screen.getByLabelText('source path output')).toHaveTextContent('"DeviceX":{"source-port":"443"}');
+    expect(screen.getByLabelText('Final event preview')).toHaveTextContent('Output values present: 1 / 1');
+  });
+
   it('bulk-applies only high-confidence official Stellar mappings and previews results',()=>{
     render(<Harness/>);
     expect(screen.getByLabelText('Field mapping summary')).toHaveTextContent('Matched to Stellar0');
@@ -41,6 +62,23 @@ describe('normalization mapping review UI',()=>{
     expect(screen.getByLabelText('Field mapping checks')).toHaveTextContent('All current field mappings passed the sample checks');
     expect(screen.getByLabelText('Field changes only')).toHaveTextContent('srcip');
     expect(screen.getByLabelText('Field changes only')).toHaveTextContent('192.0.2.10');
+  });
+
+  it('does not bulk-refresh a user-edited mapping from automatic suggestions',()=>{
+    function EditedMappingHarness(){
+      const initial=initialDraft();
+      const [draft,setDraft]=useState<ParserDraft>({...initial,mappings:initial.mappings.map(mapping=>
+        mapping.id==='auto-1'?{...mapping,target:'manual_source_ip',
+          authoring:{version:1,origin:'USER_EDITED'}}:mapping)});
+      const suite=preview(sample,draft);
+      return <><NormalizationMappingReview draft={draft} setDraft={setDraft} suite={suite}
+        selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>
+        <output aria-label="edited target">{draft.mappings.find(mapping=>mapping.id==='auto-1')?.target}</output>
+      </>;
+    }
+    render(<EditedMappingHarness/>);
+    fireEvent.click(screen.getByRole('button',{name:/Apply \d+ recommended matches/}));
+    expect(screen.getByLabelText('edited target')).toHaveTextContent('manual_source_ip');
   });
 
   it('keeps a non-dictionary target as a vendor field and still lets the user search the official catalog',()=>{

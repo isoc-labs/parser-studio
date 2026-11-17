@@ -65,6 +65,20 @@ describe('review-only JSONata source selector mapping',()=>{
   expect(output.counts).toMatchObject({total:2,matched:2,extracted:2,normalized:2,failures:0});
   expect(output.events[0]?.normalized).toMatchObject({srcip:'192.0.2.10',dstip:'198.51.100.20'});
  });
+ it('does not let an approved ChatGPT proposal replace a user-edited source mapping',async()=>{
+  const {draft:base,suite}=setup();
+  const draft:ParserDraft={...base,mappings:base.mappings.map(mapping=>mapping.id==='s'
+   ?{...mapping,target:'manual_src',authoring:{version:1,origin:'USER_EDITED'}}:mapping)};
+  const {sha256}=await createJsonataMappingPrompt(suite,draft);
+  const reviewed=await reviewJsonataMapping(answer(sha256,2,[
+   {expression:'$.src_ip',target:'srcip'},
+  ]),suite,draft,sha256);
+  expect(reviewed.ok).toBe(true);
+  if(!reviewed.ok)return;
+  expect(applyReviewedJsonataMapping(draft,suite,reviewed.rows)).toMatchObject({
+   ok:false,reason:'A user-edited or approved mapping already controls this source. Edit it in Map Fields before applying another proposal.',
+  });
+ });
  it('rejects stale SHA, extra response fields, unknown contract and excess size',async()=>{
   const {draft,suite}=setup();
   const {sha256}=await createJsonataMappingPrompt(suite,draft);

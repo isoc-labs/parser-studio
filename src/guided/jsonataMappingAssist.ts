@@ -266,6 +266,10 @@ export function applyReviewedJsonataMapping(draft:ParserDraft,suite:SuiteResult,
       seen.has(row.source))
       return {ok:false as const,reason:'Selection contains an unsupported or unreviewed expression.'};
     seen.add(row.source);
+    const protectedMapping=mappings.find(mapping=>mapping.source===row.source&&
+      (mapping.authoring?.origin==='USER_EDITED'||mapping.authoring?.origin==='APPROVED'));
+    if(protectedMapping)return {ok:false as const,
+      reason:'A user-edited or approved mapping already controls this source. Edit it in Map Fields before applying another proposal.'};
     const metadata=findStellarMetadataField(row.target);
     const original=suggestions.find(candidate=>candidate.source===row.source&&
       candidate.target===row.target&&candidate.when);

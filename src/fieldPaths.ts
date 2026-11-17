@@ -86,10 +86,10 @@ export function countUnaddressableSourceValues(fields:Record<string,unknown>):nu
   const resolvedPaths=new Set<string>();
   let missing=0;
   const countLeaves=(value:unknown):number=>{
-    if(Array.isArray(value))return value.length?value.reduce((sum,item)=>sum+countLeaves(item),0):1;
+    if(Array.isArray(value))return value.length?value.reduce<number>((sum,item)=>sum+countLeaves(item),0):1;
     if(objectRecord(value)){
       const children=Object.values(value);
-      return children.length?children.reduce((sum,item)=>sum+countLeaves(item),0):1;
+      return children.length?children.reduce<number>((sum,item)=>sum+countLeaves(item),0):1;
     }
     return 1;
   };

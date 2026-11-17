@@ -20,12 +20,13 @@ Do not push/merge/deploy, do not touch public preview, dev-atlas, original repo 
 ### LF-0 — Baseline and source/value accounting contract [P0]
 - [x] Identify and log examples of source completeness vs structured FULL vs output presence. Inspect classifyGenericStructural, lossGuard, fieldPaths, mapping-plan and every parser family involved. Evidence: [LF-0 baseline census](20261117-lossless-first-baseline.md).
 - [ ] Produce independent deterministic field/value accounting proof on vendor-derived and adversarial fixtures (nested arrays/null/dotted keys, UTF-8, quoted CSV, CEF/LEEF, syslog, duplicates, >100/1024 fields, unsupported records). For each classify exactly FULL, PARTIAL or UNKNOWN; report bytes, events, leaves and residuals; never call synthetic data "real vendor".
-- [ ] Add RED tests for actual reproducible gaps, not superficial assertions that raw text survived. Treat nonmappable paths and false success separately. If nothing fails, document honestly and do not change working core code.
+- [x] Add RED tests for actual reproducible gaps, not superficial assertions that raw text survived. Treat nonmappable paths and false success separately. If nothing fails, document honestly and do not change working core code. Evidence: array source-value undercount RED/GREEN in [LF-0 baseline census](20261117-lossless-first-baseline.md); existing structural false-FULL mutation tests remain in `src/grammar/genericLossGuard.test.ts`.
 Acceptance: no unaccounted event silently promoted to FULL; raw source hashes and data boundaries preserved; no regression of previously supported families; no change merely to improve percentage.
 
 ### LF-1 — Loss guard and mapping eligibility [P0]
 - [ ] Fix confirmed generalizable extraction/coverage defects only. Byte-accurate residuals remain visible and repairable; no vendor-specific patchwork.
-- [ ] Surface independent statuses "Raw retained", "Structurally extracted", "Mapped output coverage" without conflating them. Source-only can be retained without mapping eligible; PARTIAL/UNKNOWN must show exact unresolved spans and recovery path.
+- [x] Surface independent statuses for retained source events, structural extraction, and mapped output coverage without conflating them. Source-only retention does not count as extracted or mapped. Evidence: the Map Fields coverage and final-event panels distinguish raw-event count, FULL/PARTIAL/UNKNOWN/ERROR counts, and source-present versus output-present values.
+- [ ] For PARTIAL/UNKNOWN events, show exact unresolved spans and a recovery path before mapping can be relied on.
 - [ ] If unmapped parsed leaf cannot be emitted by native compiler, mark unsupported/blocked and retain raw; never count leaf as emitted. User selection to omit field must be explicit and previewed; cannot bypass parsing safety.
 Acceptance: positive/negative evidence, sample fingerprint, omission/collision tests, browser+generated Ruby parity whenever native runner available.
 
