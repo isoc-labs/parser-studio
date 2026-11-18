@@ -51,7 +51,7 @@ test('published Juniper logs → ChatGPT JSONata mapping review → DRAFT Ruby a
   }));
   await assistant.getByRole('button',{name:'Check JSONata Mappings'}).click();
   const reviewed=assistant.getByLabel('Reviewed ChatGPT JSONata mappings');
-  const sourceRow=reviewed.locator('label.jsonata-assist-row').filter({hasText:'source-address'});
+  const sourceRow=reviewed.locator('label.jsonata-assist-row').filter({hasText:'source-address → srcip'});
   await expect(sourceRow).toContainText('BLOCKED');
   await expect(sourceRow).toContainText('human mapping');
   await expect(sourceRow.locator('input[type="checkbox"]')).toBeDisabled();
