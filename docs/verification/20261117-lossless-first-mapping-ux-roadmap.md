@@ -15,6 +15,15 @@ Do not push/merge/deploy, do not touch public preview, dev-atlas, original repo 
 5. Unmapped values are never silently discarded. Their original field names are shown to the user (leaf name where unique; full path retained internally to distinguish collisions), and their output disposition is visible. No artificial vendor or project prefixes in displayed leaf names. For unsafe/unaddressable paths, show preserved raw source + explicit mapping limitation. Explicit user opt-out for particular output field is deliberate mapping decision, not parser evidence.
 6. Target Ruby 2.4.9, native Fluentd and real Stellar Cyber 7.0 import/indexing are distinct verification levels. Never claim release PASS from browser-only evidence.
 
+## 2026-11-18 implementation and independent host validation
+
+[Verified local candidate and open gates](20261118-lossless-first-host-qualification.md).
+Code HEAD `aac57970f1e7afda5eef20b1e4abb12fb85c3137`:
+Vitest 2,063/2,063, Python 191/191, semantic oracle 6,288/6,288,
+Chromium novice E2E 7/7 and same-head DRAFT Ruby/conf E2E 1/1 PASS.
+Native Ruby 2.4.9/Fluentd and real DP7 target remain **UNVERIFIED**.
+This is a local candidate, not a release/merge/deployment.
+
 ## Execution roadmap (strict dependency order)
 
 ### LF-0 — Baseline and source/value accounting contract [P0]
@@ -24,22 +33,22 @@ Do not push/merge/deploy, do not touch public preview, dev-atlas, original repo 
 Acceptance: no unaccounted event silently promoted to FULL; raw source hashes and data boundaries preserved; no regression of previously supported families; no change merely to improve percentage.
 
 ### LF-1 — Loss guard and mapping eligibility [P0]
-- [ ] Fix confirmed generalizable extraction/coverage defects only. Byte-accurate residuals remain visible and repairable; no vendor-specific patchwork.
+- [x] Fix confirmed generalizable extraction/coverage defects only. Byte-accurate residuals remain visible and repairable; no vendor-specific patchwork.
 - [x] Surface independent statuses for retained source events, structural extraction, and mapped output coverage without conflating them. Source-only retention does not count as extracted or mapped. Evidence: the Map Fields coverage and final-event panels distinguish raw-event count, FULL/PARTIAL/UNKNOWN/ERROR counts, and source-present versus output-present values.
-- [ ] For PARTIAL/UNKNOWN events, show exact unresolved spans and a recovery path before mapping can be relied on.
+- [x] For PARTIAL/UNKNOWN events, show exact unresolved spans and a recovery path before mapping can be relied on.
 - [ ] If unmapped parsed leaf cannot be emitted by native compiler, mark unsupported/blocked and retain raw; never count leaf as emitted. User selection to omit field must be explicit and previewed; cannot bypass parsing safety.
 Acceptance: positive/negative evidence, sample fingerprint, omission/collision tests, browser+generated Ruby parity whenever native runner available.
 
 ### MAP-1 — DR Control-style in-place three-column mapping UI [P1, after LF-0/1]
-- [ ] In existing Auto Parser "Map Fields" render "Source fields" (Tree/JSON, click to select, event tabs, original value + path + status), "Mapping rules" (source -> destination catalog search/selector, value type, origin, conflicts, user override), "Final event" (normalized preview, raw-vs-output diff, unmapped/omitted and residual warnings).
-- [ ] Borrow interaction principles, NOT Control runtime dependencies or dropping semantics: frontend/src/components/streams/wizard/wizard-basic-mapping-panel.tsx, mapping-json-tree.tsx, wizard-mapping-output-aside.tsx.
+- [x] In existing Auto Parser "Map Fields" render "Source fields" (Tree/JSON, click to select, event tabs, original value + path + status), "Mapping rules" (source -> destination catalog search/selector, value type, origin, conflicts, user override), "Final event" (normalized preview, raw-vs-output diff, unmapped/omitted and residual warnings).
+- [x] Borrow interaction principles, NOT Control runtime dependencies or dropping semantics: frontend/src/components/streams/wizard/wizard-basic-mapping-panel.tsx, mapping-json-tree.tsx, wizard-mapping-output-aside.tsx.
 - [ ] Field leaf display: source-port remains source-port (internal syslog_sd.element_1.params.source-port), recommended srcport. Likewise destination-port->dstport, raw values/path preserved.
-- [ ] Field-array/null/ambiguous-path choices are not phantom selectable: retain tree data and show NOT MAPPABLE / REVIEW guidance and safe recovery.
+- [x] Field-array/null/ambiguous-path choices are not phantom selectable: retain tree data and show NOT MAPPABLE / REVIEW guidance and safe recovery.
 Acceptance: novice Chromium path from raw vendor log to source path, manually selected Stellar 7.0 field, preview, DRAFT Ruby/.conf download, accessibility/keyboard; no new top-level mode.
 
 ### MAP-2 — Progressive mapping: auto -> ChatGPT -> manual [P1, after MAP-1]
-- [ ] On first entry run existing deterministic official suggestions without overwriting approved mapping; show confidence, provenance, warnings and counts.
-- [ ] One contextual "Improve with ChatGPT" for remaining/ambiguous fields reuses JsonataMappingAssistant, manual privacy-reviewed copy/paste, fingerprint, local checks and explicit approval; never auto-send customer logs or run arbitrary JSONata.
+- [x] On first entry run existing deterministic official suggestions without overwriting approved mapping; show confidence, provenance, warnings and counts.
+- [x] One contextual "Improve with ChatGPT" for remaining/ambiguous fields reuses JsonataMappingAssistant, manual privacy-reviewed copy/paste, fingerprint, local checks and explicit approval; never auto-send customer logs or run arbitrary JSONata.
 - [ ] Every original source path, including non-mappable, stays reviewable. Users click source, search Stellar 7.0 field name/description, select or keep original vendor name; manual has highest precedence.
 - [ ] Recompute output preview and collision/type checks on each change; do not drop values, replace source labels with vendor/path prefixes or misreport target compatibility.
 Acceptance: mapping-origin precedence and negative tests for injection, approval bypass, conflicts, auto-overriding manual mapping and stale sample/response.
@@ -48,7 +57,7 @@ Acceptance: mapping-origin precedence and negative tests for injection, approval
 - [ ] All existing Vitest/Python/backend tests, generated grammar TS->Ruby in sync, semantic oracle, negative corpus and targeted regressions.
 - [ ] Real Chromium novice E2E: Auto parsing -> automatic mapping -> optional ChatGPT-assisted mapping -> manual fallback -> preview -> DRAFT Ruby/.conf; mixed/multi-event, partial/unknown, unmapped and UTF-8 cases.
 - [ ] Native Ruby 2.4.9/Fluentd parity and no value loss from generated files if isolated runner available; otherwise report UNVERIFIED. Never conflate candidate DRAFT and real DP7 ingress/index proof.
-- [ ] Independent review, clean local commits and evidence receipt. No push, merge, preview rollout, production or target import without owner authorization.
+- [x] Independent review, clean local commits and evidence receipt. No push, merge, preview rollout, production or target import without owner authorization.
 
 ## Current code and risk pointers
 
