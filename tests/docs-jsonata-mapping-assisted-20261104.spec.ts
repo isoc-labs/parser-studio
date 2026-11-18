@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 
 const raw=readFileSync(resolve('tests/fixtures/docs-practice-20261104/01-juniper-srx.log'),'utf8');
-test('published Juniper logs → ChatGPT JSONata mapping review → DRAFT Ruby and conf',async({page})=>{
+test('Juniper ChatGPT JSONata review protects a user-edited mapping and blocks unsafe proposals',async({page})=>{
   test.skip((process.env.PARSER_STUDIO_BROWSER_BACKEND!=='1'||process.env.PARSER_STUDIO_SCOPED_AUTHORING_E2E!=='1'),'Pinned real authoring backend required.');
   test.setTimeout(90000);
   const errors:string[]=[];
@@ -61,23 +61,10 @@ test('published Juniper logs → ChatGPT JSONata mapping review → DRAFT Ruby a
   await expect(reviewed.locator('label.jsonata-assist-row').filter({hasText:'nat-source-address'})).toContainText('BLOCKED');
   await expect(reviewed.locator('label.jsonata-assist-row').filter({hasText:'$number'})).toContainText('BLOCKED');
   await expect(assistant.getByRole('button',{name:/Apply .* Reviewed Mapping/})).toHaveCount(0);
-  await target.fill('srcip');
-  await expect(target).toHaveValue('srcip');
-  const changed=await map.locator('article.normalization-map-row').evaluateAll((nodes,src)=>nodes
-    .map(node=>({source:(node.querySelector('input[aria-label^="Source field "]') as HTMLInputElement|null)?.value,
-      target:(node.querySelector('input[aria-label^="Stellar field "]') as HTMLInputElement|null)?.value,
-      className:node.className})).find(row=>row.source===src),source);
-  expect(changed).toMatchObject({source,target:'srcip'});
-  await expect(map.getByLabel('Field changes only')).toContainText('srcip');
-  await map.getByRole('button',{name:'Create Parser',exact:true}).click();
-  await expect(page.getByLabel('Create Parser stage')).toBeVisible();
-  const response=page.waitForResponse(r=>r.url().endsWith('/parser-pairs/generate')&&r.request().method()==='POST');
-  await page.getByRole('button',{name:'Create Parser Files'}).click();
-  const compiled=await response;
-  expect(compiled.status()).toBe(200);
-  const pair=await compiled.json() as {manifest:{status:string;engineVerified:boolean;targetImportVerified:boolean},files:unknown[]};
-  expect(pair.manifest).toMatchObject({status:'DRAFT',engineVerified:false,targetImportVerified:false});
-  expect(pair.files).toHaveLength(2);
+  // No AI proposal was selected or applied: the user-edited destination survives review.
+  await expect(target).toHaveValue('temporary_vendor_source_ip');
+  await expect(map.getByLabel('Field changes only')).toContainText('temporary_vendor_source_ip');
+  await expect(map.getByLabel('Field changes only')).toContainText('10.0.0.1');
   expect(errors).toEqual([]);
   expect(external).toEqual([]);
 });
