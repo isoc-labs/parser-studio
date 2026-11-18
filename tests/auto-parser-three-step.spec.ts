@@ -114,9 +114,9 @@ test('FULL JSON extraction auto-retains a vendor field and permits a manual over
  await expect(row).not.toContainText(/(?:\.\/|\[root\])/);
  const target=row.getByRole('combobox',{name:'Stellar field 3'});
  await expect(target).toHaveValue('my_vendor_token');
- await expect(map.getByLabel('Field mapping summary')).toContainText('Fields found 4');
+ await expect(map.getByLabel('Field mapping summary')).toContainText('Fields found4');
  await expect(map.getByLabel('Field mapping summary')).toContainText('Matched to Stellar3');
- await expect(map.getByLabel('Field mapping summary')).toContainText('Vendor fields retained 1');
+ await expect(map.getByLabel('Field mapping summary')).toContainText('Vendor fields retained1');
  await expect(map.getByLabel('Field mapping summary')).toContainText('Left out of output0');
  const preview=map.getByLabel('Final event preview');
  await expect(preview).toContainText('Output values present:');
