@@ -51,18 +51,23 @@ test('published Juniper logs → ChatGPT JSONata mapping review → DRAFT Ruby a
   }));
   await assistant.getByRole('button',{name:'Check JSONata Mappings'}).click();
   const reviewed=assistant.getByLabel('Reviewed ChatGPT JSONata mappings');
-  await expect(reviewed).toContainText('READY');
+  const sourceRow=reviewed.locator('label.jsonata-assist-row').filter({hasText:'source-address'});
+  await expect(sourceRow).toContainText('BLOCKED');
+  await expect(sourceRow).toContainText('human mapping');
+  await expect(sourceRow.locator('input[type="checkbox"]')).toBeDisabled();
   await expect(reviewed).toContainText('BLOCKED');
-  await expect(reviewed.locator('input[type="checkbox"]:disabled')).toHaveCount(2);
-  await expect(assistant.getByRole('button',{name:'Apply 1 Reviewed Mapping'})).toBeDisabled();
-  await assistant.getByLabel('I reviewed the selected JSONata mappings').check();
-  await assistant.getByRole('button',{name:'Apply 1 Reviewed Mapping'}).click();
+  await expect(reviewed.locator('input[type="checkbox"]:disabled')).toHaveCount(3);
+  await expect(target).toHaveValue('temporary_vendor_source_ip');
+  await expect(reviewed.locator('label.jsonata-assist-row').filter({hasText:'nat-source-address'})).toContainText('BLOCKED');
+  await expect(reviewed.locator('label.jsonata-assist-row').filter({hasText:'$number'})).toContainText('BLOCKED');
+  await expect(assistant.getByRole('button',{name:/Apply .* Reviewed Mapping/})).toHaveCount(0);
+  await target.fill('srcip');
+  await expect(target).toHaveValue('srcip');
   const changed=await map.locator('article.normalization-map-row').evaluateAll((nodes,src)=>nodes
     .map(node=>({source:(node.querySelector('input[aria-label^="Source field "]') as HTMLInputElement|null)?.value,
       target:(node.querySelector('input[aria-label^="Stellar field "]') as HTMLInputElement|null)?.value,
       className:node.className})).find(row=>row.source===src),source);
   expect(changed).toMatchObject({source,target:'srcip'});
-  expect(changed?.className).toContain('verified');
   await expect(map.getByLabel('Field changes only')).toContainText('srcip');
   await map.getByRole('button',{name:'Create Parser',exact:true}).click();
   await expect(page.getByLabel('Create Parser stage')).toBeVisible();
