@@ -65,37 +65,54 @@ test('novice reviews original/extracted/normalized samples, keeps source, and se
  await expect(page.getByLabel('Auto Parser raw logs')).toHaveValue(input);
  expect(generatedPosts).toBe(0);
 });
-test('partial source shows exact Multi-Pass residual in Map Fields and links back to repair',async({page})=>{
+test('partial source stays at Add Logs with its exact residual visible and creation locked',async({page})=>{
  test.skip(process.env.PARSER_STUDIO_TEST_MULTIPASS!=='1','Requires the isolated in-repository Multi-Pass service.');
- const raw='{"action":"allow","src_ip":"198.51.100.10"}\nopaque tail 東京';
+ const event='{"action":"allow","src_ip":"198.51.100.10"}';
+ const residual='opaque tail 東京';
+ const raw=event+'\n'+residual;
+ let generatedPosts=0;
+ page.on('request',req=>{
+   if(req.method()==='POST'&&new URL(req.url()).pathname.endsWith('/generate'))generatedPosts++;
+ });
+ await page.goto('/');
+ const source=page.getByLabel('Auto Parser raw logs');
+ await source.fill(raw);
+ await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
+ await expect(source).toHaveValue(raw);
+ const inspector=page.getByLabel('Parse problem inspector');
+ await expect(inspector).toContainText(residual,{timeout:20000});
+ await expect(inspector.getByText(residual,{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Review Fields',exact:true})).toBeDisabled();
+ const createStep=page.getByRole('navigation',{name:'Auto Parser steps'}).getByRole('button',{name:/Create Parser/});
+ await expect(createStep).toHaveClass(/locked/);
+ await createStep.click();
+ await expect(page.getByLabel('Add Logs stage')).toBeVisible();
+ await expect(source).toHaveValue(raw);
+ expect(generatedPosts).toBe(0);
+});
+test('FULL JSON extraction permits an explicit safe mapping for a new vendor leaf',async({page})=>{
+ const raw=[
+  '{"action":"allow","src_ip":"198.51.100.10","dst_port":443,"my_vendor_token":"customer-visible-note"}',
+  '{"action":"deny","src_ip":"203.0.113.5","dst_port":22,"my_vendor_token":"customer-visible-note"}',
+ ].join('\n');
  await page.goto('/');
  await page.getByLabel('Auto Parser raw logs').fill(raw);
+ await expect(page.getByLabel('Automatic event accounting')).toContainText('2/2 events analyzed locally');
  await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
  const review=page.getByRole('button',{name:'Review Fields',exact:true});
- await expect(review).toBeEnabled({timeout:20000});await review.click();
- const fields=page.getByLabel('Review Fields stage');
- await expect(fields).toBeVisible();
- const mapButton=fields.getByRole('button',{name:'Map Fields',exact:true});
- if(await mapButton.isEnabled()){
-  await mapButton.click();
-  const map=page.getByLabel('Map Fields stage');
-  await expect(map.getByLabel('Unparsed source evidence')).toContainText(/Bytes \d+–\d+/);
-  await expect(map.getByLabel('Unparsed source evidence')).toContainText('opaque tail 東京');
-  await map.getByRole('button',{name:'Review Fields and repair unparsed text'}).click();
-  await expect(page.getByLabel('Review Fields stage')).toBeVisible();
- }else{
-  await expect(fields).toContainText(/unparsed|needs review|not yet understood/i);
- }
-});
-test('FULL JSON extraction still permits an explicit safe manual vendor mapping',async({page})=>{
- await begin(page);
+ await expect(review).toBeEnabled({timeout:20000});
+ await review.click();
+ await expect(page.getByLabel('Review Fields stage')).toBeVisible();
  await page.getByLabel('Review Fields stage').getByRole('button',{name:'Map Fields',exact:true}).click();
  const map=page.getByLabel('Map Fields stage');
- await map.getByLabel('Search source fields').fill('dst_port');
- await map.getByRole('button',{name:'dst_port',exact:true}).click();
+ await map.getByLabel('Search source fields').fill('my_vendor_token');
+ await map.getByRole('button',{name:'my_vendor_token',exact:true}).click();
  await map.getByRole('button',{name:'Keep as vendor field'}).click();
  await expect(map.getByLabel('Final event preview')).toContainText('Output values present:');
+ await expect(map.getByLabel('Final event preview')).toContainText('my_vendor_token');
+ await expect(map.getByLabel('Final event preview')).toContainText('customer-visible-note');
  await expect(map.getByLabel('Final event preview')).toContainText('dst_port');
+ await expect(map.getByLabel('Final event preview')).toContainText('443');
  await expect(map.getByLabel('Unparsed source evidence')).toContainText(/no residual byte spans|UNKNOWN \/ UNVERIFIED/);
 });
 test('mixed families and unknown logs are not dropped or transmitted to validation',async({page})=>{
