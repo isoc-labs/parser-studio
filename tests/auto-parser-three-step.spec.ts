@@ -79,7 +79,7 @@ test('partial source shows exact Multi-Pass residual in Map Fields and links bac
  if(await mapButton.isEnabled()){
   await mapButton.click();
   const map=page.getByLabel('Map Fields stage');
-  await expect(map.getByLabel('Unparsed source evidence')).toContainText('UNKNOWN / UNVERIFIED');
+  await expect(map.getByLabel('Unparsed source evidence')).toContainText(/Bytes \d+–\d+/);
   await expect(map.getByLabel('Unparsed source evidence')).toContainText('opaque tail 東京');
   await map.getByRole('button',{name:'Review Fields and repair unparsed text'}).click();
   await expect(page.getByLabel('Review Fields stage')).toBeVisible();
