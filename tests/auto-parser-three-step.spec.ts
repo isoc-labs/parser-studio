@@ -81,7 +81,8 @@ test('partial source stays at Add Logs with its exact residual visible and creat
  await expect(source).toHaveValue(raw);
  const inspector=page.getByLabel('Parse problem inspector');
  await expect(inspector).toContainText(residual,{timeout:20000});
- await expect(inspector.getByText(residual,{exact:true})).toBeVisible();
+ await expect(inspector.locator('mark').filter({hasText:residual})).toBeVisible();
+ await expect(inspector.locator('code').filter({hasText:residual})).toBeVisible();
  await expect(page.getByRole('button',{name:'Review Fields',exact:true})).toBeDisabled();
  const createStep=page.getByRole('navigation',{name:'Auto Parser steps'}).getByRole('button',{name:/Create Parser/});
  await expect(createStep).toHaveClass(/locked/);
@@ -90,7 +91,7 @@ test('partial source stays at Add Logs with its exact residual visible and creat
  await expect(source).toHaveValue(raw);
  expect(generatedPosts).toBe(0);
 });
-test('FULL JSON extraction permits an explicit safe mapping for a new vendor leaf',async({page})=>{
+test('FULL JSON extraction auto-retains a vendor field and permits a manual override',async({page})=>{
  const raw=[
   '{"action":"allow","src_ip":"198.51.100.10","dst_port":443,"my_vendor_token":"customer-visible-note"}',
   '{"action":"deny","src_ip":"203.0.113.5","dst_port":22,"my_vendor_token":"customer-visible-note"}',
@@ -107,12 +108,33 @@ test('FULL JSON extraction permits an explicit safe mapping for a new vendor lea
  const map=page.getByLabel('Map Fields stage');
  await map.getByLabel('Search source fields').fill('my_vendor_token');
  await map.getByRole('button',{name:'my_vendor_token',exact:true}).click();
- await map.getByRole('button',{name:'Keep as vendor field'}).click();
+ const row=map.locator('[data-source-path="my_vendor_token"]');
+ await expect(row).toBeVisible();
+ await expect(row).toContainText('my_vendor_token');
+ await expect(row).not.toContainText(/(?:\.\/|\[root\])/);
+ const target=row.getByRole('combobox',{name:'Stellar field 3'});
+ await expect(target).toHaveValue('my_vendor_token');
+ await expect(map.getByLabel('Field mapping summary')).toContainText('Fields found 4');
+ await expect(map.getByLabel('Field mapping summary')).toContainText('Matched to Stellar3');
+ await expect(map.getByLabel('Field mapping summary')).toContainText('Vendor fields retained 1');
+ await expect(map.getByLabel('Field mapping summary')).toContainText('Left out of output0');
+ const preview=map.getByLabel('Final event preview');
+ await expect(preview).toContainText('Output values present:');
+ await expect(preview).toContainText('my_vendor_token');
+ await expect(preview).toContainText('customer-visible-note');
+ await expect(preview).toContainText('srcip');
+ await expect(preview).toContainText('198.51.100.10');
+ await expect(preview).toContainText('dstport');
+ await expect(preview).toContainText('443');
+ await target.fill('my_vendor_token_reviewed');
+ await expect(target).toHaveValue('my_vendor_token_reviewed');
+ await expect(preview).toContainText('my_vendor_token_reviewed');
+ await expect(preview).toContainText('customer-visible-note');
+ await expect(preview).toContainText('srcip');
+ await expect(preview).toContainText('198.51.100.10');
+ await expect(preview).toContainText('dstport');
+ await expect(preview).toContainText('443');
  await expect(map.getByLabel('Final event preview')).toContainText('Output values present:');
- await expect(map.getByLabel('Final event preview')).toContainText('my_vendor_token');
- await expect(map.getByLabel('Final event preview')).toContainText('customer-visible-note');
- await expect(map.getByLabel('Final event preview')).toContainText('dst_port');
- await expect(map.getByLabel('Final event preview')).toContainText('443');
  await expect(map.getByLabel('Unparsed source evidence')).toContainText(/no residual byte spans|UNKNOWN \/ UNVERIFIED/);
 });
 test('mixed families and unknown logs are not dropped or transmitted to validation',async({page})=>{
