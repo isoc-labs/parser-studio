@@ -41,9 +41,8 @@ function eventStatusLabel(status:string){
 
 function displayValue(value:unknown):string{
   if(value===undefined)return '—';
-  if(typeof value==='string')return value.length>80?value.slice(0,77)+'…':value;
-  const rendered=JSON.stringify(value);
-  return rendered?.length>80?rendered.slice(0,77)+'…':rendered??String(value);
+  if(typeof value==='string')return value;
+  return JSON.stringify(value)??String(value);
 }
 function sourceValues(suite:SuiteResult|undefined,source:string,kind?:MappingRule['sourcePathKind']):string[]{
   if(!suite)return [];
@@ -271,7 +270,7 @@ export default function NormalizationMappingReview({
         aria-pressed={selectedSource===path} onClick={()=>{setSelectedSource(path);setSelectedSourceLeaf(label);}}>{label}</button>
         :<span>{label}</span>}
       <code>{sample}</code>
-      <small>{safe?(mappedSources.has(path)?'Mapping rule exists':'Safe source path'):'NOT MAPPABLE · retained in the original source'}</small>
+      <small>{value===null?'NULL · extracted value; not mappable as a field':safe?(mappedSources.has(path)?'Mapping rule exists':'Safe source path'):'NOT MAPPABLE · retained in the original source'}</small>
     </div>;
   };
 

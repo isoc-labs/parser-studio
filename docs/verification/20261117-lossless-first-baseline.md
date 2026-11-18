@@ -58,3 +58,52 @@ array is now 3, distinct from its safe-path count.
   does not claim reviewability of source trees beyond current UI support.
 - Browser output presence, Ruby runtime behavior, Stellar 7.0 import/indexing,
   and Ruby 2.4.9 are not qualified by these unit tests.
+
+## Candidate increment at `b9f9d12` and local UI correction
+
+The isolated experiment continued from the requested clean candidate branch. A
+focused regression exercised `fieldPaths`, the generic structural loss guard,
+the shared loss guard, canonical mapping planning, and the Map Fields UI. It
+passed **57 tests across 5 files**. The UI regression checks a long UTF-8 value
+through the source tree without shortening it and confirms that a retained JSON
+null is visibly identified as a null extracted value and not a mappable field.
+`displayValue` now renders complete values in those review surfaces; visual
+clipping or scrolling does not alter the value displayed in the DOM.
+
+This is synthetic/adversarial UI evidence, not a real vendor sample. The owner
+sample logs and parsers are still absent, so vendor-derived field accounting,
+per-event source hashes, exact UTF-8 residual byte spans, and the requested
+full family/count census remain unverified. Existing `genericLossGuard` tests
+independently damage extracted JSON, CSV, CEF and LEEF values and assert that
+the verdict falls from FULL to PARTIAL. No raw-copy path is used as extraction
+evidence by those guards.
+
+Candidate checks on 2026-11-18:
+
+- Focused extraction/mapping Vitest: **57 passed**.
+- Full Vitest: **2,055 passed, 1 failed** (2,056 total). The failure is
+  `src/guided/pythonTestSender.test.ts`, where `spawnSync('python3', ...)` was
+  denied with `EPERM`; the 236 other files passed.
+- Python unittest discovery: **188 passed, 3 errored** (191 total). Each error
+  is a loopback-server test blocked while creating a socket with
+  `PermissionError: Operation not permitted`.
+- Frontend typecheck and production build: passed. Vite reported the existing
+  large-chunk advisory; output was generated successfully.
+- Backend TypeScript build: passed; semantic policy canonical-match check
+  passed.
+- Grammar generation and TS2Ruby `--verify`: passed; generated grammar and
+  all three listed Ruby translation targets were in sync.
+- Semantic-oracle TypeScript execution: not run. Its `tsx` launcher failed to
+  create `/tmp/tsx-1000/3.pipe` (`listen EPERM`).
+- Chromium novice mapping E2E: not run. Playwright could not start its configured
+  local web server (exit code 1), consistent with the environment's denied
+  loopback socket creation. The component-level mapping regression passed, but
+  this is not a browser user-path result.
+- Ruby runtime: unavailable (`ruby: command not found`). Docker daemon and
+  image inventory could not be read because access to `/var/run/docker.sock`
+  was denied. Ruby 2.4.9/native parity is UNVERIFIED; DP7 import/indexing is
+  NOT TESTED.
+
+The only source change in this increment removes the 80-character elision from
+mapping review values and gives null values an explicit NOT MAPPABLE label.
+This does not complete LF-0, LF-1, MAP-1, MAP-2, or QUAL-1 acceptance.

@@ -53,6 +53,18 @@ describe('normalization mapping review UI',()=>{
     expect(screen.getByLabelText('Final event preview')).toHaveTextContent('Output values present: 1 / 1');
   });
 
+  it('shows complete long UTF-8 values and labels retained nulls without truncation',()=>{
+    const longValue='診断ログ-'.repeat(20)+'終端';
+    const raw=JSON.stringify({message:longValue,nullable:null});
+    const draft:ParserDraft={...createDraft(),format:'json',mappings:[]};
+    const suite=preview(raw,draft);
+    render(<NormalizationMappingReview draft={draft} setDraft={vi.fn()} suite={suite}
+      selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>);
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent(longValue);
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NULL · extracted value; not mappable as a field');
+    expect(screen.getByLabelText('Source fields')).not.toHaveTextContent('…');
+  });
+
   it('bulk-applies only high-confidence official Stellar mappings and previews results',()=>{
     render(<Harness/>);
     expect(screen.getByLabelText('Field mapping summary')).toHaveTextContent('Matched to Stellar0');
