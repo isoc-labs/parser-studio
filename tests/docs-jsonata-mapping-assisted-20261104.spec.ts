@@ -28,7 +28,7 @@ test('published Juniper logs → ChatGPT JSONata mapping review → DRAFT Ruby a
   const position=await rows.evaluateAll((nodes,src)=>nodes.findIndex(node=>
     (node.querySelector('input[aria-label^="Source field "]') as HTMLInputElement|null)?.value===src),source);
   expect(position).toBeGreaterThan(-1);
-  const target=rows.nth(position).locator('input[aria-label^="Stellar field "]');
+  const target=map.locator('article.normalization-map-row[data-source-path="'+source+'"] input[aria-label^="Stellar field "]');
   await expect(target).toHaveValue('srcip');
   await target.fill('temporary_vendor_source_ip');
   const assistant=map.getByLabel('ChatGPT JSONata field mapping');
