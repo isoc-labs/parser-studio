@@ -32,6 +32,21 @@ function Harness(){
 }
 
 describe('normalization mapping review UI',()=>{
+  it('shows exact reviewed residual bytes and offers the existing Review Fields repair path',()=>{
+    const raw='{"ok":true} tail';
+    const suite=preview(raw,{...createDraft(),format:'json'});
+    const start=new TextEncoder().encode('{"ok":true} ').length;
+    const onReviewResiduals=vi.fn();
+    render(<NormalizationMappingReview draft={{...createDraft(),format:'json'}} setDraft={vi.fn()} suite={suite}
+      multipassResiduals={[[{startByte:start,endByte:new TextEncoder().encode(raw).length}]]}
+      multipassRawEvents={[raw]}
+      onReviewResiduals={onReviewResiduals} selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>);
+    const evidence=screen.getByLabelText('Unparsed source evidence');
+    expect(evidence).toHaveTextContent(`Bytes ${start}–${new TextEncoder().encode(raw).length}`);
+    expect(evidence).toHaveTextContent('tail');
+    fireEvent.click(screen.getByRole('button',{name:'Review Fields and repair unparsed text'}));
+    expect(onReviewResiduals).toHaveBeenCalledOnce();
+  });
   it('shows safe source paths with leaf labels, retains selected vendor fields, and keeps arrays not mappable',()=>{
     const raw='{"vendor":{"source-port":443},"evidence":["ioc-1","ioc-2"],"empty":null}';
     function SourceTreeHarness(){
@@ -91,6 +106,20 @@ describe('normalization mapping review UI',()=>{
     render(<EditedMappingHarness/>);
     fireEvent.click(screen.getByRole('button',{name:/Apply \d+ recommended matches/}));
     expect(screen.getByLabelText('edited target')).toHaveTextContent('manual_source_ip');
+  });
+  it('does not let an individually applied official suggestion overwrite an approved mapping',()=>{
+    function ApprovedHarness(){
+      const base=initialDraft();
+      const [draft,setDraft]=useState<ParserDraft>({...base,mappings:base.mappings.map(mapping=>
+        mapping.source==='src_ip'?{...mapping,target:'approved_destination',authoring:{version:1,origin:'APPROVED'}}:mapping)});
+      const suite=preview(sample,draft);
+      return <><NormalizationMappingReview draft={draft} setDraft={setDraft} suite={suite}
+        selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>
+        <output aria-label="protected mapping target">{draft.mappings.find(mapping=>mapping.source==='src_ip')?.target}</output></>;
+    }
+    render(<ApprovedHarness/>);
+    fireEvent.click(screen.getByRole('button',{name:'Apply official mapping src_ip'}));
+    expect(screen.getByLabelText('protected mapping target')).toHaveTextContent('approved_destination');
   });
 
   it('keeps a non-dictionary target as a vendor field and still lets the user search the official catalog',()=>{

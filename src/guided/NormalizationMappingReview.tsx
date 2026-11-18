@@ -12,6 +12,7 @@ import {HelpTip,StageGuide} from './BeginnerHelp';
 import JsonataMappingAssistant from './JsonataMappingAssistant';
 import {reconcileGeneratedMappings} from './generatedMappingReconciliation';
 import {createCanonicalMappingPlan} from './canonicalMappingPlan';
+import {sourceTextForByteRange} from './sourceByteSelection';
 import {
   findStellarMetadataField,searchStellarMetadataCatalog,STELLAR_METADATA_CATALOG,
   STELLAR_METADATA_CATALOG_PROVENANCE,
@@ -26,6 +27,9 @@ interface Props {
   pending:boolean;
   onBack:()=>void;
   onContinue:()=>void;
+  multipassResiduals?:Array<Array<{startByte:number;endByte:number}>>;
+  multipassRawEvents?:string[];
+  onReviewResiduals?:()=>void;
 }
 
 const TYPES:MappingRule['type'][]=['string','integer','number','boolean','ip','port','timestamp'];
@@ -75,7 +79,7 @@ const FINDING_LABEL:Record<NormalizationFindingCode,string>={
 const VENDOR_LIST_COLLAPSE_AT=12;
 
 export default function NormalizationMappingReview({
-  draft,setDraft,suite,selected,setSelected,pending,onBack,onContinue,
+  draft,setDraft,suite,selected,setSelected,pending,onBack,onContinue,multipassResiduals,multipassRawEvents,onReviewResiduals,
 }:Props){
   const [vendorListOpen,setVendorListOpen]=useState<boolean|null>(null);
   const [search,setSearch]=useState('');
@@ -99,6 +103,10 @@ export default function NormalizationMappingReview({
   const mappingReview=useMemo(()=>reviewNormalizationMappings(suite,draft.mappings,groups),[suite,draft.mappings,groups]);
   const findings=mappingReview.findings;
   const chosen=suite?.events[selected]??suite?.events[0];
+  const reviewEventIndex=chosen?multipassRawEvents?.findIndex(raw=>raw===chosen.raw)??-1:-1;
+  const exactResiduals=(reviewEventIndex>=0&&multipassResiduals?.[reviewEventIndex]&&multipassRawEvents?.[reviewEventIndex]!==undefined)
+    ?multipassResiduals[reviewEventIndex]!.map(span=>({span,text:sourceTextForByteRange(multipassRawEvents[reviewEventIndex]!,span.startByte,span.endByte)})).filter(item=>item.text!==null)
+    :null;
   const sourceDisplay=(source:string)=>draft.format==='generic_structural'?'parserstudio_source.'+source:source;
   const sourceFields=useMemo(()=>{
     const result=new Set<string>();
@@ -156,6 +164,7 @@ export default function NormalizationMappingReview({
             groups:{...options.groups,[id]:candidate.group}}};
       }
       const existing=old.mappings.find(mapping=>mapping.source===candidate.source);
+      if(existing&&existing.authoring?.origin!=='AUTO')return old;
       const id=existing?.id??candidate.replacesMappingId??
         'stellar-'+candidate.source.replace(/[^A-Za-z0-9_-]/g,'_')+'-'+String(old.mappings.length+1);
       const next:MappingRule={id,source:candidate.source,target:candidate.target,type:candidate.type,
@@ -335,6 +344,16 @@ export default function NormalizationMappingReview({
       <div><strong>Mapped output values present</strong><span>{outputPresent} / {outputPairs.length} applicable source values in this preview</span></div>
       <p>Raw retention, extraction completeness, and mapped output are separate checks. A retained original line does not count as extracted or mapped data.</p>
     </section>
+    {chosen&&<section className="normalization-runtime-note" aria-label="Unparsed source evidence" role={exactResiduals?.length?'alert':'note'}>
+      <strong>Unparsed source text</strong>
+      {exactResiduals===null?<span>Exact Multi-Pass residual evidence is unavailable for this event. Status: UNKNOWN / UNVERIFIED. Raw retention does not prove structural parsing. Browser output is a preview; native output remains unverified.</span>
+       :exactResiduals.length===0?<span>Multi-Pass review reports no residual byte spans for this event. Browser output is a preview; native output remains unverified.</span>
+       :<><span>{exactResiduals.length} unresolved byte range(s) in event {chosen.id}:</span>
+         {exactResiduals.map(({span,text},index)=><div key={index}><code>Bytes {span.startByte}–{span.endByte}</code> <code>{JSON.stringify(text)}</code></div>)}
+         {onReviewResiduals&&<button type="button" onClick={onReviewResiduals}>Review Fields and repair unparsed text</button>}
+         <span>Raw retention does not clear extraction issues. Browser output is a preview; native output remains unverified.</span>
+       </>}
+    </section>}
 
     {draft.mappings.some(mapping=>mapping.when)&&<div className="normalization-runtime-note"
       aria-label="Protocol-aware mapping explanation" role="note">

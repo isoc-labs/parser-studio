@@ -65,6 +65,39 @@ test('novice reviews original/extracted/normalized samples, keeps source, and se
  await expect(page.getByLabel('Auto Parser raw logs')).toHaveValue(input);
  expect(generatedPosts).toBe(0);
 });
+test('partial source shows exact Multi-Pass residual in Map Fields and links back to repair',async({page})=>{
+ test.skip(process.env.PARSER_STUDIO_TEST_MULTIPASS!=='1','Requires the isolated in-repository Multi-Pass service.');
+ const raw='{"action":"allow","src_ip":"198.51.100.10"}\nopaque tail 東京';
+ await page.goto('/');
+ await page.getByLabel('Auto Parser raw logs').fill(raw);
+ await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
+ const review=page.getByRole('button',{name:'Review Fields',exact:true});
+ await expect(review).toBeEnabled({timeout:20000});await review.click();
+ const fields=page.getByLabel('Review Fields stage');
+ await expect(fields).toBeVisible();
+ const mapButton=fields.getByRole('button',{name:'Map Fields',exact:true});
+ if(await mapButton.isEnabled()){
+  await mapButton.click();
+  const map=page.getByLabel('Map Fields stage');
+  await expect(map.getByLabel('Unparsed source evidence')).toContainText('UNKNOWN / UNVERIFIED');
+  await expect(map.getByLabel('Unparsed source evidence')).toContainText('opaque tail 東京');
+  await map.getByRole('button',{name:'Review Fields and repair unparsed text'}).click();
+  await expect(page.getByLabel('Review Fields stage')).toBeVisible();
+ }else{
+  await expect(fields).toContainText(/unparsed|needs review|not yet understood/i);
+ }
+});
+test('FULL JSON extraction still permits an explicit safe manual vendor mapping',async({page})=>{
+ await begin(page);
+ await page.getByLabel('Review Fields stage').getByRole('button',{name:'Map Fields',exact:true}).click();
+ const map=page.getByLabel('Map Fields stage');
+ await map.getByLabel('Search source fields').fill('dst_port');
+ await map.getByRole('button',{name:'dst_port',exact:true}).click();
+ await map.getByRole('button',{name:'Keep as vendor field'}).click();
+ await expect(map.getByLabel('Final event preview')).toContainText('Output values present:');
+ await expect(map.getByLabel('Final event preview')).toContainText('dst_port');
+ await expect(map.getByLabel('Unparsed source evidence')).toContainText(/no residual byte spans|UNKNOWN \/ UNVERIFIED/);
+});
 test('mixed families and unknown logs are not dropped or transmitted to validation',async({page})=>{
  const generated:string[]=[];
  page.on('request',req=>{
