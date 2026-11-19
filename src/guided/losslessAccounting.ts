@@ -51,6 +51,8 @@ export async function accountLosslessSource(raw:string,inputs:AccountingEventInp
  const events:AccountingEvent[]=await Promise.all(inputs.slice(0,400).map(async({event,residuals})=>{
   const structuralLeafPaths:string[]=[];leaves(event.fields,'',structuralLeafPaths);
   const output=normalizedPaths(event,draft);
+  const byteLength=new TextEncoder().encode(event.raw).byteLength;
+  const validResiduals=residuals!==undefined&&residuals.every(span=>Number.isInteger(span.startByte)&&Number.isInteger(span.endByte)&&span.startByte>=0&&span.endByte>span.startByte&&span.endByte<=byteLength);
   const evidence=residuals===undefined?null:residuals.map(span=>({...span}));
   const sourceBytes=new TextEncoder().encode(event.raw).byteLength;
   const unsupported=nonMappable(event.fields);
@@ -58,7 +60,7 @@ export async function accountLosslessSource(raw:string,inputs:AccountingEventInp
    structuralLeafPaths:structuralLeafPaths.slice(0,2048),structuralLeafCount:structuralLeafPaths.length,
    residuals:evidence,normalizedPaths:output.slice(0,2048),normalizedPathCount:output.length,
    notMappablePaths:unsupported.paths,notMappablePathCount:unsupported.count,pathListTruncated:unsupported.truncated||
-    structuralLeafPaths.length>2048||output.length>2048,
+    structuralLeafPaths.length>2048||output.length>2048||!validResiduals,
    unaddressableValueCount:countUnaddressableSourceValues(event.fields),
    outputEvidence:event.normalized?'PRESENT_BROWSER_PREVIEW':'UNKNOWN'};
  }));
@@ -67,8 +69,15 @@ export async function accountLosslessSource(raw:string,inputs:AccountingEventInp
  const normalizedPathCount=events.reduce((sum,item)=>sum+item.normalizedPathCount,0);
  const inconsistentFull=inputs.some(item=>status(item.event)==='FULL'&&
   (leavesCount(item.event.fields)===0||item.residuals===undefined||item.residuals.length>0));
- const incomplete=inputs.length>events.length||inconsistentFull||inputs.some(item=>item.residuals===undefined||item.event.parseStatus===undefined||!item.event.normalized);
- const unaccountedEventIds=inputs.filter((item,index)=>index>=events.length||item.residuals===undefined||
+ let cursor=0;
+ const sourceLines=raw.split(/\r?\n/).filter(line=>line.length>0);
+ const sourceMismatch=inputs.length>400||sourceLines.length!==inputs.length||inputs.some(({event},index)=>{
+  const at=event.raw?raw.indexOf(event.raw,cursor):-1;
+  if(at<cursor)return true;
+  cursor=at+event.raw.length;return sourceLines[index]!==event.raw;
+ })||inputs.reduce((sum,{event})=>sum+new TextEncoder().encode(event.raw).length,0)>new TextEncoder().encode(raw).length;
+ const incomplete=sourceMismatch||inputs.length>events.length||inconsistentFull||events.some(event=>event.pathListTruncated)||inputs.some(item=>item.residuals===undefined||item.event.parseStatus===undefined||!item.event.normalized);
+ const unaccountedEventIds=inputs.filter((item,index)=>sourceMismatch||index>=events.length||item.residuals===undefined||
   item.event.parseStatus===undefined||!item.event.normalized||
   (status(item.event)==='FULL'&&(leavesCount(item.event.fields)===0||item.residuals.length>0))).map(item=>item.event.id);
  return {sourceBytes:new TextEncoder().encode(raw).byteLength,sourceSha256:await sha256Utf8Hex(raw),eventCount:inputs.length,

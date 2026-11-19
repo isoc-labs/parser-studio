@@ -61,4 +61,21 @@ describe('independent lossless source accounting',()=>{
   expect(result.events[0]!.notMappablePaths.some(path=>path.includes('[null]'))).toBe(true);
   expect(result.events[0]!.notMappablePaths.some(path=>path.includes('[array]'))).toBe(true);
  });
+ it('fails closed when caller events do not independently reconcile to source bytes',async()=>{
+  const raw='{"a":1}\n{"b":2}';const draft={...createDraft(),format:'json' as const};
+  const event=preview('{"a":1}',draft).events[0]!;
+  const result=await accountLosslessSource(raw,[{event:{...event,parseStatus:'FULL'},residuals:[]}],draft);
+  expect(result.proof).toBe('UNKNOWN');
+  expect(result.unaccountedEventIds).toContain(event.id);
+ });
+ it('fails closed on invalid UTF-8 residual ranges and truncated structural accounting',async()=>{
+  const draft={...createDraft(),format:'json' as const};
+  const raw=JSON.stringify(Object.fromEntries(Array.from({length:2100},(_,i)=>['f'+i,i])));
+  const event=preview(raw,draft).events[0]!;
+  const result=await accountLosslessSource(raw,[{event:{...event,parseStatus:'FULL'},residuals:[
+   {startByte:0,endByte:new TextEncoder().encode(raw).length+1},
+  ]}],draft);
+  expect(result.proof).toBe('UNKNOWN');
+  expect(result.events[0]?.pathListTruncated).toBe(true);
+ });
 });

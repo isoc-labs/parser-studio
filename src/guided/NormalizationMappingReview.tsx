@@ -107,7 +107,10 @@ export default function NormalizationMappingReview({
   const exactResiduals=(reviewEventIndex>=0&&multipassResiduals?.[reviewEventIndex]&&multipassRawEvents?.[reviewEventIndex]!==undefined)
     ?multipassResiduals[reviewEventIndex]!.map(span=>({span,text:sourceTextForByteRange(multipassRawEvents[reviewEventIndex]!,span.startByte,span.endByte)})).filter(item=>item.text!==null)
     :null;
-  const sourceDisplay=(source:string)=>draft.format==='generic_structural'?'parserstudio_source.'+source:source;
+  // Do not add an authoring-only prefix to the original path shown to users.
+  // Keep the complete path here; the source tree presents its leaf label.
+  const sourceDisplay=(source:string)=>source.startsWith('parserstudio_source.')
+    ?source.slice('parserstudio_source.'.length):source;
   const sourceFields=useMemo(()=>{
     const result=new Set<string>();
     for(const event of suite?.events??[])for(const path of listSafeLeafPaths(event.fields))result.add(path);
@@ -375,7 +378,9 @@ export default function NormalizationMappingReview({
           })}/>
         {' '}Copy the full original line into every record (parserstudio_source ... source_raw)
       </label>
-      <span>On (default): each output record also carries the whole original log line, so the output is about twice the size of the log. Turn it off to keep only the parsed fields. A field you mapped from source_raw still works, and your original log is not changed.</span>
+      {draft.omitSourceRaw===true
+        ?<strong role="alert">The original line will not be emitted in parser output. Only parsed and mapped fields remain; review this deliberate omission before continuing. Your source sample remains unchanged.</strong>
+        :<span>On (default): each output record also carries the whole original log line, so the output is about twice the size of the log. Turn it off to keep only the parsed fields. A field you mapped from source_raw still works, and your original log is not changed.</span>}
     </div>}
 
     <section className="normalization-suggestions" aria-label="Recommended field matches">

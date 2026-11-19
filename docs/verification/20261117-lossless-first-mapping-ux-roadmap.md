@@ -61,6 +61,8 @@ Acceptance: mapping-origin precedence and negative tests for injection, approval
 
 ## Current code and risk pointers
 
+**2026-11-19 isolated increment:** [lossless accounting and exact local evidence](20261119-codex-lossless-accounting-increment.md). This closes the identified source/event mismatch and bounded-evidence false-COMPLETE cases locally; broad adversarial accounting, browser, native Ruby/Fluentd, and real DP gates remain open as documented there.
+
 - Existing mapping UI: src/guided/NormalizationMappingReview.tsx (suggestions, Stellar catalog lookup, manual edit); src/guided/JsonataMappingAssistant.tsx (manual AI copy/paste + local review). Reuse; don't write a greenfield mapper.
 - Existing mapping UI has "Left out of output", "Unmappable source values", omitSourceRaw and fieldPaths bounds (8 levels, normally 100 paths). These are NOT necessarily extractor loss, but they MUST be visibly distinguished and accounted.
 - Existing src/grammar/genericParseStatus.ts has FULL/PARTIAL/UNKNOWN and src/grammar/lossGuard.ts. Do not bypass refusal or count source_raw as extracted leaf.
