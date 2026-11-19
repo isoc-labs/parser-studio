@@ -40,8 +40,10 @@ describe('LF-0 independently scored bounded acceptance matrix',()=>{
    const extracted=extractFields(sample.raw,sample.format,draft).fields;
    const sourceFields=sample.id==='duplicate-source-records'?suite.events.map(event=>event.fields):[extracted];
    for(const [path,value] of Object.entries(sample.expected??{})){
-    expect(sourceFields.every(fields=>lookupFieldValue(fields,path).found&&
-     Object.is(lookupFieldValue(fields,path).found?lookupFieldValue(fields,path).value:undefined,value)),`${sample.id}:${path}`)
+    expect(sourceFields.every(fields=>{
+     const actual=lookupFieldValue(fields,path);
+     return actual.found&&Object.is(actual.value,value);
+    }),`${sample.id}:${path}`)
      .toBe(true);
     sourceChecks++;
    }
