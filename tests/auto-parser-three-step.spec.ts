@@ -54,6 +54,12 @@ test('novice reviews original/extracted/normalized samples, keeps source, and se
  const map=page.getByLabel('Map Fields stage');
  await expect(map).toBeVisible();
  await expect(map).toContainText('Stellar field dictionary 7.0.xs');
+ const accounting=map.getByLabel('Lossless source accounting');
+ await expect(accounting).toBeVisible();
+ await expect(accounting).toContainText('Total source: '+Buffer.byteLength(input,'utf8')+' UTF-8 bytes');
+ await expect(accounting).toContainText(sha(input).slice(0,12));
+ await expect(accounting).toContainText('Events accounted: 2 / 2');
+ await expect(accounting).toContainText('Browser preview only · NOT verified with native Ruby / DP.');
  await expect(map.getByLabel('Field mapping summary')).toContainText('Matched to Stellar3');
  await expect(map.getByLabel('Recommended field matches')).toContainText('Apply 0 recommended matches');
  await map.getByRole('button',{name:'Create Parser'}).click();
