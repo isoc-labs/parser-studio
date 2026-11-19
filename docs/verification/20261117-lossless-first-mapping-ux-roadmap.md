@@ -15,6 +15,18 @@ Do not push/merge/deploy, do not touch public preview, dev-atlas, original repo 
 5. Unmapped values are never silently discarded. Their original field names are shown to the user (leaf name where unique; full path retained internally to distinguish collisions), and their output disposition is visible. No artificial vendor or project prefixes in displayed leaf names. For unsafe/unaddressable paths, show preserved raw source + explicit mapping limitation. Explicit user opt-out for particular output field is deliberate mapping decision, not parser evidence.
 6. Target Ruby 2.4.9, native Fluentd and real Stellar Cyber 7.0 import/indexing are distinct verification levels. Never claim release PASS from browser-only evidence.
 
+## 2026-11-19 final isolated local acceptance (fixed-stop)
+
+[Final host acceptance and external release gates](20261119-final-local-acceptance.md):
+local source candidate `1db18cdbffc66c5990188317cb5cdd87c132b64f`
+Vitest 2076/2076, Python 191/191 (same product code), TS semantic oracle 6288/6288
+(same product code), typecheck and frontend/backend builds PASS,
+Chromium novice/manual/AI **9/9** and same-head actual backend DRAFT authoring **2/2** PASS.
+The local development phase is **COMPLETE**. LF-0 universal proof,
+native Ruby/Fluentd, native-dependent backend suite, real captured vendor source
+and managed Stellar Cyber DP7 import/indexing remain **UNVERIFIED** external gates.
+No main merge, push or preview deployment.
+
 ## 2026-11-19 independent host qualification
 
 [Verified local candidate and unresolved native/DP gates](20261119-lossless-first-host-qualification-v2.md):
@@ -67,7 +79,7 @@ Acceptance: mapping-origin precedence and negative tests for injection, approval
 
 ### QUAL-1 — Exact candidate verification [P2, after above]
 - [ ] All existing Vitest/Python/backend tests, generated grammar TS->Ruby in sync, semantic oracle, negative corpus and targeted regressions.
-- [ ] Real Chromium novice E2E: Auto parsing -> automatic mapping -> optional ChatGPT-assisted mapping -> manual fallback -> preview -> DRAFT Ruby/.conf; mixed/multi-event, partial/unknown, unmapped and UTF-8 cases.
+- [x] Real Chromium novice E2E: Auto parsing -> automatic mapping -> optional ChatGPT-assisted mapping -> manual fallback -> preview -> DRAFT Ruby/.conf; mixed/multi-event, partial/unknown, unmapped and UTF-8 cases. Exact product-and-test HEAD `1db18cd`: **9/9 novice+AI and 2/2 same-HEAD live backend Chromium PASS**, evidence in [final local acceptance receipt](20261119-final-local-acceptance.md). This qualifies local browser and authoring behavior, not native Ruby execution or DP indexing.
 - [x] Focused local-output Chromium journey in `tests/novice-mapping-output-contract-20261119.spec.ts`: same source sample through automatic vendor retention, explicit human field rename, privacy-reviewed JSONata proposal blocked by existing manual mapping, refreshed preview, and a DRAFT Ruby/.conf pair. Independent host Chromium **1/1 PASS** on code HEAD `3d12aee` (log `20261119-output-host-chromium-r5.log`). Backend validate/generate payloads were deterministically mocked: this verifies the UI workflow and same-origin privacy, not native Ruby or DP7 output.
 - [ ] Native Ruby 2.4.9/Fluentd parity and no value loss from generated files if isolated runner available; otherwise report UNVERIFIED. Never conflate candidate DRAFT and real DP7 ingress/index proof.
 - [x] Independent review, clean local commits and evidence receipt. No push, merge, preview rollout, production or target import without owner authorization.
