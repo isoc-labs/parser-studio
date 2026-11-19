@@ -33,7 +33,8 @@ test('novice keeps one source event through suggestions, blocked manual AI propo
    {name:`customized_${project.slug}`,content:ruby,bytes:Buffer.byteLength(ruby),sha256:sha(ruby)}];
   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
    contract:'host-customized-pair.v0.1',files,manifest:{status:'DRAFT',contract:'host-customized-pair.v0.1',
-    schemaRevision:'0.1',fileHashes:Object.fromEntries(files.map(file=>[file.name,file.sha256])),
+    schemaRevision:'0.1',projectId:project.slug,projectRevision:1,
+    fileHashes:Object.fromEntries(files.map(file=>[file.name,file.sha256])),
     engineVerified:false,targetImportVerified:false,warnings:[]},
   })});
  });
