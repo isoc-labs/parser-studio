@@ -3,6 +3,7 @@ import {fireEvent,render,screen} from '@testing-library/react';
 import {describe,it,expect,vi} from 'vitest';
 import {preview} from '../parser';
 import {createDraft,type ParserDraft} from '../model';
+import {sha256Utf8Hex} from '../sha256';
 import {defaultGuidedOptions} from './contract';
 import NormalizationMappingReview from './NormalizationMappingReview';
 
@@ -32,6 +33,43 @@ function Harness(){
 }
 
 describe('normalization mapping review UI',()=>{
+  it('accounts exact original UTF-8 bytes and updates with selected event and mapping edits',async()=>{
+    const raw='{"message":"診断ログ","source-port":443,"destination-port":444,"nullable":null}\n{"message":"終端","source-port":8443,"destination-port":8444,"nullable":null}';
+    const draft:ParserDraft={...createDraft(),vendor:'DeviceX',format:'json',mappings:[
+      {id:'port',source:'source-port',target:'srcport',type:'integer'}]};
+    const suite=preview(raw,draft);
+    const bytes=new TextEncoder().encode(raw).length;
+    const residuals=suite.events.map(()=>[] as {startByte:number;endByte:number}[]);
+    const raws=suite.events.map(event=>event.raw);
+    const {rerender}=render(<NormalizationMappingReview draft={draft} setDraft={vi.fn()} suite={suite}
+      originalRawSample={raw} multipassSourceSample={raw} multipassResiduals={residuals} multipassRawEvents={raws}
+      selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>);
+    expect(await screen.findByText(new RegExp(`Total source: ${bytes} UTF-8 bytes`))).toBeInTheDocument();
+    expect(screen.getByLabelText('Lossless source accounting')).toHaveTextContent(await sha256Utf8Hex(raw));
+    expect(screen.getByLabelText('Lossless source accounting')).toHaveTextContent('Events accounted: 2 / 2');
+    expect(screen.getByLabelText('Lossless source accounting')).toHaveTextContent('Residual evidence: available for every event');
+    expect(screen.getByLabelText('Lossless source accounting')).toHaveTextContent('NOT verified with native Ruby / DP');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NULL · extracted value');
+    expect(screen.getByRole('button',{name:'source-port'})).toHaveAttribute('title','Full source path: source-port');
+    expect(screen.getByRole('button',{name:'destination-port'})).toHaveAttribute('title','Full source path: destination-port');
+    rerender(<NormalizationMappingReview draft={{...draft,mappings:[{...draft.mappings[0]!,target:'dstport'}]}} setDraft={vi.fn()} suite={suite}
+      originalRawSample={raw} multipassSourceSample={raw} multipassResiduals={residuals} multipassRawEvents={raws}
+      selected={1} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>);
+    expect(await screen.findByText(/Record accounting/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Field changes only')).toHaveTextContent('dstport');
+  });
+  it('keeps missing or index-mismatched Multi-Pass evidence UNKNOWN and shows read-only raw',async()=>{
+    const raw='{"x":1}\n{"x":1}';
+    const draft:ParserDraft={...createDraft(),format:'json'};
+    const suite=preview(raw,draft);
+    render(<NormalizationMappingReview draft={draft} setDraft={vi.fn()} suite={suite} originalRawSample={raw}
+      multipassSourceSample={raw} multipassResiduals={[[]]} multipassRawEvents={[suite.events[0]!.raw]}
+      selected={1} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>);
+    expect(await screen.findByText('Record accounting UNKNOWN')).toBeInTheDocument();
+    expect(await screen.findByText(/Missing or mismatched evidence/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Read-only raw sample')).toHaveValue(raw);
+    expect(screen.getByLabelText('Unparsed source evidence')).toHaveTextContent('UNKNOWN / UNVERIFIED');
+  });
   it('shows exact reviewed residual bytes and offers the existing Review Fields repair path',()=>{
     const raw='{"ok":true} tail';
     const suite=preview(raw,{...createDraft(),format:'json'});

@@ -61,7 +61,7 @@ Acceptance: mapping-origin precedence and negative tests for injection, approval
 
 ## Current code and risk pointers
 
-**2026-11-19 isolated increment:** [lossless accounting and exact local evidence](20261119-codex-lossless-accounting-increment.md). This closes the identified source/event mismatch and bounded-evidence false-COMPLETE cases locally; broad adversarial accounting, browser, native Ruby/Fluentd, and real DP gates remain open as documented there.
+**2026-11-19 isolated increment:** [lossless accounting, Auto Parser UI integration, and exact local evidence](20261119-codex-lossless-accounting-increment.md). The oracle now runs in active Auto Parser Map Fields with index-bound Multi-Pass evidence and bounded async React state; deterministic holdout/adversarial corpus and component regressions are recorded. The independent broad FULL/PARTIAL/UNKNOWN source-value proof, browser E2E, native Ruby/Fluentd, and real DP gates remain open as documented there.
 
 - Existing mapping UI: src/guided/NormalizationMappingReview.tsx (suggestions, Stellar catalog lookup, manual edit); src/guided/JsonataMappingAssistant.tsx (manual AI copy/paste + local review). Reuse; don't write a greenfield mapper.
 - Existing mapping UI has "Left out of output", "Unmappable source values", omitSourceRaw and fieldPaths bounds (8 levels, normally 100 paths). These are NOT necessarily extractor loss, but they MUST be visibly distinguished and accounted.

@@ -1209,6 +1209,8 @@ export default function AutoParser({
      </section>}
      {step===2&&<NormalizationMappingReview
        draft={draft} setDraft={setDraft} suite={suite}
+       originalRawSample={sample}
+       multipassSourceSample={multiPass?.raw}
        multipassResiduals={multiPass?.raw===sample?multiPass.events.map(event=>event.preview.residuals):undefined}
        multipassRawEvents={multiPass?.raw===sample?multiPass.events.map(event=>sourceTextForByteRange(multiPass.raw,event.startByte,event.endByte)??''):undefined}
        onReviewResiduals={()=>setStep(1)}

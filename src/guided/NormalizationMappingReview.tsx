@@ -13,6 +13,7 @@ import JsonataMappingAssistant from './JsonataMappingAssistant';
 import {reconcileGeneratedMappings} from './generatedMappingReconciliation';
 import {createCanonicalMappingPlan} from './canonicalMappingPlan';
 import {sourceTextForByteRange} from './sourceByteSelection';
+import {accountLosslessSource,type LosslessAccounting} from './losslessAccounting';
 import {
   findStellarMetadataField,searchStellarMetadataCatalog,STELLAR_METADATA_CATALOG,
   STELLAR_METADATA_CATALOG_PROVENANCE,
@@ -29,6 +30,8 @@ interface Props {
   onContinue:()=>void;
   multipassResiduals?:Array<Array<{startByte:number;endByte:number}>>;
   multipassRawEvents?:string[];
+  multipassSourceSample?:string;
+  originalRawSample?:string;
   onReviewResiduals?:()=>void;
 }
 
@@ -79,8 +82,23 @@ const FINDING_LABEL:Record<NormalizationFindingCode,string>={
 const VENDOR_LIST_COLLAPSE_AT=12;
 
 export default function NormalizationMappingReview({
-  draft,setDraft,suite,selected,setSelected,pending,onBack,onContinue,multipassResiduals,multipassRawEvents,onReviewResiduals,
+  draft,setDraft,suite,selected,setSelected,pending,onBack,onContinue,multipassResiduals,multipassRawEvents,multipassSourceSample,originalRawSample,onReviewResiduals,
 }:Props){
+  const [losslessAccounting,setLosslessAccounting]=useState<LosslessAccounting|null>(null);
+  useEffect(()=>{
+    let aborted=false;
+    setLosslessAccounting(null);
+    if(originalRawSample===undefined||!suite)return ()=>{aborted=true;};
+    const inputs=suite.events.map((event,index)=>{
+      const rawMatches=multipassSourceSample===originalRawSample&&event.raw===multipassRawEvents?.[index]&&
+        multipassRawEvents?.length===suite.events.length&&multipassResiduals?.length===suite.events.length;
+      return {event,residuals:rawMatches?multipassResiduals?.[index]:undefined};
+    });
+    void accountLosslessSource(originalRawSample,inputs,draft).then(result=>{
+      if(!aborted)setLosslessAccounting(result);
+    }).catch(()=>{if(!aborted)setLosslessAccounting(null);});
+    return ()=>{aborted=true;};
+  },[originalRawSample,suite,draft,multipassSourceSample,multipassRawEvents,multipassResiduals]);
   const [vendorListOpen,setVendorListOpen]=useState<boolean|null>(null);
   const [search,setSearch]=useState('');
   const [catalogQuery,setCatalogQuery]=useState('');
@@ -103,9 +121,10 @@ export default function NormalizationMappingReview({
   const mappingReview=useMemo(()=>reviewNormalizationMappings(suite,draft.mappings,groups),[suite,draft.mappings,groups]);
   const findings=mappingReview.findings;
   const chosen=suite?.events[selected]??suite?.events[0];
-  const reviewEventIndex=chosen?multipassRawEvents?.findIndex(raw=>raw===chosen.raw)??-1:-1;
-  const exactResiduals=(reviewEventIndex>=0&&multipassResiduals?.[reviewEventIndex]&&multipassRawEvents?.[reviewEventIndex]!==undefined)
-    ?multipassResiduals[reviewEventIndex]!.map(span=>({span,text:sourceTextForByteRange(multipassRawEvents[reviewEventIndex]!,span.startByte,span.endByte)})).filter(item=>item.text!==null)
+  const reviewEventIndex=chosen?suite?.events.indexOf(chosen)??-1:-1;
+  const reviewRaw=reviewEventIndex>=0?multipassRawEvents?.[reviewEventIndex]:undefined;
+  const exactResiduals=multipassSourceSample===originalRawSample&&reviewRaw===chosen?.raw&&multipassResiduals?.length===suite?.events.length&&multipassRawEvents?.length===suite?.events.length&&reviewEventIndex>=0&&multipassResiduals?.[reviewEventIndex]!==undefined
+    ?multipassResiduals[reviewEventIndex]!.map(span=>({span,text:sourceTextForByteRange(multipassRawEvents![reviewEventIndex]!,span.startByte,span.endByte)})).filter(item=>item.text!==null)
     :null;
   // Do not add an authoring-only prefix to the original path shown to users.
   // Keep the complete path here; the source tree presents its leaf label.
@@ -550,6 +569,22 @@ export default function NormalizationMappingReview({
       <div className="normalization-section-head"><div><h3>Final event</h3>
         <p>Preview the current normalized event and check values not represented by output mappings.</p></div></div>
       {chosen&&<>
+        {originalRawSample!==undefined&&<section className="final-event-accounting" aria-label="Lossless source accounting" aria-live="polite">
+          <strong>Record accounting {losslessAccounting?.proof==='COMPLETE'?'complete':'UNKNOWN'}</strong>
+          {!losslessAccounting?<span>Calculating local source evidence…</span>:<>
+            <span>Total source: {losslessAccounting.sourceBytes} UTF-8 bytes · SHA-256 <code title={losslessAccounting.sourceSha256}>{losslessAccounting.sourceSha256.slice(0,12)}…</code>
+              <span className="sr-only"> Full SHA-256: {losslessAccounting.sourceSha256}</span></span>
+            <span>Events accounted: {losslessAccounting.events.length} / {losslessAccounting.eventCount}</span>
+            <span>Structural status: FULL {losslessAccounting.structuralCounts.FULL} · PARTIAL {losslessAccounting.structuralCounts.PARTIAL} · UNKNOWN {losslessAccounting.structuralCounts.UNKNOWN} · ERROR {losslessAccounting.structuralCounts.ERROR}</span>
+            <span>Leaves: {losslessAccounting.events.reduce((sum,event)=>sum+event.structuralLeafCount,0)} structured · {losslessAccounting.normalizedPathCount} browser output</span>
+            <span>Residual evidence: {losslessAccounting.events.every(event=>event.residuals!==null)?'available for every event':'incomplete; UNKNOWN'}</span>
+            <span>Original raw copy output: {draft.format==='generic_structural'&&draft.omitSourceRaw!==true?'retained in generated preview':'not guaranteed by this output mode'}</span>
+            <span>Browser preview only · NOT verified with native Ruby / DP.</span>
+            {losslessAccounting.proof==='COMPLETE'&&<span>All source records reconciled; this does not mean the records were fully parsed.</span>}
+          </>}
+          {losslessAccounting?.proof==='UNKNOWN'&&<div role="alert"><strong>Accounting is UNKNOWN.</strong> Missing or mismatched evidence means this summary cannot verify every source value. Structural PARTIAL is a separate parser status.</div>}
+          {losslessAccounting?.proof==='UNKNOWN'&&<label>Read-only original raw sample<textarea aria-label="Read-only raw sample" readOnly value={originalRawSample}/></label>}
+        </section>}
         <div className="final-event-accounting">
           <span>Raw source retained: {typeof chosen.raw==='string'?'Yes':'No'}</span>
           <span>Structural status: {chosen.parseStatus??'UNKNOWN'}</span>
