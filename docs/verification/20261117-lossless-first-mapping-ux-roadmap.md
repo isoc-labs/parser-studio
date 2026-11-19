@@ -15,6 +15,14 @@ Do not push/merge/deploy, do not touch public preview, dev-atlas, original repo 
 5. Unmapped values are never silently discarded. Their original field names are shown to the user (leaf name where unique; full path retained internally to distinguish collisions), and their output disposition is visible. No artificial vendor or project prefixes in displayed leaf names. For unsafe/unaddressable paths, show preserved raw source + explicit mapping limitation. Explicit user opt-out for particular output field is deliberate mapping decision, not parser evidence.
 6. Target Ruby 2.4.9, native Fluentd and real Stellar Cyber 7.0 import/indexing are distinct verification levels. Never claim release PASS from browser-only evidence.
 
+## 2026-11-19 independent host qualification
+
+[Verified local candidate and unresolved native/DP gates](20261119-lossless-first-host-qualification-v2.md):
+Vitest 2,072/2,072, Python 191/191, semantic oracle 6,288/6,288,
+Chromium novice/AI 10/10, same-head DRAFT 1/1, and an additional
+live source-accounting Chromium 1/1 PASS. Native Ruby/Fluentd and real
+Stellar Cyber DP7 import/indexing remain **UNVERIFIED**.
+
 ## 2026-11-18 implementation and independent host validation
 
 [Verified local candidate and open gates](20261118-lossless-first-host-qualification.md).
@@ -42,7 +50,7 @@ Acceptance: positive/negative evidence, sample fingerprint, omission/collision t
 ### MAP-1 — DR Control-style in-place three-column mapping UI [P1, after LF-0/1]
 - [x] In existing Auto Parser "Map Fields" render "Source fields" (Tree/JSON, click to select, event tabs, original value + path + status), "Mapping rules" (source -> destination catalog search/selector, value type, origin, conflicts, user override), "Final event" (normalized preview, raw-vs-output diff, unmapped/omitted and residual warnings).
 - [x] Borrow interaction principles, NOT Control runtime dependencies or dropping semantics: frontend/src/components/streams/wizard/wizard-basic-mapping-panel.tsx, mapping-json-tree.tsx, wizard-mapping-output-aside.tsx.
-- [ ] Field leaf display: source-port remains source-port (internal syslog_sd.element_1.params.source-port), recommended srcport. Likewise destination-port->dstport, raw values/path preserved.
+- [x] Field leaf display: source-port remains source-port (internal syslog_sd.element_1.params.source-port), recommended srcport. Likewise destination-port->dstport, raw values/path preserved. Evidence: `NormalizationMappingReview.test.tsx`, `juniperSdNormalization20261104.test.ts`, `vendorFieldNames.test.ts`, verified local [host qualification v2](20261119-lossless-first-host-qualification-v2.md).
 - [x] Field-array/null/ambiguous-path choices are not phantom selectable: retain tree data and show NOT MAPPABLE / REVIEW guidance and safe recovery.
 Acceptance: novice Chromium path from raw vendor log to source path, manually selected Stellar 7.0 field, preview, DRAFT Ruby/.conf download, accessibility/keyboard; no new top-level mode.
 
