@@ -49,7 +49,11 @@ test('novice keeps one source event through suggestions, blocked manual AI propo
  await expect(map.getByRole('region',{name:'Source fields'})).toContainText('sample-source');
  await map.getByLabel('Search source fields').fill('client_hint');
  await map.getByRole('button',{name:'client_hint',exact:true}).click();
- await map.getByRole('button',{name:'Keep as vendor field'}).click();
+ const mapped=map.locator('[data-source-path="client_hint"]');
+ await expect(mapped).toBeVisible();
+ await expect(mapped.getByRole('combobox',{name:/Stellar field/})).toHaveValue('client_hint');
+ await mapped.getByRole('combobox',{name:/Stellar field/}).fill('client_hint_reviewed');
+ await expect(map.getByLabel('Final event preview')).toContainText('client_hint_reviewed');
  await expect(map.getByLabel('Final event preview')).toContainText('sample-source');
  await expect(map.getByRole('region',{name:'Source fields'})).toContainText('EMITTED IN BROWSER PREVIEW');
  await map.getByRole('button',{name:'Improve mappings with ChatGPT JSONata'}).click();
