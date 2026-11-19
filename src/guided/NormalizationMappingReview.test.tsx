@@ -33,6 +33,56 @@ function Harness(){
 }
 
 describe('normalization mapping review UI',()=>{
+  it('reports a rule with a missing normalized target as not emitted',()=>{
+    const raw='{"src_ip":"192.0.2.10","items":["x"],"empty":null}';
+    const draft:ParserDraft={...createDraft(),format:'json',mappings:[
+      {id:'ip',source:'src_ip',target:'srcip',type:'ip'}],
+      guided:{...defaultGuidedOptions(),groups:{ip:'top_fields'}}};
+    const suite=preview(raw,draft);
+    const normalized={...suite.events[0]!.normalized};delete normalized.srcip;
+    suite.events[0]={...suite.events[0]!,normalized};
+    render(<NormalizationMappingReview draft={draft} setDraft={vi.fn()} suite={suite}
+      selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>);
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NOT EMITTED · source value present');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NOT MAPPABLE · arrays need a supported native selector');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NOT MAPPABLE · null source value');
+    expect(screen.getByLabelText('Final event preview')).toHaveTextContent('Output values present: 0 / 1');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('["x"]');
+  });
+
+  it('shows no rule for an unmapped source and keeps its original sample visible',()=>{
+    const raw='{"unmapped":"retained","name":"sample"}';
+    const draft:ParserDraft={...createDraft(),format:'json',mappings:[]};
+    const suite=preview(raw,draft);
+    render(<NormalizationMappingReview draft={draft} setDraft={vi.fn()} suite={suite}
+      selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>);
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NO MAPPING RULE · source value present');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('retained');
+  });
+
+  it('recomputes this event after a manual rename and explicit leave-out',()=>{
+    const raw='{"source-port":443,"note":"original-value"}';
+    function EditableHarness(){
+      const [draft,setDraft]=useState<ParserDraft>({...createDraft(),vendor:'DeviceX',format:'json',
+        mappings:[{id:'port',source:'source-port',target:'srcport',type:'integer',
+          authoring:{version:1,origin:'APPROVED'}}]});
+      const suite=preview(raw,draft);
+      return <><NormalizationMappingReview draft={draft} setDraft={setDraft} suite={suite}
+        originalRawSample={raw} selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>
+        <output aria-label="current normalized event">{JSON.stringify(suite.events[0]?.normalized)}</output></>;
+    }
+    render(<EditableHarness/>);
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('EMITTED IN BROWSER PREVIEW');
+    fireEvent.change(screen.getByLabelText('Stellar field 0'),{target:{value:'client_port'}});
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('EMITTED IN BROWSER PREVIEW');
+    expect(screen.getByLabelText('current normalized event')).toHaveTextContent('client_port');
+    fireEvent.click(screen.getByRole('button',{name:'Remove normalization 0'}));
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NO MAPPING RULE · source value present');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('443');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('original-value');
+    expect(screen.getByLabelText('Final event preview')).toHaveTextContent('Output values present: 0 / 0');
+  });
+
   it('accounts exact original UTF-8 bytes and updates with selected event and mapping edits',async()=>{
     const raw='{"message":"診断ログ","source-port":443,"destination-port":444,"nullable":null}\n{"message":"終端","source-port":8443,"destination-port":8444,"nullable":null}';
     const draft:ParserDraft={...createDraft(),vendor:'DeviceX',format:'json',mappings:[
@@ -49,7 +99,7 @@ describe('normalization mapping review UI',()=>{
     expect(screen.getByLabelText('Lossless source accounting')).toHaveTextContent('Events accounted: 2 / 2');
     expect(screen.getByLabelText('Lossless source accounting')).toHaveTextContent('Residual evidence: available for every event');
     expect(screen.getByLabelText('Lossless source accounting')).toHaveTextContent('NOT verified with native Ruby / DP');
-    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NULL · extracted value');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NOT MAPPABLE · null source value');
     expect(screen.getByRole('button',{name:'source-port'})).toHaveAttribute('title','Full source path: source-port');
     expect(screen.getByRole('button',{name:'destination-port'})).toHaveAttribute('title','Full source path: destination-port');
     rerender(<NormalizationMappingReview draft={{...draft,mappings:[{...draft.mappings[0]!,target:'dstport'}]}} setDraft={vi.fn()} suite={suite}
@@ -114,7 +164,7 @@ describe('normalization mapping review UI',()=>{
     render(<NormalizationMappingReview draft={draft} setDraft={vi.fn()} suite={suite}
       selected={0} setSelected={vi.fn()} pending={false} onBack={vi.fn()} onContinue={vi.fn()}/>);
     expect(screen.getByLabelText('Source fields')).toHaveTextContent(longValue);
-    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NULL · extracted value; not mappable as a field');
+    expect(screen.getByLabelText('Source fields')).toHaveTextContent('NOT MAPPABLE · null source value');
     expect(screen.getByLabelText('Source fields')).not.toHaveTextContent('…');
   });
 

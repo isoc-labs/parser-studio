@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import type {Dispatch,ReactNode,SetStateAction} from 'react';
 import {ArrowLeft,ArrowRight,CheckCircle2,CircleAlert,Search,ShieldCheck,WandSparkles,X} from 'lucide-react';
 import type {MappingRule,ParserDraft,SuiteResult} from '../model';
-import {listSafeLeafPaths,lookupFieldValue,countUnaddressableSourceValues,safeLocalFieldPath} from '../fieldPaths';
+import {listSafeLeafPaths,lookupFieldValue,countUnaddressableSourceValues,safeLocalFieldPath,mappingWhenApplies} from '../fieldPaths';
 import {defaultGuidedOptions} from './contract';
 import {normalizationCandidateScanStatus,
   type NormalizationCandidate} from './normalizationCandidates';
@@ -147,14 +147,18 @@ export default function NormalizationMappingReview({
   const statusCounts=(suite?.events??[]).reduce((counts,event)=>{
     const status=event.parseStatus??'UNKNOWN';counts[status]=(counts[status]??0)+1;return counts;
   },{} as Record<string,number>);
-  const outputPairs=(suite?.events??[]).flatMap(event=>draft.mappings.map(mapping=>{
+  const outputPairs=(suite?.events??[]).flatMap((event,eventIndex)=>draft.mappings.flatMap(mapping=>{
+    if(!mappingWhenApplies(event.fields,mapping.when))return [];
     const source=lookupFieldValue(event.fields,mapping.source,mapping.sourcePathKind);
+    if(!source.found)return [];
     const group=groups[mapping.id]??'vendor_fields';
     const root=group==='vendor_fields'?event.normalized[draft.vendor]:event.normalized;
     const output=root&&typeof root==='object'&&!Array.isArray(root)
       ?lookupFieldValue(root as Record<string,unknown>,mapping.target):{found:false as const};
-    return {sourceFound:source.found,outputFound:output.found};
-  })).filter(pair=>pair.sourceFound);
+    const blocked=findings.some(finding=>finding.source===mapping.source&&
+      (finding.event===null||finding.event===eventIndex+1)&&isBlockingNormalizationFinding(finding.code));
+    return [{sourceFound:true,outputFound:output.found&&!blocked}];
+  }));
   const outputPresent=outputPairs.filter(pair=>pair.outputFound).length;
   const officialCount=draft.mappings.filter(mapping=>catalogState(mapping,groups[mapping.id]??'vendor_fields').kind==='verified').length;
   const vendorCount=draft.mappings.filter(mapping=>(groups[mapping.id]??'vendor_fields')==='vendor_fields').length;
@@ -296,12 +300,26 @@ export default function NormalizationMappingReview({
     const needle=sourceSearch.trim().toLowerCase();
     const sample=displayValue(value);
     if(needle&&!path.toLowerCase().includes(needle)&&!sample.toLowerCase().includes(needle))return null;
+    const applicable=draft.mappings.filter(mapping=>mapping.source===path&&
+      mappingWhenApplies(chosen?.fields??{},mapping.when));
+    const disposition=value===null?'NOT MAPPABLE · null source value':!safe
+      ?'NOT MAPPABLE · retained in the original source'
+      :applicable.length===0?(mappedSources.has(path)?'NOT EMITTED · source value present; mapping condition does not apply':'NO MAPPING RULE · source value present')
+      :applicable.some(mapping=>{
+        const group=groups[mapping.id]??'vendor_fields';
+        const root=group==='vendor_fields'?chosen?.normalized[draft.vendor]:chosen?.normalized;
+        const target=root&&typeof root==='object'&&!Array.isArray(root)
+          ?lookupFieldValue(root as Record<string,unknown>,mapping.target):{found:false as const};
+        const blocked=findings.some(finding=>finding.source===mapping.source&&
+          (finding.event===null||finding.event===reviewEventIndex+1)&&isBlockingNormalizationFinding(finding.code));
+        return target.found&&!blocked;
+      })?'EMITTED IN BROWSER PREVIEW · native output UNVERIFIED':'NOT EMITTED · source value present';
     return <div className="source-tree-leaf" key={path}>
       {safe?<button type="button" title={'Full source path: '+path}
         aria-pressed={selectedSource===path} onClick={()=>{setSelectedSource(path);setSelectedSourceLeaf(label);}}>{label}</button>
         :<span>{label}</span>}
       <code>{sample}</code>
-      <small>{value===null?'NULL · extracted value; not mappable as a field':safe?(mappedSources.has(path)?'Mapping rule exists':'Safe source path'):'NOT MAPPABLE · retained in the original source'}</small>
+      <small>{disposition}</small>
     </div>;
   };
 
