@@ -86,5 +86,6 @@ test('novice keeps one source event through suggestions, blocked manual AI propo
  expect(postRequests.every(request=>[
   '/api/v1/multipass/preview','/api/v1/multipass/preview-batch',
   '/api/v1/parser-pairs/validate','/api/v1/parser-pairs/generate',
+  '/api/v1/parser-pairs/recipe/v0.2/validate','/api/v1/parser-pairs/recipe/v0.2/generate',
  ].includes(request.path))).toBe(true);
 });
