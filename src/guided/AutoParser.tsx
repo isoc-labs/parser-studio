@@ -25,7 +25,7 @@ import {parseJavaStacktrace} from '../javaStacktrace';
 import {defaultGuidedOptions} from './contract';
 import ParserIdentityCard from './ParserIdentityCard';
 import {reviewLogicalBoundaries,type LogicalBoundaryReport} from './logicalBoundaryReview';
-import {buildSourceReviewedGenericStructuralDraft} from './genericStructuralAutoDraft';
+import {buildSourceReviewedGenericStructuralDraft,buildSourceReviewedNamedPositionalDraft} from './genericStructuralAutoDraft';
 import {inspectZeekReview} from './zeekReview';
 
 
@@ -658,11 +658,11 @@ export default function AutoParser({
    // its strict grammar preserves the same complete set of original records.
    // A line that only reads as positional CSV without column names (no PRI in front of a Syslog-wrapped
    // firewall record, for example) is not "unsupported" for the first scan, but it has no field meaning
-   // either. The bounded compiler is asked for it too; it is adopted only when it reads every reviewed
-   // source record completely, otherwise the CSV column review stays as it was.
-   const automatic=!advanced&&draft.format==='auto'&&(report.unsupported>0||csvFound)&&
-     review.events.length>0
-     ?buildSourceReviewedGenericStructuralDraft(original,draft,review):null;
+   // either. The bounded compiler is asked for it too, but only a reading that names the columns from a
+   // verified record layout replaces the CSV column review (buildSourceReviewedNamedPositionalDraft).
+   const automatic=!advanced&&draft.format==='auto'&&review.events.length>0
+     ?(report.unsupported>0?buildSourceReviewedGenericStructuralDraft(original,draft,review)
+       :csvFound?buildSourceReviewedNamedPositionalDraft(original,draft,review):null):null;
    // Finish before a successful automatic draft adoption changes the identity.
    analysisRun.finish(run);
    setMultiPass(review);

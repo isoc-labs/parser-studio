@@ -1,7 +1,7 @@
 """RFC 5424 SD-ELEMENT length: the preview reads what the generated parser reads.
 
-RFC 5424 gives an SD-ELEMENT no maximum length. A Junos RT_FLOW_SESSION_CLOSE element with NAT and
-application fields is longer than 1 KiB. Synthetic values; no target verification implied.
+RFC 5424 gives structured data no maximum length. A Junos RT_FLOW_SESSION_CLOSE element with NAT and
+application fields is longer than 1 KiB; the bound of the preview is the 8192 bytes of the browser's Junos reader. Synthetic values; no target verification implied.
 """
 import sys
 import unittest
@@ -45,6 +45,13 @@ class Rfc5424SdElementLength(unittest.TestCase):
         self.assertEqual(result['status'],'SOURCE_PARSED')
         span=next(s for s in result['spans'] if s['path'].endswith('.user-note'))
         self.assertEqual(raw.encode('utf8')[span['startByte']:span['endByte']].decode('utf8'),'보안 이벤트 🌐'*20)
+
+    def test_structured_data_above_the_shared_bound_is_not_a_complete_parse(self):
+        raw=HEAD+element(flow(200))
+        self.assertGreater(len(element(flow(200)).encode('utf8')),8192)
+        result=preview(raw)
+        self.assertNotEqual(result['status'],'SOURCE_PARSED')
+        self.assertIn('RFC5424_SD_BYTE_LIMIT',result['issues'])
 
     def test_an_unterminated_long_element_is_still_not_a_complete_parse(self):
         raw=HEAD+element(flow(40))[:-1]

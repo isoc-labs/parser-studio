@@ -265,6 +265,21 @@ assert.deepEqual(target([{proto:'tcp'},{proto:'-'}],'proto'),['proto_name:HIGH']
 assert.deepEqual(target([{proto:6},{proto:'17'}],'proto'),['proto:HIGH'],'protocol numbers');
 assert.deepEqual(target([{proto:'tcp'},{proto:6}],'proto'),['proto:REVIEW'],'names and numbers mixed');
 assert.deepEqual(target([{proto:'https'}],'proto'),['proto:REVIEW'],'an application label is neither');
+// Independent audit of 2026-11-21 (F3-F6, F9): sparse approval needs TCP or UDP named by the record for a port,
+// a record-level source, a URL-shaped url, and never applies to an explicit port label or a Zeek id.*_p alias
+// without a transport protocol.
+const rv=(events,source)=>suggest(events).filter(r=>r.source===source).map(r=>r.confidence);
+assert.deepEqual(rv([{srcport:51234,ipproto:6},{srcport:8,ipproto:1},{note:'x'}],'srcport'),['REVIEW'],'ICMP family, ipproto');
+assert.deepEqual(rv([{srcport:8},{note:'x'}],'srcport'),['REVIEW'],'sparse port, no protocol');
+assert.deepEqual(rv([{srcport:51234,l4proto:'tcp'},{note:'x'}],'srcport'),['HIGH'],'sparse port, l4proto=tcp');
+assert.deepEqual(rv([{srcport:51234,proto:6,transport:51234},{note:'x'}],'srcport'),['HIGH'],'FortiGate transport is a translated port, not a protocol');
+assert.deepEqual(rv([{xlate:{srcip:'203.0.113.5'}},{note:'x'}],'xlate.srcip'),['REVIEW'],'nested endpoint');
+assert.deepEqual(rv([{generic:{kv:{srcip:'203.0.113.5'}}},{note:'x'}],'generic.kv.srcip'),['HIGH'],'reader container');
+assert.deepEqual(rv([{url:'category-db-2026.11'},{note:'x'}],'url'),['REVIEW'],'url that is not a URL');
+assert.deepEqual(rv([{url:'/index.html'},{url:'https://example.com/a'},{note:'x'}],'url'),['HIGH'],'URL-shaped url');
+assert.deepEqual(rv([{'source-port':'12','destination-port':'2048','protocol-id':'1'},{note:'x'}],'source-port'),['REVIEW'],'sparse explicit label');
+assert.deepEqual(rv([{'id.orig_h':'192.168.1.10','id.orig_p':8,'id.resp_h':'8.8.8.8','id.resp_p':0}],'id.orig_p'),['REVIEW'],'Zeek port alias without proto');
+assert.deepEqual(rv([{'id.orig_h':'192.168.1.10','id.orig_p':51234,'id.resp_h':'8.8.8.8','id.resp_p':443,proto:'tcp'}],'id.orig_p'),['HIGH'],'Zeek port alias beside tcp');
 const sparseBadPort=suggest([{srcport:70000},{note:'system record'}]);
 assert.equal(sparseBadPort.find(r=>r.source==='srcport')?.confidence,'REVIEW','sparse endpoint with an invalid value');
 const mismatch={id:'auto-1',source:'src_ip',target:'srcip',type:'string',

@@ -34,6 +34,25 @@ const ALIASES:Readonly<Record<string,string>>=semanticPolicy.normalizationAliase
 const WHITESPACE_FREE_TARGETS=new Set(['srcport','dstport','srcip','dstip']);
 /** Official fields a sparse source may be approved for when the source is named exactly like the field. */
 const SPARSE_SAFE_TARGETS=new Set(['srcip','dstip','srcport','dstport','proto','proto_name','url']);
+/** A sparse source is approved only where the name stands for the record itself: at the root, or in the
+ * container a reader puts the record's own pairs in (generic.kv.x, generic.fields.x, body.x, junos_sd.x).
+ * A nested object of the log (xlate.srcip, outer.srcip, nat.srcip) names another endpoint. */
+const RECORD_LEVEL_SOURCE=/^(?:(?:[a-z_]+\.)?(?:kv|fields)\.|body\.|junos_sd\.)?[^.]+$/u;
+const URL_SHAPED=/^(?:[a-z][a-z0-9+.-]*:\/\/\S+|\/\S*)$/iu;
+type Looked={found:true;value:unknown}|{found:false};
+function sparseSafeSource(source:string,target:string,values:readonly Looked[]):boolean{
+  if(!RECORD_LEVEL_SOURCE.test(source)||sourceHasExcludedPortSegment(source))return false;
+  // The other sparse-safe fields are checked by the type of the field; a URL has no such check.
+  return target!=='url'||values.every(result=>result.found&&typeof result.value==='string'&&
+    URL_SHAPED.test(result.value.trim()));
+}
+/** Field names under which a record states its IP protocol. `transport` is not one of them: FortiGate writes
+ * the translated source port under that name. */
+const PROTOCOL_EVIDENCE_NAMES=['protocol-id','protocol_id','protocol','proto','proto_name','protocol_name',
+  'ipproto','ip_proto','l4proto'];
+/** Aliases whose documented meaning depends on the protocol: Zeek writes the ICMP type and code in
+ * id.orig_p and id.resp_p. They are ports only beside a TCP or UDP protocol. */
+const PROTOCOL_DEPENDENT_PORT_ALIASES=new Set(['id.orig_p','id.resp_p']);
 /** The source key behind a Generic Structural `atoms.<key>_001` first piece. */
 function firstAtomKeyOf(source:string):string|undefined{
   return /^(?:.+\.)?atoms\.([A-Za-z0-9_]+)_001$/.exec(source)?.[1];
@@ -67,13 +86,24 @@ function protocolContextPrefixes(source:string):string[]{
 function unsupportedPortProtocolInEvent(
   fields:Record<string,unknown>,source:string,
 ):boolean{
-  const names=['protocol-id','protocol','proto','proto_name'];
+  const names=PROTOCOL_EVIDENCE_NAMES;
   const candidates=[...protocolContextPrefixes(source).flatMap(prefix=>names.map(name=>prefix+name)),...names];
   return candidates.some(name=>{
     const found=lookupFieldValue(fields,name);
     if(!found.found)return false;
     const value=String(found.value).trim().toLowerCase();
     return !(TRANSPORT_NUMERIC.has(value)||TRANSPORT_NAMES.has(value));
+  });
+}
+/** The record itself says that its ports are TCP or UDP ports. */
+function transportEvidenceInEvent(fields:Record<string,unknown>,source:string):boolean{
+  const names=PROTOCOL_EVIDENCE_NAMES;
+  const candidates=[...protocolContextPrefixes(source).flatMap(prefix=>names.map(name=>prefix+name)),...names];
+  return candidates.some(name=>{
+    const found=lookupFieldValue(fields,name);
+    if(!found.found)return false;
+    const value=String(found.value).trim().toLowerCase();
+    return TRANSPORT_NUMERIC.has(value)||TRANSPORT_NAMES.has(value);
   });
 }
 /** Shared, versioned source-field contract. A declared port label has higher
@@ -245,14 +275,24 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
   // It must also be present in every event: in a sample of several record families a name may belong to one
   // family only, so a sparse source stays a "check first" proposal.
   // The exception is a network endpoint or URL field (SPARSE_SAFE_TARGETS) whose source carries the official
-  // name itself, or a fully spelled port label: its value is checked by its form (address, port range,
-  // protocol), and the name leaves no other reading. Mixed samples (traffic, web filter and system records of
-  // one device) hold such a field in some events only; the mapping writes nothing for an event without it.
-  // Other official names (severity, type, icmp_type ...) differ between vendors and keep the full-coverage rule.
+  // name itself at the level of the record: the name leaves no other reading, and the value is checked by its
+  // form (address, port range with TCP or UDP named by the record, protocol, URL shape). Mixed samples
+  // (traffic, web filter and system records of one device) hold such a field in some events only; the mapping
+  // writes nothing for an event without it. Other official names (severity, type, icmp_type ...), aliases and
+  // explicit port labels keep the full-coverage rule.
   const informative=informativeValues.length;
-  const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&(leaf.toLowerCase()===target||explicitPort);
+  const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&leaf.toLowerCase()===target&&sparseSafeSource(source,target,informativeValues);
+  // Unknown protocol evidence never authorizes an official port. A port that only some record families carry,
+  // or an alias whose meaning depends on the protocol, needs the record itself to name TCP or UDP in every
+  // event that has the port: an ICMP record of another family may name its protocol differently, or not at all.
+  const needsTransportEvidence=(target==='srcport'||target==='dstport')&&
+    (values.length!==events.length||PROTOCOL_DEPENDENT_PORT_ALIASES.has(source.toLowerCase()));
+  const lacksTransportEvidence=needsTransportEvidence&&events.some(fields=>{
+    const value=lookupFieldValue(fields,source);
+    return value.found&&!ignored(value.value)&&!transportEvidenceInEvent(fields,source);
+  });
   const high=compatibleObserved===informative&&(values.length===events.length||namedAsTarget)&&
-    informative>0&&!nonTransportPort;
+    informative>0&&!nonTransportPort&&!lacksTransportEvidence;
   // Auto-generated provenance is explicit; field names and IDs cannot prove
   // that a user has not edited a persisted mapping.
   const replaceIsGenerated=current?.authoring?.version===1&&

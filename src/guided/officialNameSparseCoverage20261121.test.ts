@@ -117,3 +117,48 @@ describe('Junos structured data read with underscore names',()=>{
       .toMatchObject({source:'junos_sd.icmp_type',confidence:'HIGH'});
   });
 });
+
+// Found by the independent audit of 2026-11-21 (F3-F6, F9). Each of these was approved by the first version of
+// the sparse rule; none of them may be.
+describe('what the sparse rule must not approve',()=>{
+  const system={logdesc:'Admin login successful'};
+  const review=(target:string,...events:Record<string,unknown>[])=>{
+    const found=candidate(target,...events);
+    if(found)expect(found,target).toMatchObject({confidence:'REVIEW',safeForBulk:false});
+  };
+  it('a port of an ICMP record whose protocol field has another name, another container, or is missing',()=>{
+    const tcp=(name:string)=>({srcip:'10.0.0.1',dstip:'93.184.216.34',[name]:6,srcport:51234,dstport:443});
+    for(const name of ['ipproto','ip_proto','l4proto','protocol_name','protocol_id']){
+      const icmp={srcip:'10.0.0.1',dstip:'8.8.8.8',[name]:name==='protocol_name'?'icmp':1,srcport:8,dstport:0};
+      review('srcport',tcp(name),icmp,system);
+      review('dstport',tcp(name),icmp,system);
+    }
+    review('srcport',{srcport:8,dstport:0},system);
+    review('srcport',{flow:{srcport:8},net:{proto:'icmp'}},system);
+    // FortiGate writes the translated source port as transport=<port>: that field is not protocol evidence, and
+    // the ports of such a record are still approved through its proto.
+    expect(candidate('srcport',{srcport:51544,dstport:443,proto:6,transport:51544},system)).toMatchObject({confidence:'HIGH'});
+    // With TCP or UDP named by every record that has the port, the approval stands.
+    expect(candidate('srcport',tcp('ipproto'),{...tcp('ipproto'),ipproto:17},system)).toMatchObject({confidence:'HIGH'});
+  });
+  it('an explicit port label that only some events carry',()=>{
+    review('srcport',{'source-port':'12','destination-port':'2048','protocol-id':'1'},system);
+    review('srcport',{'source-port':'51234','destination-port':'443','protocol-id':'6'},system);
+  });
+  it('Zeek id.orig_p and id.resp_p without a TCP or UDP proto (weird.log: ICMP type and code)',()=>{
+    const weird={ts:1763719200.1,'id.orig_h':'192.168.1.10','id.orig_p':8,'id.resp_h':'8.8.8.8','id.resp_p':0,name:'bad_ICMP_checksum'};
+    review('srcport',weird,{...weird,'id.orig_p':51234,'id.resp_p':443,name:'data_before_established'});
+    review('dstport',weird,{...weird,'id.orig_p':51234,'id.resp_p':443,name:'data_before_established'});
+  });
+  it('a translated or outer endpoint inside a nested object',()=>{
+    for(const container of ['xlate','nat','outer','tunnel']){
+      const nested={client_addr:'10.0.0.1',[container]:{srcip:'203.0.113.5',srcport:40002,dstip:'93.184.216.34',dstport:443},proto:6};
+      for(const target of ['srcip','dstip','srcport','dstport'])review(target,nested,system);
+    }
+  });
+  it('a field called url whose value is not a URL',()=>{
+    review('url',{url:'http://example.com/a'},{url:'category-db-2026.11'},system);
+    for(const value of ['update-server-list','10','Malicious Websites'])review('url',{url:value},system);
+    expect(candidate('url',{url:'http://example.com/a'},{url:'/index.html'},system)).toMatchObject({confidence:'HIGH'});
+  });
+});

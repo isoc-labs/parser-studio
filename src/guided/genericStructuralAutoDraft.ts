@@ -170,3 +170,24 @@ export function buildSourceReviewedGenericStructuralDraft(
   }
   return candidate;
 }
+
+/** Readings that name the columns of a positional record from a verified record layout. */
+const NAMED_POSITIONAL_MODES:readonly string[]=['panos_traffic_csv'];
+
+/**
+ * A sample that the first scan reads as positional CSV without column names. The bounded compiler may replace
+ * the CSV column review only with a reading that names the columns from a verified record layout, for every
+ * event. Any other reading of such a line (a Syslog header taken from the first cells, key=value pairs taken
+ * from one cell) would move the cell boundaries the CSV reading already has, so it is not adopted.
+ */
+export function buildSourceReviewedNamedPositionalDraft(
+  source:string,draft:ParserDraft,review:GenericStructuralSourceReview,
+):ReturnType<typeof buildAutomaticGenericStructuralDraft>{
+  const candidate=buildSourceReviewedGenericStructuralDraft(source,draft,review);
+  if(!candidate)return null;
+  return candidate.suite.events.every(event=>{
+    const generic=event.fields.generic;
+    return !!generic&&typeof generic==='object'&&!Array.isArray(generic)&&
+      NAMED_POSITIONAL_MODES.includes(String((generic as Record<string,unknown>).mode));
+  })?candidate:null;
+}
