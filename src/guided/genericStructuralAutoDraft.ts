@@ -247,7 +247,10 @@ function mergesDelimitedCells(fields:Record<string,unknown>):boolean{
     for(const [key,value] of Object.entries(generic))if(/^prefix_\d+$/u.test(key))pieces.push(value);
     if(Array.isArray(generic.prefix_tokens))pieces.push(...generic.prefix_tokens);
   }
-  if(isRecord(fields.syslog))pieces.push(...Object.values(fields.syslog));
+  // The header fields of the Syslog envelope; a copy of original text the reader keeps beside them
+  // (structured_data_raw) is not a positional piece, and its quoted values may hold any character.
+  if(isRecord(fields.syslog))
+    for(const [key,value] of Object.entries(fields.syslog))if(!key.endsWith('_raw'))pieces.push(value);
   return pieces.some(piece=>typeof piece==='string'&&holdsCells(piece));
 }
 

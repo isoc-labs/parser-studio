@@ -60,6 +60,17 @@ describe('F-01: a reading that merges the cells of a delimited record is not ado
   });
 });
 
+describe('a delimiter inside a quoted value is not evidence of merged cells',()=>{
+  // E2E T9: the public Junos RT_FLOW sample was adopted before the rule and must stay adopted.
+  const SD='<14>1 2019-11-14T09:37:51.184+01:00 SRX-GW1 RT_FLOW - RT_FLOW_SESSION_CREATE [junos@2636.1.1.1.2.40 source-address="10.0.0.1" source-port="594" destination-address="67.43.156.13" destination-port="10400" application-category="Web,Media,Other" policy-name="vpn_trust;permit;all"]';
+  it('adopts an RFC 5424 record whose STRUCTURED-DATA values hold commas and semicolons',()=>{
+    const none=[false];
+    const adopted=buildSourceReviewedBoundedDraft(SD,createDraft(),parsedWitness(SD),none,none);
+    expect(adopted).not.toBeNull();
+    expect(adopted!.suite.events[0]!.parseStatus).toBe('FULL');
+  });
+});
+
 describe('F-08: a reading that keeps the cells and names them from the record is adopted',()=>{
   const QUOTED='Oct 15 00:14:28 bigip-waf01 ASM: unit_hostname="bigip-waf01",management_ip_address="10.1.1.10",request_status="blocked",violations="SQL-Injection,Cross Site Scripting",ip_client="203.0.113.211",route_domain="0",method="POST",protocol="HTTPS",dest_port="443",dest_ip="10.20.1.25",uri="/api/login?a=1,b=2"';
   const UNQUOTED='Oct 15 00:14:27 bigip-waf01 ASM: unit_hostname=bigip-waf01,management_ip_address=10.1.1.10,request_status=blocked,ip_client=203.0.113.210,route_domain=0,method=POST,protocol=HTTPS,dest_port=443,dest_ip=10.20.1.25,uri=/api/login';
