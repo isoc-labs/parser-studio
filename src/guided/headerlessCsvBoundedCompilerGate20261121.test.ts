@@ -63,12 +63,13 @@ describe('a headerless positional CSV sample and the bounded compiler (independe
   });
 
   // CI run 44888070774: a BIG-IP ASM line (comma-separated key="value" pairs behind a Syslog tag, no PRI) is
-  // none/csv with status BODY_MALFORMED for the first scan. It was not read as CSV, so the rule does not apply
-  // and the compiler reads it as before.
+  // none/csv with status BODY_MALFORMED for the first scan. It is a delimited record like the others (the flag
+  // does not ask for the status: independent audit 2026-11-21, F-01); it is adopted because the compiler's
+  // reading keeps its cells and takes their names from the record.
   const BIGIP='Oct 15 00:14:27 bigip-waf01 ASM: unit_hostname="bigip-waf01",management_ip_address="10.1.1.10",request_status="blocked",ip_client="203.0.113.210",route_domain="0",method="POST",protocol="HTTPS",date_time="2026-10-15T00:14:27+09:00",dest_port="443",dest_ip="10.20.1.25",uri="/api/login"';
   const flags=(source:string)=>headerlessCsvEvents(analyzeLogEnvelopes(source,'single-line').events);
-  it('flags only events the first scan read as CSV',()=>{
-    expect(flags(BIGIP)).toEqual([false]);
+  it('flags the events the first scan takes for a delimited record without an envelope',()=>{
+    expect(flags(BIGIP)).toEqual([true]);
     expect(flags(PAN)).toEqual([true]);
     for(const source of Object.values(MISREAD).slice(0,3))expect(flags(source).every(Boolean),source.slice(0,40)).toBe(true);
     expect(flags('<14>'+PAN)).toEqual([false]);

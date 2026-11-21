@@ -25,7 +25,7 @@ import {parseJavaStacktrace} from '../javaStacktrace';
 import {defaultGuidedOptions} from './contract';
 import ParserIdentityCard from './ParserIdentityCard';
 import {reviewLogicalBoundaries,type LogicalBoundaryReport} from './logicalBoundaryReview';
-import {buildSourceReviewedBoundedDraft,headerlessCsvEvents} from './genericStructuralAutoDraft';
+import {buildSourceReviewedBoundedDraft,headerlessCsvEvents,nativelyReadEvents} from './genericStructuralAutoDraft';
 import {inspectZeekReview} from './zeekReview';
 
 
@@ -659,11 +659,12 @@ export default function AutoParser({
    // A line that only reads as positional CSV without column names (no PRI in front of a Syslog-wrapped
    // firewall record, for example) is not "unsupported" for the first scan, but it has no field meaning
    // either. The bounded compiler is asked for it too. Whatever opened the route, an event the first scan
-   // read as headerless CSV is adopted only with a reading that names its columns from a verified record
-   // layout (buildSourceReviewedBoundedDraft); otherwise the CSV column review stays.
+   // takes for a delimited record is adopted only with a reading that keeps its cells and has names for them,
+   // and an event it read natively only with a reading that holds everything the native reading holds
+   // (buildSourceReviewedBoundedDraft); otherwise the CSV column review and the native readings stay.
    const headerlessCsv=headerlessCsvEvents(report.events);
    const automatic=!advanced&&draft.format==='auto'&&review.events.length>0&&(report.unsupported>0||csvFound)
-     ?buildSourceReviewedBoundedDraft(original,draft,review,headerlessCsv):null;
+     ?buildSourceReviewedBoundedDraft(original,draft,review,headerlessCsv,nativelyReadEvents(report.events)):null;
    // Finish before a successful automatic draft adoption changes the identity.
    analysisRun.finish(run);
    setMultiPass(review);
