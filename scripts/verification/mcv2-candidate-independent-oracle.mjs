@@ -296,15 +296,19 @@ assert.deepEqual(read('json',[inBody,other],'body.srcip'),['REVIEW'],'a JSON obj
 assert.deepEqual(read('kv',[inBody,other],'body.srcip'),['REVIEW'],'no container in a key=value reading');
 assert.deepEqual(read('syslog_rfc3164',[inKv,other],'generic.kv.srcip'),['REVIEW'],'generic container under a Syslog reading');
 assert.deepEqual(read('generic_structural',[{xlate:{fields:{srcip:'203.0.113.5'}}},other],'xlate.fields.srcip'),['REVIEW'],'not a reader container');
-// The requested host of an HTTP request record (Zeek http.log `host`) is not the official hostname.
-absent({method:'GET',host:'example.com',uri:'/index.html',status_code:200},'host');
-absent({request_method:'POST',host:'shop.example.com',user_agent:'curl/8.5.0'},'host');
-absent({Method:'GET',host:'example.com',URI:'/'},'host');
-absent({http:{method:'GET',host:'example.com',url:'/x'}},'http.host');
+// A host field carried only by events that describe an HTTP request (a value is a method, a request line or an
+// HTTP version) is not established as the official hostname: offered for review, never approved.
+review({method:'GET',host:'example.com',uri:'/index.html',status_code:200},'host','hostname');
+review({request_method:'POST',host:'shop.example.com',user_agent:'curl/8.5.0'},'host','hostname');
+review({Method:'GET',host:'example.com',URI:'/'},'host','hostname');
+review({http:{method:'GET',host:'example.com',url:'/x'}},'http.host','hostname');
+review({host:'shop.example.com',request:'GET /cart HTTP/1.1',status:200},'host','hostname');
+review({http:{hostname:'example.com',http_method:'GET',protocol:'HTTP/1.1'}},'http.hostname','hostname');
 high({host:'fw01',msg:'link up'},'host','hostname','string');
 high({host:'fw01',method:'https'},'host','hostname','string');
 high({host:'fw01',url:'/admin'},'host','hostname','string');
-high({host:'proxy01',request:{method:'GET',uri:'/'}},'host','hostname','string');
+review({host:'proxy01',request:{method:'GET',uri:'/'}},'host','hostname');
+high({host:'api-node-3',method:'GetUser',status_code:0},'host','hostname','string');
 // A protocol field without a scalar value says nothing.
 assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:null}],'srcport'),['HIGH'],'null protocol field');
 assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:{name:'x'}}],'srcport'),['HIGH'],'object protocol field');

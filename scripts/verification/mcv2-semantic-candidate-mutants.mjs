@@ -92,6 +92,17 @@ function oracle(mod){
     'sparse endpoint inside a nested object');
   assert.equal(families.find(c=>c.source==='srcport')?.safeForBulk,true,'sparse official-name endpoint field');
   assert.equal(families.find(c=>c.source==='md5')?.safeForBulk,false,'sparse official name of another kind');
+  // A host field carried only by events that describe an HTTP request (a value is a method, a request line or
+  // an HTTP version) is offered for review, whatever its fields are called; a record whose field called method
+  // holds another value keeps its host name.
+  for(const fields of [{host:'shop.example.com',request:'GET /cart HTTP/1.1',status:200},
+    {http:{hostname:'example.com',http_method:'GET',protocol:'HTTP/1.1'}},{host:'example.com',verb:'POST',path:'/x'}]){
+    const hosts=runSuite(mod,[fields]).filter(c=>c.target==='hostname');
+    assert.equal(hosts.length===1&&hosts[0].confidence==='REVIEW'&&!hosts[0].safeForBulk,true,
+      'host field of an HTTP request record '+JSON.stringify(fields));
+  }
+  assert.equal(runSuite(mod,[{host:'api-node-3',method:'GetUser',status_code:0}]).find(c=>c.source==='host')?.safeForBulk,true,
+    'host field beside a method that is not an HTTP method');
   assert.deepEqual(runSuite(mod,[]),[],'empty data has no candidates');
 }
 const variants=[
@@ -104,6 +115,12 @@ const variants=[
   ['pretend no type-compatible observations',
     'const compatibleObserved=informativeValues.filter(result=>',
     'const compatibleObserved=informativeValues.filter(result=>false&&'],
+  ['approve a host field of an HTTP request record as the official hostname',
+    "const unconfirmedHost=target==='hostname'&&hostNameUnconfirmed(source,events);",
+    'const unconfirmedHost=false;'],
+  ['take a field called method for an HTTP request whatever its value says',
+    'return HTTP_METHOD_TOKENS.has(text)||HTTP_REQUEST_LINE.test(text)||HTTP_VERSION.test(text);',
+    'return text.length>0;'],
   ['ignore a non-transport protocol beside the port',
     'informative>0&&!nonTransportPort&&!lacksTransportEvidence;',
     'informative>0&&!lacksTransportEvidence;'],

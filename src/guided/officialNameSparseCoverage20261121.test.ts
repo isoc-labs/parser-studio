@@ -212,23 +212,49 @@ describe('guards of the sparse rule that the re-audit found incomplete',()=>{
   });
 });
 
-// Independent audit of 2026-11-21, seen outside the diff (same on main): Zeek http.log `host` is the HTTP Host header.
-describe('the requested host of an HTTP request record is not the official hostname',()=>{
-  const http=(overrides:Record<string,unknown>={})=>({ts:1763719200.1,uid:'CmES5u32sYpV7JYN','id.orig_h':'192.168.1.10',
-    'id.orig_p':51234,'id.resp_h':'93.184.216.34','id.resp_p':80,method:'GET',host:'example.com',uri:'/index.html',
-    user_agent:'curl/8.5.0',status_code:200,...overrides});
-  it('does not propose hostname for host beside a method and a resource, agent or status',()=>{
-    expect(candidate('hostname',http(),http({host:'example.org',uri:'/a'}))).toBeUndefined();
-    expect(candidate('hostname',{request_method:'POST',host:'shop.example.com',request_uri:'/cart'})).toBeUndefined();
-    expect(candidate('hostname',{Method:'GET',host:'example.com',URI:'/'})).toBeUndefined();
-    expect(candidate('hostname',{http:{method:'GET',host:'example.com',url:'/x'}})).toBeUndefined();
+// Independent audit of 2026-11-21 (F-05, F-06, F-07). The first rule compared field names (a field called `host`
+// beside fields called method and uri): it missed every other naming of an HTTP log and dropped a device host
+// name. What a record is follows from what its values say.
+describe('a host field of an HTTP request record is not confirmed as the official hostname',()=>{
+  const review=(...events:Record<string,unknown>[])=>expect(candidate('hostname',...events)).toMatchObject({confidence:'REVIEW'});
+  it('is offered for review and never approved, whatever the fields of the request are called',()=>{
+    // Zeek http.log
+    review({ts:1763719200.1,uid:'CmES5u32sYpV7JYN','id.orig_h':'192.168.1.10','id.resp_h':'93.184.216.34',method:'GET',
+      host:'example.com',uri:'/index.html',user_agent:'curl/8.5.0',status_code:200});
+    // nginx JSON: the request line is one value
+    review({time:'2026-11-21T10:00:00+09:00',remote_addr:'10.0.0.5',host:'shop.example.com',request:'GET /cart HTTP/1.1',status:200});
+    // Suricata EVE http: the field is called hostname and sits in the http object
+    review({event_type:'http',src_ip:'10.0.0.5',dest_ip:'93.184.216.34',
+      http:{hostname:'example.com',url:'/index.html',http_method:'GET',protocol:'HTTP/1.1',status:200}});
+    // A logged Host header
+    review({level:30,req:{method:'GET',url:'/index.html',headers:{host:'example.com','user-agent':'curl/8.5.0'}},res:{statusCode:200}});
+    // Other names for the method and the resource
+    review({ts:'2026-11-21T10:00:00Z',client:'10.0.0.5',host:'example.com',verb:'GET',path:'/index.html',status:200});
+    review({time:'2026-11-21T10:00:00Z',client_ip:'10.0.0.5',host:'example.com',http_method:'POST',request_url:'https://example.com/'});
+    // The method one level deeper than the host
+    review({http:{request:{method:'POST'},host:'example.com',url:'/x',status_code:200}});
+    // A field called hostname at the root of a request record
+    review({hostname:'example.com',method:'GET',uri:'/',status_code:200});
+    // A host that may well be the device (a shipper added it): still not established, so it is offered, not dropped
+    review({host:'web01',vhost:'shop.example.com',method:'GET',uri:'/cart',status_code:200});
   });
-  it('keeps hostname for the host that a record is about',()=>{
+  it('is decided on every event that carries the field: one request among the records of a device does not decide',()=>{
+    expect(candidate('hostname',{host:'fw01',type:'traffic',action:'allow'},
+      {host:'fw01',type:'webfilter',method:'GET',url:'http://example.com/a',action:'allow'},
+      {host:'fw01',type:'system',msg:'admin login'})).toMatchObject({source:'host',confidence:'HIGH'});
+  });
+  it('keeps hostname for a record that says nothing of an HTTP request',()=>{
     expect(candidate('hostname',{host:'fw01',msg:'link up'},{host:'fw02',msg:'link down'})).toMatchObject({source:'host',confidence:'HIGH'});
-    // A method alone, or a resource alone, does not make the record an HTTP request.
+    // A field called method does not make a request: the value does.
     expect(candidate('hostname',{host:'fw01',method:'https'},{host:'fw02',method:'ssh'})).toMatchObject({confidence:'HIGH'});
+    expect(candidate('hostname',{host:'api-node-3',method:'GetUser',status_code:0,caller:'svc-a'})).toMatchObject({confidence:'HIGH'});
+    expect(candidate('hostname',{host:'bastion01',method:'publickey',user:'bob',user_agent:'OpenSSH_9.6'})).toMatchObject({confidence:'HIGH'});
     expect(candidate('hostname',{host:'fw01',url:'/admin'},{host:'fw02',url:'/login'})).toMatchObject({confidence:'HIGH'});
-    // Another object of the same event may be an HTTP request; the host beside it is not.
-    expect(candidate('hostname',{host:'proxy01',request:{method:'GET',uri:'/'}})).toMatchObject({source:'host',confidence:'HIGH'});
+  });
+  it('never asks the host of a Syslog header, and does not propose the requested host beside it',()=>{
+    const hosts=(...events:Record<string,unknown>[])=>suggestNormalizationCandidatesFromSuite(suite(...events),[])
+      .filter(item=>item.target==='hostname').map(item=>[item.source,item.confidence]);
+    expect(hosts({syslog_hostname:'web01',body:{method:'GET',host:'example.com',uri:'/'}})).toEqual([['syslog_hostname','HIGH']]);
+    expect(hosts({syslog:{hostname:'web01'},generic:{kv:{method:'GET',host:'example.com',uri:'/'}}})).toEqual([['syslog.hostname','HIGH']]);
   });
 });

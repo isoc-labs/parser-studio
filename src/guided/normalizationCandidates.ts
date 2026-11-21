@@ -181,15 +181,40 @@ function suricataAlertEvidence(fields:Record<string,unknown>,source:string):bool
       lookupFieldValue(fields,prefix+'alert.signature_id').found;
   });
 }
-const HTTP_METHOD_NAMES=['method','request_method','http_method'];
-const HTTP_REQUEST_NAMES=['uri','url','request_uri','user_agent','useragent','status_code','referrer','referer'];
-/** The object that holds `source` is an HTTP request record: it names the method and the requested resource,
- * the agent or the response status. Names are compared without regard to case. */
-function httpRequestRecord(fields:Record<string,unknown>,source:string):boolean{
-  const parent=source.includes('.')?source.slice(0,source.lastIndexOf('.')):'';
-  const container=objectAt(fields,parent)??fields;
-  const names=Object.keys(container).map(name=>name.toLowerCase());
-  return HTTP_METHOD_NAMES.some(name=>names.includes(name))&&HTTP_REQUEST_NAMES.some(name=>names.includes(name));
+// HTTP request methods (RFC 9110 section 9, and PATCH of RFC 5789) as a request writes them, a request line
+// and a protocol version: what a VALUE of the record says, whatever the field that holds it is called.
+const HTTP_METHOD_TOKENS=new Set(['GET','HEAD','POST','PUT','DELETE','CONNECT','OPTIONS','TRACE','PATCH']);
+const HTTP_REQUEST_LINE=/^(?:GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE|PATCH) \S+ HTTP\/\d(?:\.\d)?$/u;
+const HTTP_VERSION=/^HTTP\/\d(?:\.\d)?$/u;
+/** True when a value of the event, at any depth, is an HTTP method, a request line or an HTTP version: the
+ * event describes an HTTP request. */
+function saysHttpRequest(value:unknown):boolean{
+  if(Array.isArray(value))return value.some(saysHttpRequest);
+  if(value!==null&&typeof value==='object')return Object.values(value as Record<string,unknown>).some(saysHttpRequest);
+  if(typeof value!=='string')return false;
+  const text=value.trim();
+  return HTTP_METHOD_TOKENS.has(text)||HTTP_REQUEST_LINE.test(text)||HTTP_VERSION.test(text);
+}
+// The HOSTNAME of a Syslog header: its position in the header names the sender (RFC 3164 4.1.2, RFC 5424 6.2.4).
+const SYSLOG_HEADER_HOST_SOURCES=['syslog_hostname','syslog.hostname','syslog.host'];
+const syslogHeaderHostIn=(fields:Record<string,unknown>):boolean=>
+  SYSLOG_HEADER_HOST_SOURCES.some(path=>lookupFieldValue(fields,path).found);
+/**
+ * A host field whose meaning as the official hostname (the host the record is about) is not established.
+ * In a record of an HTTP request a host field is, as a rule, the host the client ASKED FOR (the Host header:
+ * Zeek http.log `host`, nginx `host`, Suricata `http.hostname`, `req.headers.host`), and nothing in the record
+ * tells the two apart. So a field that is carried only by events that describe an HTTP request is offered for
+ * review and never approved. Decided on what the values say, not on the names of the fields beside it: the
+ * earlier rule (a field called `host` beside fields called method and uri) missed every other naming and
+ * refused a device host name outright (independent audit 2026-11-21, F-05, F-06). A field that events without
+ * a request carry as well (host=fw01 in the traffic, web filter and system lines of one device) is an
+ * attribute of the record, and a Syslog header host is never asked. Where a Syslog header names the sender,
+ * the host field of the request beside it is another host and is not proposed at all.
+ */
+function hostNameUnconfirmed(source:string,events:readonly Record<string,unknown>[]):boolean{
+  if(SYSLOG_HEADER_HOST_SOURCES.includes(source))return false;
+  const carriers=events.filter(fields=>lookupFieldValue(fields,source).found);
+  return carriers.length>0&&carriers.every(saysHttpRequest);
 }
 function incompatibleVendorMeaning(
   source:string,target:string,events:Record<string,unknown>[],
@@ -219,10 +244,6 @@ function incompatibleVendorMeaning(
   if(target==='srcport'&&leaf==='spt'&&events.some(fields=>
     lookupFieldValue(fields,source).found&&
     lookupFieldValue(fields,source.slice(0,source.lastIndexOf('.')+1)+'cpt').found))return true;
-  // An HTTP request record names the requested host `host` (the Host header: Zeek http.log, web access logs).
-  // That is the site the client asked for, not the host the record is about or the one that wrote it.
-  if(target==='hostname'&&leaf==='host'&&events.some(fields=>
-    lookupFieldValue(fields,source).found&&httpRequestRecord(fields,source)))return true;
   // RFC3164 PRI severity 0-7 is a Syslog facility code component, not
   // Stellar's 0-100 security severity score. Never silently relabel it.
   if(source.toLowerCase().endsWith('syslog.severity'))return true;
@@ -286,6 +307,8 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
   if(!target)return null;
   if((target==='srcport'||target==='dstport')&&sourceHasExcludedPortSegment(source))return null;
   if(incompatibleVendorMeaning(source,target,events))return null;
+  // The Syslog header names the sender; a host field of the HTTP request it carries is the requested host.
+  if(target==='hostname'&&hostNameUnconfirmed(source,events)&&events.some(syslogHeaderHostIn))return null;
   const catalog=findStellarMetadataField(target);
   if(!catalog?.mappable||!catalog.mappingType||!catalog.group)return null;
   const current=existing.find(rule=>rule.source===source);
@@ -330,7 +353,9 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
     const value=lookupFieldValue(fields,source);
     return value.found&&!ignored(value.value)&&!transportEvidenceInEvent(fields,source);
   });
-  const high=compatibleObserved===informative&&(values.length===events.length||namedAsTarget)&&
+  // The official hostname needs more than a name: see hostNameUnconfirmed.
+  const unconfirmedHost=target==='hostname'&&hostNameUnconfirmed(source,events);
+  const high=!unconfirmedHost&&compatibleObserved===informative&&(values.length===events.length||namedAsTarget)&&
     informative>0&&!nonTransportPort&&!lacksTransportEvidence;
   // Auto-generated provenance is explicit; field names and IDs cannot prove
   // that a user has not edited a persisted mapping.
