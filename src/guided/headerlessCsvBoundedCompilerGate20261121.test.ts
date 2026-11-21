@@ -1,6 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {createDraft} from '../model';
-import {buildSourceReviewedBoundedDraft,buildSourceReviewedGenericStructuralDraft,buildSourceReviewedNamedPositionalDraft,
+import {analyzeLogEnvelopes} from './autoParserEnvelope';
+import {buildSourceReviewedBoundedDraft,buildSourceReviewedGenericStructuralDraft,buildSourceReviewedNamedPositionalDraft,headerlessCsvEvents,
   type GenericStructuralSourceReview} from './genericStructuralAutoDraft';
 
 // The witness the Auto Parser gets from the preview service: every line a completely parsed source record.
@@ -59,6 +60,28 @@ describe('a headerless positional CSV sample and the bounded compiler (independe
   });
   it('a flag list that does not match the events adopts nothing that was read as headerless CSV',()=>{
     expect(buildSourceReviewedBoundedDraft(PAN,createDraft(),parsedWitness(PAN),[true,true])).toBeNull();
+  });
+
+  // CI run 44888070774: a BIG-IP ASM line (comma-separated key="value" pairs behind a Syslog tag, no PRI) is
+  // none/csv with status BODY_MALFORMED for the first scan. It was not read as CSV, so the rule does not apply
+  // and the compiler reads it as before.
+  const BIGIP='Oct 15 00:14:27 bigip-waf01 ASM: unit_hostname="bigip-waf01",management_ip_address="10.1.1.10",request_status="blocked",ip_client="203.0.113.210",route_domain="0",method="POST",protocol="HTTPS",date_time="2026-10-15T00:14:27+09:00",dest_port="443",dest_ip="10.20.1.25",uri="/api/login"';
+  const flags=(source:string)=>headerlessCsvEvents(analyzeLogEnvelopes(source,'single-line').events);
+  it('flags only events the first scan read as CSV',()=>{
+    expect(flags(BIGIP)).toEqual([false]);
+    expect(flags(PAN)).toEqual([true]);
+    for(const source of Object.values(MISREAD).slice(0,3))expect(flags(source).every(Boolean),source.slice(0,40)).toBe(true);
+    expect(flags('<14>'+PAN)).toEqual([false]);
+  });
+  it('a suspected-CSV line the first scan could not read is still adopted by the compiler',()=>{
+    const adopted=buildSourceReviewedBoundedDraft(BIGIP,createDraft(),parsedWitness(BIGIP),flags(BIGIP));
+    expect(adopted).not.toBeNull();
+    expect(adopted!.draft.mappings.find(mapping=>mapping.source==='generic.fields.ip_client')?.target).toBe('srcip');
+  });
+  it('the flags of the first scan decide the audit samples end to end',()=>{
+    for(const source of Object.values(MISREAD).slice(0,3))
+      expect(buildSourceReviewedBoundedDraft(source,createDraft(),parsedWitness(source),flags(source))).toBeNull();
+    expect(buildSourceReviewedBoundedDraft(PAN,createDraft(),parsedWitness(PAN),flags(PAN))).not.toBeNull();
   });
 
   it('events the first scan did not read as headerless CSV keep the general route',()=>{

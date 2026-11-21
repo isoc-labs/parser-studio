@@ -25,7 +25,7 @@ import {parseJavaStacktrace} from '../javaStacktrace';
 import {defaultGuidedOptions} from './contract';
 import ParserIdentityCard from './ParserIdentityCard';
 import {reviewLogicalBoundaries,type LogicalBoundaryReport} from './logicalBoundaryReview';
-import {buildSourceReviewedBoundedDraft} from './genericStructuralAutoDraft';
+import {buildSourceReviewedBoundedDraft,headerlessCsvEvents} from './genericStructuralAutoDraft';
 import {inspectZeekReview} from './zeekReview';
 
 
@@ -661,7 +661,7 @@ export default function AutoParser({
    // either. The bounded compiler is asked for it too. Whatever opened the route, an event the first scan
    // read as headerless CSV is adopted only with a reading that names its columns from a verified record
    // layout (buildSourceReviewedBoundedDraft); otherwise the CSV column review stays.
-   const headerlessCsv=report.events.map(entry=>entry.envelope==='none'&&entry.body==='csv');
+   const headerlessCsv=headerlessCsvEvents(report.events);
    const automatic=!advanced&&draft.format==='auto'&&review.events.length>0&&(report.unsupported>0||csvFound)
      ?buildSourceReviewedBoundedDraft(original,draft,review,headerlessCsv):null;
    // Finish before a successful automatic draft adoption changes the identity.

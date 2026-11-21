@@ -175,6 +175,17 @@ export function buildSourceReviewedGenericStructuralDraft(
 const NAMED_POSITIONAL_MODES:readonly string[]=['panos_traffic_csv'];
 
 /**
+ * The events the first scan READ as positional CSV without an envelope. An event it only suspected to be CSV
+ * and could not read (BODY_MALFORMED: comma-separated key="value" pairs behind a Syslog tag, for example) is an
+ * unsupported event; the bounded compiler is free to read it.
+ */
+export function headerlessCsvEvents(
+  entries:readonly {envelope:string;body:string;status:string}[],
+):boolean[]{
+  return entries.map(entry=>entry.envelope==='none'&&entry.body==='csv'&&entry.status==='RECOGNIZED');
+}
+
+/**
  * Adoption of the bounded compiler's reading against what the first scan said about each event.
  * `headerlessCsv[i]` is true for an event the first scan read as positional CSV without column names. Such an
  * event is adopted only with a reading that names the columns from a verified record layout. Any other reading
