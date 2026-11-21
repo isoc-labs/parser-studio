@@ -49,6 +49,8 @@ class Fragment:
     primitive_fields:int=0
 
 
+_SD_ELEMENT_BYTE_LIMIT=65536
+
 def _unescape(segment:str)->str:
     out=[]
     i=0
@@ -417,7 +419,11 @@ def extract_rfc5424(raw:str,*,source_preserving:bool=False,
                     raise ValueError("RFC5424_SD_UNCLOSED")
                 pos+=1
                 structured[ident]=fields
-                if len(raw[sd_start:pos].encode("utf8"))>1024:
+                # RFC 5424 sets no length for an SD-ELEMENT, and the browser and Ruby readers have none. A Junos
+                # RT_FLOW_SESSION_CLOSE element with NAT and application fields is longer than 1 KiB, so a
+                # smaller bound here made the preview disagree with the parser that is generated. The bound
+                # is the largest event the receiver accepts.
+                if len(raw[sd_start:pos].encode("utf8"))>_SD_ELEMENT_BYTE_LIMIT:
                     raise ValueError("RFC5424_SD_BYTE_LIMIT")
             except ValueError as exc:
                 result.issues.append(str(exc))

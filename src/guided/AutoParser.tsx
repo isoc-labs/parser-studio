@@ -656,7 +656,11 @@ export default function AutoParser({
    if(!analysisRun.isCurrent(run))return;
    // The bounded compiler can resolve a partial source diagnostic only when
    // its strict grammar preserves the same complete set of original records.
-   const automatic=!advanced&&draft.format==='auto'&&report.unsupported>0&&
+   // A line that only reads as positional CSV without column names (no PRI in front of a Syslog-wrapped
+   // firewall record, for example) is not "unsupported" for the first scan, but it has no field meaning
+   // either. The bounded compiler is asked for it too; it is adopted only when it reads every reviewed
+   // source record completely, otherwise the CSV column review stays as it was.
+   const automatic=!advanced&&draft.format==='auto'&&(report.unsupported>0||csvFound)&&
      review.events.length>0
      ?buildSourceReviewedGenericStructuralDraft(original,draft,review):null;
    // Finish before a successful automatic draft adoption changes the identity.
