@@ -5,6 +5,10 @@ import {suggestNormalizationCandidatesFromSuite} from './normalizationCandidates
 function suite(...fields:Record<string,unknown>[]):SuiteResult{
   return {events:fields.map(value=>({fields:value}))} as unknown as SuiteResult;
 }
+function candidateRead(format:string,target:string,...fields:Record<string,unknown>[]){
+  const read={events:fields.map(value=>({fields:value,effectiveFormat:format}))} as unknown as SuiteResult;
+  return suggestNormalizationCandidatesFromSuite(read,[]).filter(item=>item.target===target)[0];
+}
 function candidate(target:string,...fields:Record<string,unknown>[]){
   const found=suggestNormalizationCandidatesFromSuite(suite(...fields),[]).filter(item=>item.target===target);
   expect(found.length,'candidates for '+target).toBeLessThanOrEqual(1);
@@ -23,8 +27,11 @@ describe('a source named as its official Stellar field in a sample of several re
 
   it('is approved inside a container as well (generic.kv.dstport)',()=>{
     const wrap=(kv:Record<string,unknown>)=>({generic:{kv}});
-    expect(candidate('dstport',wrap(traffic),wrap(web),wrap(system)))
+    expect(candidateRead('generic_structural','dstport',wrap(traffic),wrap(web),wrap(system)))
       .toMatchObject({source:'generic.kv.dstport',confidence:'HIGH',safeForBulk:true});
+    // The same path in a JSON log is an object of the log, and a path alone does not say which it is.
+    expect(candidateRead('json','dstport',wrap(traffic),wrap(web),wrap(system))).toMatchObject({confidence:'REVIEW'});
+    expect(candidate('dstport',wrap(traffic),wrap(web),wrap(system))).toMatchObject({confidence:'REVIEW'});
   });
 
   it('stays a review proposal when one of its values does not fit the field',()=>{
@@ -160,5 +167,47 @@ describe('what the sparse rule must not approve',()=>{
     review('url',{url:'http://example.com/a'},{url:'category-db-2026.11'},system);
     for(const value of ['update-server-list','10','Malicious Websites'])review('url',{url:value},system);
     expect(candidate('url',{url:'http://example.com/a'},{url:'/index.html'},system)).toMatchObject({confidence:'HIGH'});
+  });
+});
+
+// Re-audit of 2026-11-21 (N2, N3, N4).
+describe('guards of the sparse rule that the re-audit found incomplete',()=>{
+  const system={logdesc:'Admin login successful'};
+  it('does not take a JSON object called fields, kv or body for a reader container',()=>{
+    for(const name of ['fields','kv','body']){
+      const nat={client_addr:'10.0.0.1',proto:6,[name]:{srcip:'203.0.113.5',srcport:40002,dstip:'93.184.216.34',dstport:443}};
+      for(const target of ['srcip','dstip','srcport','dstport'])
+        expect(candidateRead('json',target,nat,system)?.confidence??'REVIEW',name+'.'+target).toBe('REVIEW');
+    }
+    const deep={xlate:{fields:{srcip:'203.0.113.5',srcport:40002}},proto:6};
+    expect(candidateRead('json','srcip',deep,system)?.confidence??'REVIEW').toBe('REVIEW');
+    expect(candidateRead('generic_structural','srcip',deep,system)?.confidence??'REVIEW').toBe('REVIEW');
+  });
+  it('reads protocol evidence in the object that holds the port, in the same event',()=>{
+    const nested=(port:number,inner:Record<string,unknown>)=>({proto:6,body:{srcport:port,dstport:0,...inner}});
+    expect(candidateRead('syslog_rfc3164','srcport',nested(8,{kind:'icmp-echo'}),system)?.confidence??'REVIEW').toBe('REVIEW');
+    expect(candidateRead('syslog_rfc3164','srcport',nested(51234,{proto:'tcp'}),system)).toMatchObject({confidence:'HIGH'});
+    expect(candidate('srcport',{srcport:51234,proto:6},{srcport:8},system)).toMatchObject({confidence:'REVIEW'});
+  });
+  it('does not count a placeholder as coverage',()=>{
+    const events=[{srcport:51234,dstport:443,service:'HTTPS'},{srcport:8,dstport:0,service:'PING'},
+      {srcport:'-',dstport:'-',service:'-'}];
+    expect(candidate('srcport',...events)).toMatchObject({confidence:'REVIEW',safeForBulk:false});
+    expect(candidate('dstport',...events)).toMatchObject({confidence:'REVIEW',safeForBulk:false});
+  });
+  it('sees a protocol field whose name is written in another case',()=>{
+    const tcp={SrcIP:'10.0.0.1',Protocol:'TCP',SrcPort:51234,DstPort:443};
+    expect(candidate('srcport',tcp,{...tcp,Protocol:'ICMP',SrcPort:8,DstPort:0})).toMatchObject({confidence:'REVIEW'});
+    expect(candidate('srcport',tcp,{...tcp,Protocol:'udp'})).toMatchObject({confidence:'HIGH'});
+  });
+  it('pins every protocol field name with a positive and a negative record',()=>{
+    for(const name of ['protocol-id','protocol_id','protocol','proto','proto_name','protocol_name','ipproto','ip_proto','l4proto']){
+      expect(candidate('srcport',{srcport:51234,[name]:'tcp'},system),name).toMatchObject({confidence:'HIGH'});
+      expect(candidate('srcport',{srcport:8,[name]:'icmp'},system),name).toMatchObject({confidence:'REVIEW'});
+    }
+  });
+  it('never approves a sparse endpoint under a translated segment of a reader container',()=>{
+    const read={generic:{kv:{proto:6}},nat:{kv:{srcip:'203.0.113.5',srcport:40002,proto:6}}};
+    expect(candidateRead('generic_structural','srcip',read,{generic:{kv:{note:'x'}}})?.confidence??'REVIEW').toBe('REVIEW');
   });
 });

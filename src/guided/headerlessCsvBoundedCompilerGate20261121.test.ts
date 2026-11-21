@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {createDraft} from '../model';
-import {buildSourceReviewedGenericStructuralDraft,buildSourceReviewedNamedPositionalDraft,
+import {buildSourceReviewedBoundedDraft,buildSourceReviewedGenericStructuralDraft,buildSourceReviewedNamedPositionalDraft,
   type GenericStructuralSourceReview} from './genericStructuralAutoDraft';
 
 // The witness the Auto Parser gets from the preview service: every line a completely parsed source record.
@@ -42,8 +42,28 @@ describe('a headerless positional CSV sample and the bounded compiler (independe
     });
   }
 
-  it('the general route used for unsupported events is unchanged by the stricter headerless route',()=>{
+  // Re-audit N1: one unsupported line beside the CSV lines opens the route for the whole sample. The CSV
+  // lines keep their rule: they are not adopted with a reading that moves their cell boundaries.
+  const THREAT='<14>Nov 21 10:08:21 PA-VM 1,2026/11/21 10:08:22,007051000113358,THREAT,url,2305,2026/11/21 10:08:22,192.168.1.10,93.184.216.34,203.0.113.5,93.184.216.34,allow-web,,,web-browsing,vsys1,trust,untrust,ethernet1/1,ethernet1/2,forward-all,2026/11/21 10:08:22,33445,1,51234,80,45001,80,0x400000,tcp,alert,"example.com/a",(9999),any,informational,client-to-server';
+  for(const name of Object.keys(MISREAD).slice(0,3)){
+    it('a mixed sample does not free the CSV lines: '+name,()=>{
+      const lines=MISREAD[name]!.split('\n');
+      const source=[...lines,THREAT].join('\n');
+      const flags=[...lines.map(()=>true),false];
+      expect(buildSourceReviewedBoundedDraft(source,createDraft(),parsedWitness(source),flags)).toBeNull();
+    });
+  }
+  it('a mixed sample of a PRI-less TRAFFIC record and a record with a PRI is adopted',()=>{
+    const source=[PAN,THREAT].join('\n');
+    expect(buildSourceReviewedBoundedDraft(source,createDraft(),parsedWitness(source),[true,false])).not.toBeNull();
+  });
+  it('a flag list that does not match the events adopts nothing that was read as headerless CSV',()=>{
+    expect(buildSourceReviewedBoundedDraft(PAN,createDraft(),parsedWitness(PAN),[true,true])).toBeNull();
+  });
+
+  it('events the first scan did not read as headerless CSV keep the general route',()=>{
     const wrapped='<14>'+PAN;
     expect(buildSourceReviewedGenericStructuralDraft(wrapped,createDraft(),parsedWitness(wrapped))).not.toBeNull();
+    expect(buildSourceReviewedBoundedDraft(wrapped,createDraft(),parsedWitness(wrapped),[false])).not.toBeNull();
   });
 });

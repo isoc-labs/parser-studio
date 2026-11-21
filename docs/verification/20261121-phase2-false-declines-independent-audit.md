@@ -56,3 +56,25 @@ Seen by the audit outside the diff (same at `ee1cd73`), open:
 | Cisco ASA, Linux syslog, Snort fast (free text) | not done | the Python preview reads 7 of 8 ASA records, the browser grammar does not; a bounded message grammar for free text is a new grammar in TypeScript and therefore in the Ruby template |
 | WatchGuard event records | not done | the browser reads them as header + message, the Python preview reports the message as residual; the witness rule does not accept that |
 | ModSecurity audit JSON | not done | duplicate JSON keys are declined by the duplicate-key policy; changing it changes a security decision |
+
+## 4. Re-audit of the fixes (`1d23770`)
+
+The same agent re-ran its reproductions on `1d23770` and tried to defeat the new guards. F1-F4, F6 and F9 were
+closed as reported; no test of the fixes was vacuous (each fails when its guard is removed). It found the guards
+incomplete in four places. Dispositions in the commit that contains this section:
+
+| ID | Finding at `1d23770` | Disposition |
+|---|---|---|
+| N1 (P1, same at `ee1cd73`) | one line the first scan calls unsupported opened the general route for the whole sample, and the F1/F2 misreadings of the CSV lines beside it were adopted | fixed: the rule is per event (`buildSourceReviewedBoundedDraft`): an event the first scan read as headerless CSV is adopted only with a named positional reading, whatever opened the route |
+| N2 (P2, introduced by this branch) | the record level of F5 was decided from the text of the path, so a JSON object called `fields`, `kv` or `body` passed, and a root-level `proto` served as evidence for a port inside it | fixed: the record level follows from the reading (effective format) of the events that carry the source, with the reader containers listed per format; protocol evidence is read in the object that holds the port |
+| N3 (P1 by the owner's rule, same at `ee1cd73`) | an event carrying the port key with a placeholder counted as coverage, so no protocol evidence was asked | fixed: a port needs TCP or UDP named by the record unless every event has a usable value for it |
+| N4 (P2, same at `ee1cd73`) | `Protocol=ICMP` beside `SrcPort` was not seen: aliases match without regard to case, protocol fields did not | fixed: protocol field names are compared without regard to case, for the blocking gate and for the evidence |
+| N5 (P3) | the URL shape accepts any absolute path or scheme (`/var/log/messages`, `file:///...`) in a sparse field called `url` | open |
+| N6 (P3) | the Python preview has the browser's byte bound but not its 64-parameter bound for Junos structured data | open |
+
+Effect on the golden corpus: two synthetic mixed cases (`mixed_envelope_cef_kv`, `mixed_types_kv`) carry sparse
+`srcport`/`dstport` in records that name no protocol. They were approved in Phase 1 and are review proposals now
+(the semantic policy: unknown protocol evidence never authorizes an official port). This is the price of F3.
+
+Not covered by any independent run: a real browser, the generated Ruby and CI were verified by the main session
+only; the changes of this last commit were not audited a third time.

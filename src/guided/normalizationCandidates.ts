@@ -35,13 +35,22 @@ const WHITESPACE_FREE_TARGETS=new Set(['srcport','dstport','srcip','dstip']);
 /** Official fields a sparse source may be approved for when the source is named exactly like the field. */
 const SPARSE_SAFE_TARGETS=new Set(['srcip','dstip','srcport','dstport','proto','proto_name','url']);
 /** A sparse source is approved only where the name stands for the record itself: at the root, or in the
- * container a reader puts the record's own pairs in (generic.kv.x, generic.fields.x, body.x, junos_sd.x).
- * A nested object of the log (xlate.srcip, outer.srcip, nat.srcip) names another endpoint. */
-const RECORD_LEVEL_SOURCE=/^(?:(?:[a-z_]+\.)?(?:kv|fields)\.|body\.|junos_sd\.)?[^.]+$/u;
+ * container the READER of the event puts the record's own pairs in. Which containers those are follows from
+ * the reading (the effective format of the events that carry the source), never from the text of the path: in
+ * a JSON log `fields.srcip`, `body.srcip` or `xlate.srcip` is an object of the log and names another endpoint. */
+const GENERIC_STRUCTURAL_CONTAINER=/^(?:generic\.(?:kv|fields)|watchguard\.kv|junos_sd|body)\.[^.]+$/u;
+const SYSLOG_BODY_CONTAINER=/^body\.[^.]+$/u;
+function recordLevelSource(source:string,formats:readonly (string|undefined)[]):boolean{
+  if(!source.includes('.'))return true;
+  return formats.length>0&&formats.every(format=>
+    format==='generic_structural'?GENERIC_STRUCTURAL_CONTAINER.test(source):
+    format==='syslog_rfc3164'||format==='syslog_rfc5424'?SYSLOG_BODY_CONTAINER.test(source):false);
+}
 const URL_SHAPED=/^(?:[a-z][a-z0-9+.-]*:\/\/\S+|\/\S*)$/iu;
 type Looked={found:true;value:unknown}|{found:false};
-function sparseSafeSource(source:string,target:string,values:readonly Looked[]):boolean{
-  if(!RECORD_LEVEL_SOURCE.test(source)||sourceHasExcludedPortSegment(source))return false;
+function sparseSafeSource(source:string,target:string,values:readonly Looked[],
+  formats:readonly (string|undefined)[]):boolean{
+  if(!recordLevelSource(source,formats)||sourceHasExcludedPortSegment(source))return false;
   // The other sparse-safe fields are checked by the type of the field; a URL has no such check.
   return target!=='url'||values.every(result=>result.found&&typeof result.value==='string'&&
     URL_SHAPED.test(result.value.trim()));
@@ -81,30 +90,44 @@ function protocolContextPrefixes(source:string):string[]{
   if(firstAtomKeyOf(source)===undefined)return [prefix];
   return [prefix,source.slice(0,source.lastIndexOf('atoms.'))+'kv.'];
 }
+function objectAt(fields:Record<string,unknown>,path:string):Record<string,unknown>|null{
+  if(!path)return fields;
+  const found=lookupFieldValue(fields,path);
+  return found.found&&found.value!==null&&typeof found.value==='object'&&!Array.isArray(found.value)
+    ?found.value as Record<string,unknown>:null;
+}
+/** What the record says about its IP protocol beside `source`: the values of the protocol fields in the object
+ * that holds the source (for an atom also in the key=value carrier beside it). Field names are compared without
+ * regard to case, as the aliases are (`Protocol=ICMP` beside `SrcPort`). `withRoot` adds the root of the event;
+ * a source whose path names no object (a literal dotted key such as Zeek's id.orig_p) is at the root. */
+function protocolValuesBeside(fields:Record<string,unknown>,source:string,withRoot:boolean):string[]{
+  const containers=new Set<Record<string,unknown>>();
+  for(const prefix of protocolContextPrefixes(source)){
+    const container=objectAt(fields,prefix.endsWith('.')?prefix.slice(0,-1):prefix);
+    if(container)containers.add(container);
+  }
+  if(withRoot||containers.size===0)containers.add(fields);
+  const values:string[]=[];
+  for(const container of containers)for(const key of Object.keys(container)){
+    if(!PROTOCOL_EVIDENCE_NAMES.includes(key.toLowerCase()))continue;
+    const value=container[key];
+    if(value===null||value===undefined||typeof value==='object')continue;
+    values.push(String(value).trim().toLowerCase());
+  }
+  return values;
+}
+const isTransport=(value:string):boolean=>TRANSPORT_NUMERIC.has(value)||TRANSPORT_NAMES.has(value);
 /** A protocol observation is not proof of a Layer 4 port unless it names an
  * independently reviewed carrier. Unknown/contradicting evidence is REVIEW. */
 function unsupportedPortProtocolInEvent(
   fields:Record<string,unknown>,source:string,
 ):boolean{
-  const names=PROTOCOL_EVIDENCE_NAMES;
-  const candidates=[...protocolContextPrefixes(source).flatMap(prefix=>names.map(name=>prefix+name)),...names];
-  return candidates.some(name=>{
-    const found=lookupFieldValue(fields,name);
-    if(!found.found)return false;
-    const value=String(found.value).trim().toLowerCase();
-    return !(TRANSPORT_NUMERIC.has(value)||TRANSPORT_NAMES.has(value));
-  });
+  return protocolValuesBeside(fields,source,true).some(value=>!isTransport(value));
 }
-/** The record itself says that its ports are TCP or UDP ports. */
+/** The record itself says that its ports are TCP or UDP ports: in the object that holds the port, not at the
+ * root of an event whose port lives in a nested family. */
 function transportEvidenceInEvent(fields:Record<string,unknown>,source:string):boolean{
-  const names=PROTOCOL_EVIDENCE_NAMES;
-  const candidates=[...protocolContextPrefixes(source).flatMap(prefix=>names.map(name=>prefix+name)),...names];
-  return candidates.some(name=>{
-    const found=lookupFieldValue(fields,name);
-    if(!found.found)return false;
-    const value=String(found.value).trim().toLowerCase();
-    return TRANSPORT_NUMERIC.has(value)||TRANSPORT_NAMES.has(value);
-  });
+  return protocolValuesBeside(fields,source,false).some(isTransport);
 }
 /** Shared, versioned source-field contract. A declared port label has higher
  * identity evidence than abbreviated aliases (spt/sport etc). The field must
@@ -223,7 +246,7 @@ export function valueFitsNormalizationTarget(
     meetsStellar7ValueConstraints(target,value,converted.value);
 }
 function candidateForSource(source:string,events:Record<string,unknown>[],existing:MappingRule[],
- existingGroups:Record<string,FieldGroup>):NormalizationCandidate|null{
+ existingGroups:Record<string,FieldGroup>,formats:readonly (string|undefined)[]=[]):NormalizationCandidate|null{
   // Generic Structural space_kv lets an unquoted value run up to the next key,
   // so `dport=53 pattern: allow all` stores the whole text under kv.dport and
   // its whitespace-separated pieces under atoms.dport_001... A port or IP never
@@ -281,12 +304,14 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
   // writes nothing for an event without it. Other official names (severity, type, icmp_type ...), aliases and
   // explicit port labels keep the full-coverage rule.
   const informative=informativeValues.length;
-  const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&leaf.toLowerCase()===target&&sparseSafeSource(source,target,informativeValues);
+  const carrierFormats=events.flatMap((fields,index)=>lookupFieldValue(fields,source).found?[formats[index]]:[]);
+  const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&leaf.toLowerCase()===target&&sparseSafeSource(source,target,informativeValues,carrierFormats);
   // Unknown protocol evidence never authorizes an official port. A port that only some record families carry,
   // or an alias whose meaning depends on the protocol, needs the record itself to name TCP or UDP in every
   // event that has the port: an ICMP record of another family may name its protocol differently, or not at all.
+  // An event that carries the port key with a placeholder (`-`, empty) does not make the port "present in every event".
   const needsTransportEvidence=(target==='srcport'||target==='dstport')&&
-    (values.length!==events.length||PROTOCOL_DEPENDENT_PORT_ALIASES.has(source.toLowerCase()));
+    (informativeValues.length!==events.length||PROTOCOL_DEPENDENT_PORT_ALIASES.has(source.toLowerCase()));
   const lacksTransportEvidence=needsTransportEvidence&&events.some(fields=>{
     const value=lookupFieldValue(fields,source);
     return value.found&&!ignored(value.value)&&!transportEvidenceInEvent(fields,source);
@@ -372,7 +397,7 @@ export function suggestNormalizationCandidatesFromSuite(
   const proposed:NormalizationCandidate[]=[];
   const candidatesByTarget=new Map<string,NormalizationCandidate[]>();
   for(const source of scan.paths){
-    const candidate=candidateForSource(source,fields,existing,existingGroups);
+    const candidate=candidateForSource(source,fields,existing,existingGroups,suite.events.map(event=>event.effectiveFormat));
     if(!candidate)continue;
     candidatesByTarget.set(candidate.target,[...(candidatesByTarget.get(candidate.target)??[]),candidate]);
     proposed.push(candidate);

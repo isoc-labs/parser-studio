@@ -175,19 +175,30 @@ export function buildSourceReviewedGenericStructuralDraft(
 const NAMED_POSITIONAL_MODES:readonly string[]=['panos_traffic_csv'];
 
 /**
- * A sample that the first scan reads as positional CSV without column names. The bounded compiler may replace
- * the CSV column review only with a reading that names the columns from a verified record layout, for every
- * event. Any other reading of such a line (a Syslog header taken from the first cells, key=value pairs taken
- * from one cell) would move the cell boundaries the CSV reading already has, so it is not adopted.
+ * Adoption of the bounded compiler's reading against what the first scan said about each event.
+ * `headerlessCsv[i]` is true for an event the first scan read as positional CSV without column names. Such an
+ * event is adopted only with a reading that names the columns from a verified record layout. Any other reading
+ * of that line (a Syslog header taken from the first cells, key=value pairs taken from one cell) would move the
+ * cell boundaries the CSV reading already has. This holds whichever events of the sample opened the route: a
+ * sample with one unsupported line does not make the CSV lines beside it free text.
  */
-export function buildSourceReviewedNamedPositionalDraft(
-  source:string,draft:ParserDraft,review:GenericStructuralSourceReview,
+export function buildSourceReviewedBoundedDraft(
+  source:string,draft:ParserDraft,review:GenericStructuralSourceReview,headerlessCsv:readonly boolean[],
 ):ReturnType<typeof buildAutomaticGenericStructuralDraft>{
   const candidate=buildSourceReviewedGenericStructuralDraft(source,draft,review);
   if(!candidate)return null;
-  return candidate.suite.events.every(event=>{
+  if(headerlessCsv.length!==candidate.suite.events.length)return headerlessCsv.some(Boolean)?null:candidate;
+  return candidate.suite.events.every((event,index)=>{
+    if(!headerlessCsv[index])return true;
     const generic=event.fields.generic;
     return !!generic&&typeof generic==='object'&&!Array.isArray(generic)&&
       NAMED_POSITIONAL_MODES.includes(String((generic as Record<string,unknown>).mode));
   })?candidate:null;
+}
+
+/** A sample in which the first scan read every event as positional CSV without column names. */
+export function buildSourceReviewedNamedPositionalDraft(
+  source:string,draft:ParserDraft,review:GenericStructuralSourceReview,
+):ReturnType<typeof buildAutomaticGenericStructuralDraft>{
+  return buildSourceReviewedBoundedDraft(source,draft,review,review.events.map(()=>true));
 }

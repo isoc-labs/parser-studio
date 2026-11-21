@@ -274,7 +274,31 @@ assert.deepEqual(rv([{srcport:8},{note:'x'}],'srcport'),['REVIEW'],'sparse port,
 assert.deepEqual(rv([{srcport:51234,l4proto:'tcp'},{note:'x'}],'srcport'),['HIGH'],'sparse port, l4proto=tcp');
 assert.deepEqual(rv([{srcport:51234,proto:6,transport:51234},{note:'x'}],'srcport'),['HIGH'],'FortiGate transport is a translated port, not a protocol');
 assert.deepEqual(rv([{xlate:{srcip:'203.0.113.5'}},{note:'x'}],'xlate.srcip'),['REVIEW'],'nested endpoint');
-assert.deepEqual(rv([{generic:{kv:{srcip:'203.0.113.5'}}},{note:'x'}],'generic.kv.srcip'),['HIGH'],'reader container');
+assert.deepEqual(rv([{generic:{kv:{srcip:'203.0.113.5'}}},{note:'x'}],'generic.kv.srcip'),['REVIEW'],'a container of an unknown reading is not the record level');
+// Re-audit of 2026-11-21 (N2-N4).
+assert.deepEqual(rv([{proto:6,fields:{srcip:'203.0.113.5',srcport:40002}},{note:'x'}],'fields.srcip'),['REVIEW'],'JSON object called fields');
+assert.deepEqual(rv([{proto:6,fields:{srcip:'203.0.113.5',srcport:40002}},{note:'x'}],'fields.srcport'),['REVIEW'],'root proto is not evidence for a nested port');
+assert.deepEqual(rv([{srcport:51234,dstport:443,service:'HTTPS'},{srcport:8,dstport:0,service:'PING'},{srcport:'-',dstport:'-',service:'-'}],'srcport'),['REVIEW'],'a placeholder is not coverage');
+assert.deepEqual(rv([{SrcPort:51234,Protocol:'TCP'},{SrcPort:8,Protocol:'ICMP'}],'SrcPort'),['REVIEW'],'protocol field name in another case');
+assert.deepEqual(rv([{SrcPort:51234,Protocol:'TCP'},{SrcPort:443,Protocol:'udp'}],'SrcPort'),['HIGH'],'TCP and UDP named in another case');
+assert.deepEqual(rv([{srcport:51234,proto:6},{srcport:8},{note:'x'}],'srcport'),['REVIEW'],'evidence of one event does not serve another');
+// The record level follows from the reading of the events that carry the source.
+const read=(format,events,source)=>mod.suggestNormalizationCandidatesFromSuite(
+  {events:events.map(fields=>({fields,effectiveFormat:format}))},[]).filter(r=>r.source===source).map(r=>r.confidence);
+const inKv={generic:{kv:{srcip:'203.0.113.5',srcport:40002,proto:6}}},inBody={body:{srcip:'203.0.113.5',srcport:40002,proto:6}};
+const other={generic:{kv:{note:'x'}},body:{note:'x'}};
+assert.deepEqual(read('generic_structural',[inKv,other],'generic.kv.srcip'),['HIGH'],'generic reader container');
+assert.deepEqual(read('generic_structural',[inKv,other],'generic.kv.srcport'),['HIGH'],'port with TCP in its own container');
+assert.deepEqual(read('json',[inKv,other],'generic.kv.srcip'),['REVIEW'],'the same path in a JSON log');
+assert.deepEqual(read('syslog_rfc3164',[inBody,other],'body.srcip'),['HIGH'],'RFC 3164 body');
+assert.deepEqual(read('syslog_rfc5424',[inBody,other],'body.srcip'),['HIGH'],'RFC 5424 body');
+assert.deepEqual(read('json',[inBody,other],'body.srcip'),['REVIEW'],'a JSON object called body');
+assert.deepEqual(read('kv',[inBody,other],'body.srcip'),['REVIEW'],'no container in a key=value reading');
+assert.deepEqual(read('syslog_rfc3164',[inKv,other],'generic.kv.srcip'),['REVIEW'],'generic container under a Syslog reading');
+assert.deepEqual(read('generic_structural',[{xlate:{fields:{srcip:'203.0.113.5'}}},other],'xlate.fields.srcip'),['REVIEW'],'not a reader container');
+// A protocol field without a scalar value says nothing.
+assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:null}],'srcport'),['HIGH'],'null protocol field');
+assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:{name:'x'}}],'srcport'),['HIGH'],'object protocol field');
 assert.deepEqual(rv([{url:'category-db-2026.11'},{note:'x'}],'url'),['REVIEW'],'url that is not a URL');
 assert.deepEqual(rv([{url:'/index.html'},{url:'https://example.com/a'},{note:'x'}],'url'),['HIGH'],'URL-shaped url');
 assert.deepEqual(rv([{'source-port':'12','destination-port':'2048','protocol-id':'1'},{note:'x'}],'source-port'),['REVIEW'],'sparse explicit label');
