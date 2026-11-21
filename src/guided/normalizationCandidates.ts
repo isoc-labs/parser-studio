@@ -167,14 +167,13 @@ function incompatibleVendorMeaning(
       return value.found&&['TRAFFIC','THREAT','SYSTEM','CONFIG'].includes(String(value.value).toUpperCase());
     }))return true;
   // A zero-filled ICMP field on UDP or TCP is not evidence of ICMP semantics.
-  // The Junos structured-data reader spells the names with underscores (icmp_type, protocol_id).
+  // The Junos structured-data reader of the Generic Structural route spells the same two names with
+  // underscores (icmp_type beside protocol_id). A field that is called icmp_type on its own is not this record.
   if(target==='icmp_type'&&(leaf==='icmp-type'||leaf==='icmp_type'))return events.some(fields=>{
     if(!lookupFieldValue(fields,source).found)return false;
     const prefix=source.slice(0,source.length-leaf.length);
-    return ['protocol-id','protocol_id'].some(name=>{
-      const protocol=lookupFieldValue(fields,prefix+name);
-      return protocol.found&&!['1','58'].includes(String(protocol.value));
-    });
+    const protocol=lookupFieldValue(fields,prefix+(leaf==='icmp-type'?'protocol-id':'protocol_id'));
+    return protocol.found&&!['1','58'].includes(String(protocol.value));
   });
   return false;
 }

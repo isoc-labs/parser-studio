@@ -77,6 +77,11 @@ function oracle(mod){
   assert.equal(runSuite(mod,[{src_ip:'192.0.2.1'}],[
     {id:'custom',source:'old',target:'srcip',type:'ip'}]).some(c=>c.target==='srcip'),
     false,'occupied destination cannot get a competing candidate');
+  // Mixed record families: an endpoint field that carries the official name itself is approved although one
+  // family lacks it; an official name of another kind is not.
+  const families=runSuite(mod,[{srcport:51544,md5:'69630e4574ec6798239b091cda43dca0'},{note:'system record'}]);
+  assert.equal(families.find(c=>c.source==='srcport')?.safeForBulk,true,'sparse official-name endpoint field');
+  assert.equal(families.find(c=>c.source==='md5')?.safeForBulk,false,'sparse official name of another kind');
   assert.deepEqual(runSuite(mod,[]),[],'empty data has no candidates');
 }
 const variants=[
@@ -93,8 +98,20 @@ const variants=[
     'informative>0&&!nonTransportPort;',
     'informative>0;'],
   ['ignore complete event evidence',
-    'compatibleObserved===informative&&values.length===events.length&&',
+    'compatibleObserved===informative&&(values.length===events.length||namedAsTarget)&&',
     'compatibleObserved===informative&&'],
+  ['approve every sparse source',
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&(leaf.toLowerCase()===target||explicitPort);',
+    'const namedAsTarget=true;'],
+  ['approve a sparse source for any official name',
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&(leaf.toLowerCase()===target||explicitPort);',
+    'const namedAsTarget=(leaf.toLowerCase()===target||explicitPort);'],
+  ['approve a sparse alias of an endpoint field',
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&(leaf.toLowerCase()===target||explicitPort);',
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target);'],
+  ['never approve a sparse official-name endpoint field',
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&(leaf.toLowerCase()===target||explicitPort);',
+    'const namedAsTarget=false;'],
   ['ignore abnormal port protocol',
     'const nonTransportPort=!explicitPort&&(target===\'srcport\'||target===\'dstport\')&&',
     'const nonTransportPort=false&&(target===\'srcport\'||target===\'dstport\')&&'],

@@ -244,6 +244,29 @@ high({flow:{spt:443,'protocol-id':6}},'flow.spt','srcport','integer');
 absent({post_nat:{'destination-port':443}},'post_nat.destination-port');
 absent({translated_source:{'destination-port':443}},'translated_source.destination-port');
 high({icmp_type:'8','protocol-id':6},'icmp_type','icmp_type','string');
+// The Junos structured-data reader writes icmp_type beside protocol_id: zero-filled on TCP/UDP, a type on ICMP.
+absent({junos_sd:{icmp_type:'0',protocol_id:'6'}},'junos_sd.icmp_type');
+high({junos_sd:{icmp_type:'8',protocol_id:'1'}},'junos_sd.icmp_type','icmp_type','string');
+// A sample of several record families: an endpoint field that carries the official name itself is approved
+// although one family lacks it; an alias, or an official name of another kind, stays a review proposal.
+const families=suggest([{srcip:'192.0.2.1',srcport:51544,dstport:443,proto:6,md5:'69630e4574ec6798239b091cda43dca0'},
+  {note:'system record'}]);
+for(const name of ['srcip','srcport','dstport','proto']){
+  const found=families.find(r=>r.source===name);
+  assert.equal(found?.target,name,'sparse official-name endpoint '+name);
+  assert.equal(found?.confidence,'HIGH','sparse official-name endpoint approved '+name);
+  assert.equal(found?.safeForBulk,true,'sparse official-name endpoint bulk '+name);
+}
+assert.equal(families.find(r=>r.source==='md5')?.confidence,'REVIEW','sparse non-endpoint official name');
+// A source called proto: documented protocol names are the name field, numbers the number field.
+const target=(events,source)=>suggest(events).filter(r=>r.source===source).map(r=>r.target+':'+r.confidence);
+assert.deepEqual(target([{proto:'tcp'},{proto:'UDP'}],'proto'),['proto_name:HIGH'],'protocol names');
+assert.deepEqual(target([{proto:'tcp'},{proto:'-'}],'proto'),['proto_name:HIGH'],'a placeholder beside a name does not make the field a number');
+assert.deepEqual(target([{proto:6},{proto:'17'}],'proto'),['proto:HIGH'],'protocol numbers');
+assert.deepEqual(target([{proto:'tcp'},{proto:6}],'proto'),['proto:REVIEW'],'names and numbers mixed');
+assert.deepEqual(target([{proto:'https'}],'proto'),['proto:REVIEW'],'an application label is neither');
+const sparseBadPort=suggest([{srcport:70000},{note:'system record'}]);
+assert.equal(sparseBadPort.find(r=>r.source==='srcport')?.confidence,'REVIEW','sparse endpoint with an invalid value');
 const mismatch={id:'auto-1',source:'src_ip',target:'srcip',type:'string',
   authoring:{version:1,origin:'AUTO'}};
 const mismatchCandidate=row({src_ip:'192.0.2.1'},'src_ip',[mismatch]);
