@@ -910,7 +910,7 @@ def psg_independent_key_value_pairs(raw)
           value = (rawValue.include?('\\') ? psg_replace(rawValue, /\\(?m:.)/, true, lambda { |pair| psg_slice(pair, 1) }) : rawValue)
           pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value, 'rawValue' => rawValue, 'quoted' => true})
           index = (cursor + 1)
-          if (((index < length) && ',;|'.include?(psg_at(raw, index))) && psg_key_starts_at(raw, psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, (index + 1))), length))
+          if (((index < length) && psg_is_list_delimiter(psg_at(raw, index))) && psg_key_starts_at(raw, psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, (index + 1))), length))
             index += 1
           end
           next
@@ -967,6 +967,11 @@ def psg_inspect_declared_forwarders(raw, config = nil)
     i += 1
   end
   return (psg_t(hops.length) ? {'status' => 'UNWRAPPED', 'payload' => text, 'payloadStartByte' => startByte, 'hops' => hops, 'reason' => 'DECLARED_SYSLOG_RELAY'} : direct)
+end
+
+# src/grammar/parseStatus.ts: isListDelimiter
+def psg_is_list_delimiter(ch)
+  return (((ch == ',') || (ch == ';')) || (ch == '|'))
 end
 
 # src/grammar/syslogHeader.ts: isSupportedRfc5424Version
@@ -1757,7 +1762,7 @@ def psg_unquoted_value_end(raw, from, v_end)
     if (ch == '=')
       return v_end
     end
-    if !',;|'.include?(ch)
+    if !psg_is_list_delimiter(ch)
       next
     end
     v_next = (((at + 1) < v_end) ? (at + 1) : psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, v_end)))

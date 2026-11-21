@@ -35,7 +35,11 @@ const BACKSLASH_PAIR = /\\./gsu;
 // that is the reason this reader must: "a=1,b=2" is two pairs whatever the grammar made of the line. A reader
 // that cut tokens at white space only shared the grammar's assumption and could not see the second pair, so a
 // line whose pairs are separated by commas alone was reported FULL with one field (Issue #315, Phase 3).
-const LIST_DELIMITERS = ',;|';
+// Compared character by character: in the generated Ruby a string search for a character beyond ASCII raises
+// when the artifact was loaded as US-ASCII source, a comparison is simply false.
+function isListDelimiter(ch: string): boolean {
+  return ch === ',' || ch === ';' || ch === '|';
+}
 
 /**
  * RFC 5424 section 6: after "<PRI>VERSION" come five header fields, each separated by exactly one SP and
@@ -114,7 +118,7 @@ function unquotedValueEnd(raw: string, from: number, end: number): number {
   for (let at = from; at < end; at += 1) {
     const ch = raw[at]!;
     if (ch === '=') return end;
-    if (!LIST_DELIMITERS.includes(ch)) continue;
+    if (!isListDelimiter(ch)) continue;
     const next = at + 1 < end ? at + 1 : matchEnd(matchAt(GAP_RUN, raw, end)!);
     if (keyStartsAt(raw, next, at + 1 < end ? end : raw.length)) return at;
   }
@@ -148,7 +152,7 @@ export function independentKeyValuePairs(raw: string): RawPair[] {
           pairs.push({ key: key[0].slice(0, -1), value, rawValue, quoted: true });
           index = cursor + 1;
           // A list delimiter between the closing quote and the next key separates two pairs.
-          if (index < length && LIST_DELIMITERS.includes(raw[index]!) &&
+          if (index < length && isListDelimiter(raw[index]!) &&
             keyStartsAt(raw, matchEnd(matchAt(GAP_RUN, raw, index + 1)!), length)) index += 1;
           continue;
         }
