@@ -181,6 +181,16 @@ function suricataAlertEvidence(fields:Record<string,unknown>,source:string):bool
       lookupFieldValue(fields,prefix+'alert.signature_id').found;
   });
 }
+const HTTP_METHOD_NAMES=['method','request_method','http_method'];
+const HTTP_REQUEST_NAMES=['uri','url','request_uri','user_agent','useragent','status_code','referrer','referer'];
+/** The object that holds `source` is an HTTP request record: it names the method and the requested resource,
+ * the agent or the response status. Names are compared without regard to case. */
+function httpRequestRecord(fields:Record<string,unknown>,source:string):boolean{
+  const parent=source.includes('.')?source.slice(0,source.lastIndexOf('.')):'';
+  const container=objectAt(fields,parent)??fields;
+  const names=Object.keys(container).map(name=>name.toLowerCase());
+  return HTTP_METHOD_NAMES.some(name=>names.includes(name))&&HTTP_REQUEST_NAMES.some(name=>names.includes(name));
+}
 function incompatibleVendorMeaning(
   source:string,target:string,events:Record<string,unknown>[],
 ):boolean{
@@ -209,6 +219,10 @@ function incompatibleVendorMeaning(
   if(target==='srcport'&&leaf==='spt'&&events.some(fields=>
     lookupFieldValue(fields,source).found&&
     lookupFieldValue(fields,source.slice(0,source.lastIndexOf('.')+1)+'cpt').found))return true;
+  // An HTTP request record names the requested host `host` (the Host header: Zeek http.log, web access logs).
+  // That is the site the client asked for, not the host the record is about or the one that wrote it.
+  if(target==='hostname'&&leaf==='host'&&events.some(fields=>
+    lookupFieldValue(fields,source).found&&httpRequestRecord(fields,source)))return true;
   // RFC3164 PRI severity 0-7 is a Syslog facility code component, not
   // Stellar's 0-100 security severity score. Never silently relabel it.
   if(source.toLowerCase().endsWith('syslog.severity'))return true;

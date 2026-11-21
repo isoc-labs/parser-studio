@@ -211,3 +211,24 @@ describe('guards of the sparse rule that the re-audit found incomplete',()=>{
     expect(candidateRead('generic_structural','srcip',read,{generic:{kv:{note:'x'}}})?.confidence??'REVIEW').toBe('REVIEW');
   });
 });
+
+// Independent audit of 2026-11-21, seen outside the diff (same on main): Zeek http.log `host` is the HTTP Host header.
+describe('the requested host of an HTTP request record is not the official hostname',()=>{
+  const http=(overrides:Record<string,unknown>={})=>({ts:1763719200.1,uid:'CmES5u32sYpV7JYN','id.orig_h':'192.168.1.10',
+    'id.orig_p':51234,'id.resp_h':'93.184.216.34','id.resp_p':80,method:'GET',host:'example.com',uri:'/index.html',
+    user_agent:'curl/8.5.0',status_code:200,...overrides});
+  it('does not propose hostname for host beside a method and a resource, agent or status',()=>{
+    expect(candidate('hostname',http(),http({host:'example.org',uri:'/a'}))).toBeUndefined();
+    expect(candidate('hostname',{request_method:'POST',host:'shop.example.com',request_uri:'/cart'})).toBeUndefined();
+    expect(candidate('hostname',{Method:'GET',host:'example.com',URI:'/'})).toBeUndefined();
+    expect(candidate('hostname',{http:{method:'GET',host:'example.com',url:'/x'}})).toBeUndefined();
+  });
+  it('keeps hostname for the host that a record is about',()=>{
+    expect(candidate('hostname',{host:'fw01',msg:'link up'},{host:'fw02',msg:'link down'})).toMatchObject({source:'host',confidence:'HIGH'});
+    // A method alone, or a resource alone, does not make the record an HTTP request.
+    expect(candidate('hostname',{host:'fw01',method:'https'},{host:'fw02',method:'ssh'})).toMatchObject({confidence:'HIGH'});
+    expect(candidate('hostname',{host:'fw01',url:'/admin'},{host:'fw02',url:'/login'})).toMatchObject({confidence:'HIGH'});
+    // Another object of the same event may be an HTTP request; the host beside it is not.
+    expect(candidate('hostname',{host:'proxy01',request:{method:'GET',uri:'/'}})).toMatchObject({source:'host',confidence:'HIGH'});
+  });
+});
