@@ -32,6 +32,8 @@ export interface NormalizationCandidate {
 
 const ALIASES:Readonly<Record<string,string>>=semanticPolicy.normalizationAliases;
 const WHITESPACE_FREE_TARGETS=new Set(['srcport','dstport','srcip','dstip']);
+/** Official fields a sparse source may be approved for when the source is named exactly like the field. */
+const SPARSE_SAFE_TARGETS=new Set(['srcip','dstip','srcport','dstport','proto','proto_name','url']);
 /** The source key behind a Generic Structural `atoms.<key>_001` first piece. */
 function firstAtomKeyOf(source:string):string|undefined{
   return /^(?:.+\.)?atoms\.([A-Za-z0-9_]+)_001$/.exec(source)?.[1];
@@ -165,11 +167,14 @@ function incompatibleVendorMeaning(
       return value.found&&['TRAFFIC','THREAT','SYSTEM','CONFIG'].includes(String(value.value).toUpperCase());
     }))return true;
   // A zero-filled ICMP field on UDP or TCP is not evidence of ICMP semantics.
-  if(target==='icmp_type'&&leaf==='icmp-type')return events.some(fields=>{
+  // The Junos structured-data reader spells the names with underscores (icmp_type, protocol_id).
+  if(target==='icmp_type'&&(leaf==='icmp-type'||leaf==='icmp_type'))return events.some(fields=>{
     if(!lookupFieldValue(fields,source).found)return false;
     const prefix=source.slice(0,source.length-leaf.length);
-    const protocol=lookupFieldValue(fields,prefix+'protocol-id');
-    return protocol.found&&!['1','58'].includes(String(protocol.value));
+    return ['protocol-id','protocol_id'].some(name=>{
+      const protocol=lookupFieldValue(fields,prefix+name);
+      return protocol.found&&!['1','58'].includes(String(protocol.value));
+    });
   });
   return false;
 }
@@ -200,9 +205,17 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
   const leaf=atomKey===undefined?source.split('.').at(-1)??source:atomKey;
   const exact=findStellarMetadataField(source);
   const leafExact=findStellarMetadataField(leaf);
-  const target=exact?.mappable?source:
+  let target=exact?.mappable?source:
     leafExact?.mappable?leaf:
     ALIASES[source.toLowerCase()]??ALIASES[leaf.toLowerCase()];
+  // Stellar's proto is the IP protocol number and proto_name its name. A source field called proto whose
+  // usable values are all documented protocol names (tcp, udp, icmp, igmp) holds the name, not the number.
+  if(target==='proto'){
+    const observed=events.map(fields=>lookupFieldValue(fields,source))
+      .filter(result=>result.found&&!ignored(result.value));
+    if(observed.length>0&&observed.every(result=>result.found&&typeof result.value==='string'&&
+      DOCUMENTED_PROTO_NAMES.has(result.value.trim().toLowerCase())))target='proto_name';
+  }
   if(atomKey!==undefined&&target&&!WHITESPACE_FREE_TARGETS.has(target))return null;
   if(!target)return null;
   if((target==='srcport'||target==='dstport')&&sourceHasExcludedPortSegment(source))return null;
@@ -229,11 +242,17 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
     events.some(fields=>lookupFieldValue(fields,source).found&&
       unsupportedPortProtocolInEvent(fields,source));
   const method:NormalizationCandidate['method']=target===source?'EXACT_DICTIONARY_NAME':'DOCUMENTED_ALIAS';
-  // All event samples must contain this source and at least one usable value.
-  // A sparse heterogeneous sample or placeholders are not sufficient evidence
-  // for a bulk-approved official field mapping.
+  // A source needs at least one usable value, and every usable value must fit the target.
+  // It must also be present in every event: in a sample of several record families a name may belong to one
+  // family only, so a sparse source stays a "check first" proposal.
+  // The exception is a network endpoint or URL field (SPARSE_SAFE_TARGETS) whose source carries the official
+  // name itself, or a fully spelled port label: its value is checked by its form (address, port range,
+  // protocol), and the name leaves no other reading. Mixed samples (traffic, web filter and system records of
+  // one device) hold such a field in some events only; the mapping writes nothing for an event without it.
+  // Other official names (severity, type, icmp_type ...) differ between vendors and keep the full-coverage rule.
   const informative=informativeValues.length;
-  const high=compatibleObserved===informative&&values.length===events.length&&
+  const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&(leaf.toLowerCase()===target||explicitPort);
+  const high=compatibleObserved===informative&&(values.length===events.length||namedAsTarget)&&
     informative>0&&!nonTransportPort;
   // Auto-generated provenance is explicit; field names and IDs cannot prove
   // that a user has not edited a persisted mapping.
