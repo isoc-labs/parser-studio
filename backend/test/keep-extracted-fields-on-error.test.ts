@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
+import {diagnosticsOf} from './failure-record.js';
 import {compilePair} from '../src/compiler.js';
 import {sampleProject} from './fixture.js';
 
@@ -36,7 +37,8 @@ function run(p:ReturnType<typeof project>,line:string):Record<string,unknown>{
 
 test('a failing field cast keeps the other successfully extracted fields next to the diagnostics',
   {skip:!rubyAvailable},()=>{
-    const out=run(project(),JSON.stringify({username:'alice',value:65536,hostname:'fw01'}));
+    const line=JSON.stringify({username:'alice',value:65536,hostname:'fw01'});
+    const out=run(project(),line);
     assert.equal(out.parser_err_msg,'MappedFieldError');
     assert.equal(out.parser_err_stage,'normalization');
     assert.equal(out.parser_err_field,'value');
@@ -44,29 +46,47 @@ test('a failing field cast keeps the other successfully extracted fields next to
     assert.equal(out.username,'alice');
     assert.equal(out.host_name,'fw01');
     assert.ok(!('dstport' in out),'the field that failed is not emitted');
-    assert.ok(!JSON.stringify(out).includes('65536'),'the invalid value is not echoed');
+    assert.equal(out.parser_raw_msg,line,'the original text is kept whole');
+    assert.ok(!JSON.stringify(diagnosticsOf(out)).includes('65536'),'no other field echoes the invalid value');
   });
 
-test('diagnostic keys always win over extracted fields and no raw log text is copied',
+test('diagnostic keys always win over extracted fields and only parser_raw_msg holds the raw log text',
   {skip:!rubyAvailable},()=>{
     const line=JSON.stringify({username:'alice',value:65536,hostname:'fw01',unmapped:'DO_NOT_ECHO_PRIVATE'});
     const out=run(project(),line);
     assert.equal(out.parser_err_stage,'normalization');
-    assert.ok(!JSON.stringify(out).includes('DO_NOT_ECHO_PRIVATE'),'unmapped source data stays out');
-    assert.ok(!JSON.stringify(out).includes(line),'raw line is never copied');
+    assert.equal(out.parser_raw_msg,line,'the original text is kept whole');
+    assert.ok(!JSON.stringify(diagnosticsOf(out)).includes('DO_NOT_ECHO_PRIVATE'),'unmapped source data stays out of every other field');
+    assert.ok(!JSON.stringify(diagnosticsOf(out)).includes(line),'no other field repeats the raw line');
   });
 
-test('an extraction failure still emits diagnostics only',
+test('an extraction failure emits the diagnostics and the original text only',
   {skip:!rubyAvailable},()=>{
-    const out=run(project(),'this is not json DO_NOT_ECHO_PRIVATE');
+    const line='this is not json DO_NOT_ECHO_PRIVATE';
+    const out=run(project(),line);
     assert.equal(out.parser_err_stage,'extraction');
-    assert.deepEqual(Object.keys(out).sort(),['parser_err_msg','parser_err_stage','stellar_log_index']);
+    assert.equal(out.parser_raw_msg,line);
+    assert.deepEqual(Object.keys(out).sort(),['parser_err_msg','parser_err_stage','parser_raw_msg','stellar_log_index']);
   });
 
 test('a clean event is unchanged',
   {skip:!rubyAvailable},()=>{
     const out=run(project(),JSON.stringify({username:'alice',value:443,hostname:'fw01'}));
     assert.ok(!('parser_err_msg' in out));
+    assert.ok(!('parser_raw_msg' in out),'a parsed event carries no raw copy');
     assert.equal(out.dstport,443);
     assert.equal(out.username,'alice');
+  });
+
+test('a mapped parser_raw_msg never replaces the original text of a failed event',
+  {skip:!rubyAvailable},()=>{
+    const p=project();
+    p.normalization.topFields={
+      username:{normalized_name:'parser_raw_msg',data_type:'string'},
+      value:{normalized_name:'dstport',data_type:'integer'},
+    };
+    const line=JSON.stringify({username:'alice',value:65536});
+    const out=run(p,line);
+    assert.equal(out.parser_err_stage,'normalization');
+    assert.equal(out.parser_raw_msg,line);
   });

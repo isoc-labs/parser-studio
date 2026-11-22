@@ -8,6 +8,7 @@ import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import test from 'node:test';
+import {diagnosticsOf} from './failure-record.js';
 import {compilePair} from '../src/compiler.js';
 import {sampleProject} from './fixture.js';
 import {validateProject} from '../src/validate.js';
@@ -141,10 +142,12 @@ test('H3 generated native 8-grammar differential has exact typed, error-stage an
    assert.equal(bad.stellar_log_index,'syslog',item.format+' no false positive index');
    assert.equal(bad.action,item.expectedAction,item.format+' unrelated action preserved');
    assert.ok(!Object.hasOwn(bad,'srcip'),item.format+' invalid official IP leaked');
+   assert.equal(bad.parser_raw_msg,item.bad,item.format+' failed event keeps its original text');
+   assert.ok(!Object.hasOwn(good,'parser_raw_msg'),item.format+' parsed event carries no raw copy');
    for(const record of outputs){
-     const serialized=JSON.stringify(record);
+     const serialized=JSON.stringify(diagnosticsOf(record));
      for(const source of input)
-       assert.ok(!serialized.includes(source),item.format+' raw log leak');
+       assert.ok(!serialized.includes(source),item.format+' raw log leak outside parser_raw_msg');
    }
  }
 });

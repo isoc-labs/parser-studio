@@ -26,6 +26,13 @@ def parserstudio_wire_record(record, strict = true)
   output
 end
 
+# The original event as text for a record: UTF-8, and a byte sequence that is not valid
+# UTF-8 replaced by U+FFFD so that the record can always be serialized.
+def parserstudio_raw_text(text)
+  raw = text.to_s.dup.force_encoding('UTF-8')
+  raw.valid_encoding? ? raw : raw.scrub
+end
+
 class ParserstudioFieldError < StandardError
   attr_reader :field
   def initialize(field)
@@ -71,12 +78,16 @@ def parse(text)
   rescue StandardError => e
     # Diagnostics are static codes and schema-controlled field paths. Fields that
     # were already mapped and validated before the failure stay next to them; the
-    # field that failed, unmapped source data, raw log text and exception messages
-    # are never copied.
+    # field that failed and exception messages are not copied.
+    # An event that could not be parsed is never lost (owner decision 2026-11-22): the
+    # record carries the original text in parser_raw_msg, the field of the Stellar Cyber
+    # dictionary for the raw message of a parsing error, as the installed reference
+    # parsers write it.
     diagnostic = {
       'stellar_log_index' => 'syslog',
       'parser_err_msg' => e.is_a?(ParserstudioFieldError) ? 'MappedFieldError' : e.class.name,
-      'parser_err_stage' => current_stage
+      'parser_err_stage' => current_stage,
+      'parser_raw_msg' => parserstudio_raw_text(text)
     }
     diagnostic['parser_err_field'] = e.field if e.is_a?(ParserstudioFieldError)
     kept = @parserstudio_partial.is_a?(Hash) ? @parserstudio_partial : {}

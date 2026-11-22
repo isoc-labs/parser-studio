@@ -754,8 +754,8 @@ export default function AutoParser({
        {parserSetOrigin.sourceCount-parserSetOrigin.groupCount===1?' is':' are'} not parsed by this parser:
        {' '}{describeExcluded(parserSetOrigin.excluded)}. They are not shown as parsed. When the generated parser
        receives such an event it extracts nothing and invents nothing: it marks the event as not parsed
-       (parser_err_msg), and the receiver is expected to keep it as an unparsed raw log. That hand-over is
-       NOT VERIFIED on a Stellar Cyber system. For a parser that reads these events, use ChatGPT Assisted Parser.</p>
+       (parser_err_msg) and keeps its complete original text in parser_raw_msg, so the event is not dropped.
+       For a parser that reads these events, use ChatGPT Assisted Parser.</p>
      <button type="button" onClick={restoreParserSetSource}>
        Return to all {parserSetOrigin.sourceCount} logs
      </button>

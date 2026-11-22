@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
+import {diagnosticsOf} from './failure-record.js';
 import {compilePair} from '../src/compiler.js';
 import {validateBoundedRegexPattern,validateProject} from '../src/validate.js';
 import {sampleProject} from './fixture.js';
@@ -49,7 +50,7 @@ for(const family of [false,true]){
    const ambiguous=native('source.ip','srcip','ip',{'source.ip':'203.0.113.47',source:{ip:'192.0.2.19'}},family);
    assert.equal(ambiguous.parser_err_stage,'normalization');
    assert.ok(!('srcip' in ambiguous));
-   assert.ok(!JSON.stringify(ambiguous).includes('203.0.113.47'));
+   assert.ok(!JSON.stringify(diagnosticsOf(ambiguous)).includes('203.0.113.47'));
    const flat=native('source.ip','srcip','ip',{'source.ip':'203.0.113.47'},family);
    assert.equal(flat.srcip,'203.0.113.47');
    const nested=native('source.ip','srcip','ip',{source:{ip:'192.0.2.19'}},family);

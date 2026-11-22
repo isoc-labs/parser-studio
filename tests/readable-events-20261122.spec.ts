@@ -22,6 +22,7 @@ test('events that cannot be read do not stop the parser for the events that can'
   await offer.getByRole('button',{name:'Continue with readable events'}).click();
   const context=page.getByLabel('Events not covered by this parser');
   await expect(context).toContainText('This parser covers 3 of your 5 events');
+  await expect(context).toContainText('keeps its complete original text in parser_raw_msg');
   await expect(context).toContainText('1 × unrecognized format');
   await expect(page.getByLabel('Auto Parser raw logs')).toHaveValue([KV(1),KV(2),KV(3)].join('\n'));
   await expect(page.getByLabel('Beginner analysis summary'))

@@ -79,9 +79,41 @@ that can.
 
 ### What is not established
 
-- An error record carries `parser_err_msg` and no raw text (owner decision D-4). That the receiver then keeps
-  the event as an unparsed raw log is known from the source of the patched Fluentd inputs only; it is NOT
-  VERIFIED on a Stellar Cyber system. The notice in the UI says so.
-- A partly read event (PARTIAL) is treated like an unread one at run time: its extracted fields are not kept.
-  Keeping them, or copying the original text into the record, conflicts with D-4 and needs an owner decision.
+- An error record carries `parser_err_msg` and, since the owner decision of 2026-11-22 22:05 KST, the complete
+  original text of the event in `parser_raw_msg` (next section). What a Stellar Cyber system does with such a
+  record is outside the product scope and is not tested here.
+- An event that is not read completely is not a parsed event at run time: none of its fields is emitted, only
+  the failure record with the original text (next section).
 - PAN-OS mixed with CEF (audit F-02 / G-09) was not changed in these commits.
+
+### Failure records keep the original text (owner decision of 2026-11-22 22:05 KST)
+
+The owner removed the part of decision D-4 that kept raw log text out of the output of a generated parser. A
+generated parser now writes the complete original text of every event it cannot hand over as parsed into
+`parser_raw_msg`, the Stellar Cyber 7.0 dictionary field for the raw message of a parsing error, which the
+installed reference parsers write as well (`contracts/stellar-custom-parser-structure.v1.json`,
+INFO-ERROR-RECORD-SHAPE). `parser_err_msg` (the class of the error), `parser_err_stage` and, for a mapping
+failure, `parser_err_field` are unchanged, and fields that were mapped and validated before a later failure
+stay in the record as before. A parsed event carries no `parser_raw_msg`. A byte sequence that is not valid
+UTF-8 is replaced by U+FFFD in that field so that the record can always be serialized; this is the one case
+in which the field is not identical to the input.
+
+Evidence (native Ruby tests of the backend suite): `backend/test/failure-record-keeps-raw-native-20261122.test.ts`
+(key=value, JSON, CEF, LEEF; three lines in, three records out) and the tests of the earlier rule, which now
+require the original text in `parser_raw_msg` and in no other field of the record.
+
+What the shared grammar does with a damaged event (readEvent, measured on 2026-11-22):
+
+| Event | Verdict | Fields |
+|---|---|---|
+| `user=bob stray words here port=22` (key=value) | UNKNOWN | none |
+| `user=bob action=allow action=deny port=22` (duplicate key) | UNKNOWN | none |
+| `user=bob msg="open quote port=22` | UNKNOWN | none |
+| `{"a":1} trailing` (JSON) | UNKNOWN | none |
+
+The grammar is all-or-nothing. PARTIAL is the verdict of the loss guard on a reading that leaves text
+unaccounted for, so the field values of such a reading are in doubt. For both, the run-time result is the
+failure record with the complete original text: no event is lost and no doubtful value is emitted, but the
+cleanly written pairs of a damaged event are not available as fields. Emitting them needs a tolerant reading
+in the shared grammar (browser, Python, Ruby), and a rule for which pairs are safe when free text follows a
+value (`msg=hello world port=22`: is `world` part of the value?). NOT IMPLEMENTED.

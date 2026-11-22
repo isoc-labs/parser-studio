@@ -4,9 +4,9 @@
  *
  * Every event has its own verdict. A parser is created for the events whose verdict is FULL; the others are
  * named with their kind and their number and never shown as parsed. At run time the generated parser marks
- * such an event as not parsed (parser_err_msg, backend/templates/canonical-operators.rb.tpl) and copies neither
- * fields nor raw text; the receiver is expected to report it as an unparsed raw log (source reading of the
- * patched Fluentd inputs, not verified on a Stellar Cyber system).
+ * such an event as not parsed (parser_err_msg, backend/templates/canonical-operators.rb.tpl) and keeps its
+ * complete original text in parser_raw_msg, the Stellar Cyber 7.0 dictionary field for the raw message of a
+ * parsing error (owner decision of 2026-11-22), so the parser never drops the event.
  */
 import type {SuiteResult} from '../model';
 import {splitEvents,MAX_EVENTS} from '../parser';
