@@ -84,7 +84,7 @@ that can.
   record is outside the product scope and is not tested here.
 - An event that is not read completely is not a parsed event at run time: none of its fields is emitted, only
   the failure record with the original text (next section).
-- PAN-OS mixed with CEF (audit F-02 / G-09) was not changed in these commits.
+- PAN-OS mixed with CEF (audit F-02 / G-09): see "Per-family mappings" below.
 
 ### Failure records keep the original text (owner decision of 2026-11-22 22:05 KST)
 
@@ -145,3 +145,43 @@ Measured (SYNTHETIC lines after the documented order; real Multi-Pass witness; a
 
 Not established: PAN-OS releases whose THREAT or SYSTEM layout differs inside the named prefix; no vendor
 original record was available.
+
+### Per-family mappings (audit G-09, 2026-11-23)
+
+Cause: PAN-OS reads the source address as `generic.fields.src`, CEF as `body.src`. Both are plausible sources of
+Stellar `srcip`; the candidate engine correctly refuses to choose one (REVIEW), and one shared mapping cannot hold
+two sources, so neither family got the official field.
+
+Change: the automatic Generic Structural draft groups the events by the reading mode the grammar records for
+every event (`generic.mode`), decides the official candidates inside each group, and gives each family its own
+mappings through the existing reviewed event-profile contract. No backend contract changed: the browser preview,
+backend adapter, backend validation and generated Ruby already implement event profiles (one destination at most
+once per event; different families may reuse it). A mapping decided the same way for every family stays shared.
+The routed draft is used only when it maps strictly more official values than the shared draft, and never for an
+explicit profile combination (its recipe has no family routing). Two contract mismatches surfaced and were fixed
+to the backend rule: the UI contract required a shared mapping, and the preview warned NO_MAPPINGS for an event
+whose mappings are family-specific.
+
+An event of a family that was not in the sample is not parsed with the mappings of another family: the preview
+reports UNRECOGNIZED_EVENT_FAMILY, the generated parser emits a failure record with the original text in
+`parser_raw_msg`. The other events are not affected.
+
+Measured (SYNTHETIC PAN-OS TRAFFIC and CEF lines; Ruby 2.4.9 via the E2E runner, fragment compiled by the backend):
+
+| Event | Browser preview | Generated Ruby |
+|---|---|---|
+| PAN-OS TRAFFIC | srcip, dstip, srcport, dstport, action, hostname, proto_name | identical |
+| JSON in Syslog (family not in the sample) | UNRECOGNIZED_EVENT_FAMILY | failure record, `parser_raw_msg` = original line |
+| CEF | srcip, dstip, srcport, dstport | identical |
+| second PAN-OS TRAFFIC | its own values | identical |
+
+4 lines in, 4 records out. Reversed and interleaved orders give the same per-event result (unit tests).
+
+### Stellar `direction` (audit, 2026-11-23)
+
+The 7.0 dictionary defines `direction` as "The direction of the maltrace event" - a Stellar detection attribute.
+PAN-OS `direction` is the direction of the threat (client-to-server, server-to-client); FortiOS uses the name for
+traffic direction. The name alone therefore never maps it: the candidate engine treats `direction` like
+`event_type` (REVIEW, vendor field kept). Before this change the public PAN-OS THREAT sample mapped it.
+`action` keeps its existing rule (security dispositions only; a THREAT `alert` stays a vendor field) and
+`proto_name` holds the protocol name the record carries.

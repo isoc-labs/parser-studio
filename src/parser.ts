@@ -482,7 +482,7 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
   if (unmapped.length) diagnostics.push({ stage: 'normalize', severity: 'warning', code: 'UNMAPPED_FIELDS', message: unmapped.length + ' source fields remain available without mappings' });
   const hasErrors = diagnostics.some((issue) => issue.severity === 'error');
   const normalizedOk = matched && Object.keys(normalized).length > 0 && !hasErrors;
-  if (matched && !draft.mappings.length) {
+  if (matched && !draft.mappings.length && !family.profile?.mappings.length) {
     diagnostics.push({ stage: 'normalize', severity: 'warning', code: 'NO_MAPPINGS', message: 'No output mapping has been defined' });
   }
   trace.push({ stage: 'Normalization', detail: Object.keys(normalized).length + ' mapped fields', ok: normalizedOk });

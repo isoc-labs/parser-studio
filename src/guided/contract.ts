@@ -212,7 +212,9 @@ export function compilerDraftContract(draft: ParserDraft): ContractResult {
         (options.groups[mapping.id] ?? 'vendor_fields') === 'vendor_fields')));
   if (vendorOutputs && RESERVED_OUTPUT_ROOTS.has(draft.vendor.trim()))
     errors.push('Manufacturer conflicts with a reserved parser output namespace.');
-  if (!draft.mappings.length) errors.push('Map at least one extracted field');
+  // Mirrors backend validation: with event profiles, the family-specific mappings may be the only ones.
+  if (!draft.mappings.length && !draft.eventProfiles?.variants.some((variant) => variant.mappings.length > 0))
+    errors.push('Map at least one extracted field');
   const targets = new Set<string>();
   const normalization: PairProjectContract['normalization'] = { top_fields: [], ns_fields: [], vendor_fields: [] };
   const supportedTypes: FieldType[] = ['string', 'integer', 'timestamp', 'ip', 'port', 'boolean'];

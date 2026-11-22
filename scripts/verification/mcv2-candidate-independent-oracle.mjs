@@ -60,6 +60,9 @@ absent({nat_source:{'source-port':443}},'nat_source.source-port');
 absent({translated_source:{'source-port':443}},'translated_source.source-port');
 absent({event_type:'alert'},'event_type');
 absent({duration:2000},'duration');
+// Stellar direction is the direction of a maltrace event; a vendor direction field is not that (2026-11-23).
+absent({direction:'client-to-server'},'direction');
+absent({generic:{fields:{direction:'server-to-client',src:'10.0.0.1'}}},'generic.fields.direction');
 absent({action:'admin-login'},'action');
 absent({syslog:{severity:4}},'syslog.severity');
 absent({unknown_vendor_field:42},'unknown_vendor_field');

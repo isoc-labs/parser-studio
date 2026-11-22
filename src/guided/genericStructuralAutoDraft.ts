@@ -2,11 +2,12 @@ import type {MappingRule,ParserDraft,SuiteResult} from '../model';
 import {MAX_EVENTS,preview,splitEvents} from '../parser';
 import {extractGenericStructural,type GenericStructuralProfile} from '../genericStructural';
 import {GENERIC_STRUCTURAL_PROFILES,GENERIC_STRUCTURAL_MIXED_PROFILE_V1} from '../genericStructuralProfiles';
-import {listSafeLeafPaths} from '../fieldPaths';
+import {listSafeLeafPaths,lookupFieldValue} from '../fieldPaths';
 import {defaultGuidedOptions,type FieldGroup} from './contract';
 import {suggestNormalizationCandidatesFromSuite} from './normalizationCandidates';
 import {originalContainerCompilerGate} from './sourceContainerCompilerGate';
 import {vendorFieldNames} from './vendorFieldNames';
+import {validateEventProfiles,type EventProfile} from './multiEventRouting';
 import type {MultiPassSourcePreview} from './multipassPreviewClient';
 
 const MAX_EXPLICIT_MAPPINGS=100;
@@ -122,8 +123,117 @@ export function buildAutomaticGenericStructuralDraft(
      candidateSuite.counts.extracted!==candidateSuite.counts.total||
      candidateSuite.counts.failures!==0)return null;
 
+  // An explicit profile combination keeps one reviewed mapping set: its recipe has no event-family routing.
+  const routed=discovery.profile?null:familyRoutedDraft(source,candidate,candidateSuite);
+  if(routed)return {draft:routed.draft,suite:routed.suite,automaticOfficialMappings:routed.official};
   return {draft:candidate,suite:candidateSuite,
     automaticOfficialMappings:suggestions.length};
+}
+
+
+/**
+ * Event families of one sample that read the same Stellar meaning from different source paths (audit G-09:
+ * PAN-OS generic.fields.src beside CEF body.src). One shared mapping per destination cannot serve both, and the
+ * candidate engine rightly refuses to pick one of two plausible sources, so neither family got the official
+ * field. Here the events are grouped by the reading mode the grammar records for every event (generic.mode),
+ * the official candidates are decided inside each group, and each family gets its own mappings through the
+ * reviewed event-profile contract (one destination at most once per event, different families may reuse it).
+ * A mapping whose decision is the same for every family stays shared. An event of a family that was not in the
+ * sample is not parsed with the mappings of another family: the event-profile contract reports it
+ * (UNRECOGNIZED_EVENT_FAMILY), and the generated parser keeps its original text in parser_raw_msg.
+ * The routed draft is used only when it maps strictly more official values than the shared draft.
+ */
+const FAMILY_DISCRIMINATOR='generic.mode';
+const FAMILY_NAME=/^[a-z][a-z0-9_-]{0,31}$/u;
+type Decision={target:string;type:MappingRule['type'];group:FieldGroup};
+
+function officialValues(suite:SuiteResult,vendor:string):number{
+  let count=0;
+  for(const event of suite.events){
+    const out=(event.normalized??{}) as Record<string,unknown>;
+    for(const key of Object.keys(out))
+      if(!key.startsWith('parserstudio_')&&key!==vendor)count++;
+  }
+  return count;
+}
+
+function familyRoutedDraft(
+  source:string,candidate:ParserDraft,suite:SuiteResult,
+):{draft:ParserDraft;suite:SuiteResult;official:number}|null{
+  const families=new Map<string,number[]>();
+  for(const [index,event] of suite.events.entries()){
+    const mode=lookupFieldValue(event.fields,FAMILY_DISCRIMINATOR);
+    if(!mode.found||typeof mode.value!=='string'||!FAMILY_NAME.test(mode.value))return null;
+    families.set(mode.value,[...(families.get(mode.value)??[]),index]);
+  }
+  if(families.size<2||families.size>16)return null;
+  const names=[...families.keys()].sort();
+  const vendorMappings=new Map(candidate.mappings.map(mapping=>[mapping.source,mapping]));
+  const decisions=new Map<string,Map<string,Decision|null>>();
+  for(const name of names){
+    const events=families.get(name)!.map(index=>suite.events[index]!);
+    const present=new Set(events.flatMap(event=>listSafeLeafPaths(event.fields)));
+    const decided=new Map<string,Decision|null>();
+    for(const mapping of candidate.mappings)if(present.has(mapping.source))decided.set(mapping.source,null);
+    const high=suggestNormalizationCandidatesFromSuite({...suite,events},
+      candidate.mappings.map(mapping=>vendorMappings.get(mapping.source)!),{}).filter(item=>item.confidence==='HIGH');
+    for(const item of high)if(decided.has(item.source))
+      decided.set(item.source,{target:item.target,type:item.type,group:item.group});
+    decisions.set(name,decided);
+  }
+  const same=(a:Decision|null|undefined,b:Decision|null|undefined)=>
+    (a??null)===null?(b??null)===null:!!b&&a!.target===b.target&&a!.type===b.type&&a!.group===b.group;
+  const apply=(mapping:MappingRule,decision:Decision|null,id:string):[MappingRule,FieldGroup]=>decision
+    ?[{...mapping,id,target:decision.target,type:decision.type},decision.group]
+    :[{...mapping,id},'vendor_fields'];
+  const groups:Record<string,FieldGroup>={};
+  const shared:MappingRule[]=[];
+  const local=new Set<string>();
+  for(const mapping of candidate.mappings){
+    const perFamily=names.map(name=>decisions.get(name)!);
+    const everywhere=perFamily.every(decided=>decided.has(mapping.source));
+    const first=perFamily[0]!.get(mapping.source);
+    if(everywhere&&perFamily.every(decided=>same(decided.get(mapping.source),first))){
+      const [rule,group]=apply(mapping,first??null,mapping.id);
+      shared.push(rule);groups[rule.id]=group;
+    }else local.add(mapping.source);
+  }
+  const variants:EventProfile[]=names.map((name,index)=>{
+    const decided=decisions.get(name)!;
+    const mappings:MappingRule[]=[];
+    let n=0;
+    for(const mapping of candidate.mappings){
+      if(!local.has(mapping.source)||!decided.has(mapping.source))continue;
+      const [rule,group]=apply(mapping,decided.get(mapping.source)??null,'family-'+String(index)+'-'+String(n++));
+      mappings.push(rule);groups[rule.id]=group;
+    }
+    return {name,equals:name,mappings};
+  });
+  if(!variants.some(variant=>variant.mappings.length>0))return null;
+  const eventProfiles={discriminator:FAMILY_DISCRIMINATOR,unknown:'reject' as const,variants};
+  if(validateEventProfiles(eventProfiles)!==null)return null;
+  // One destination at most once per event: the shared outputs and the outputs of one family.
+  const output=(rule:MappingRule)=>(groups[rule.id]==='vendor_fields'?'\u0000vendor.':'')+rule.target;
+  const overlaps=(a:string,b:string)=>a===b||a.startsWith(b+'.')||b.startsWith(a+'.');
+  for(const variant of variants){
+    const seen:string[]=[];
+    for(const rule of [...shared,...variant.mappings]){
+      const out=output(rule);
+      if(seen.some(other=>overlaps(other,out)))return null;
+      seen.push(out);
+    }
+  }
+  const routed:ParserDraft={...candidate,mappings:shared,eventProfiles,
+    guided:{...candidate.guided!,groups}};
+  const routedSuite=preview(source,routed);
+  if(routedSuite.counts.total!==suite.counts.total||routedSuite.counts.matched!==routedSuite.counts.total||
+     routedSuite.counts.extracted!==routedSuite.counts.total||routedSuite.counts.normalized!==routedSuite.counts.total||
+     routedSuite.counts.failures!==0)return null;
+  const vendor=candidate.vendor.trim();
+  if(officialValues(routedSuite,vendor)<=officialValues(suite,vendor))return null;
+  const official=[...shared,...variants.flatMap(variant=>variant.mappings)]
+    .filter(rule=>groups[rule.id]!=='vendor_fields').length;
+  return {draft:routed,suite:routedSuite,official};
 }
 
 export interface GenericStructuralSourceReview {

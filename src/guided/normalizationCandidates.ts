@@ -306,6 +306,10 @@ function incompatibleVendorMeaning(
   // event_type is an ML-job event type in the 7.0 dictionary, not the
   // manufacturer's record family (Suricata alert, Okta session, etc.).
   if(target==='event_type')return true;
+  // direction is "the direction of the maltrace event" in the 7.0 dictionary: a Stellar detection attribute.
+  // A vendor field of the same name (PAN-OS client-to-server / server-to-client, FortiOS inbound / outbound)
+  // describes the traffic or the attack in the vendor's terms, so the name alone never maps it.
+  if(target==='direction')return true;
   if(target==='type'&&(!events.every(windowsAgentEvidence)||source!=='type'))return true;
   // Vendor traffic durations commonly use seconds or unspecified units.
   // Do not emit the official milliseconds field without explicit ms evidence.
