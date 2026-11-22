@@ -172,7 +172,7 @@ export function buildSourceReviewedGenericStructuralDraft(
 }
 
 /** Readings that name the columns of a positional record from a verified record layout. */
-const NAMED_POSITIONAL_MODES:readonly string[]=['panos_traffic_csv'];
+const NAMED_POSITIONAL_MODES:readonly string[]=['panos_traffic_csv','panos_threat_csv','panos_system_csv'];
 
 /**
  * Readings that keep the cells of a delimited record and take the name of every cell from the record itself

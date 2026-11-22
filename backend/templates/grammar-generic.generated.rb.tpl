@@ -19,6 +19,16 @@ def psg_k_month_days
   @psg_k_month_days ||= {'Jan' => 31, 'Feb' => 29, 'Mar' => 31, 'Apr' => 30, 'May' => 31, 'Jun' => 30, 'Jul' => 31, 'Aug' => 31, 'Sep' => 30, 'Oct' => 31, 'Nov' => 30, 'Dec' => 31}
 end
 
+# src/genericStructural.ts: PANOS_SYSTEM
+def psg_k_panos_system
+  @psg_k_panos_system ||= ['domain', 'receive_time', 'serial', 'type', 'subtype', 'config_version', 'time_generated', 'vsys', 'eventid', 'object', 'column_10', 'column_11', 'module', 'severity', 'opaque', 'seqno', 'actionflags', 'dg_hier_level_1', 'dg_hier_level_2', 'dg_hier_level_3', 'dg_hier_level_4', 'vsys_name', 'device_name', 'column_23', 'column_24', 'high_res_timestamp']
+end
+
+# src/genericStructural.ts: PANOS_THREAT
+def psg_k_panos_threat
+  @psg_k_panos_threat ||= ['domain', 'receive_time', 'serial', 'type', 'subtype', 'config_version', 'time_generated', 'src', 'dst', 'natsrc', 'natdst', 'rule', 'srcuser', 'dstuser', 'app', 'vsys', 'from', 'to', 'inbound_if', 'outbound_if', 'logset', 'time_received', 'sessionid', 'repeatcnt', 'sport', 'dport', 'natsport', 'natdport', 'flags', 'protocol', 'action', 'misc', 'threatid', 'category', 'severity', 'direction', 'seqno', 'actionflags', 'srcloc', 'dstloc', 'column_40', 'contenttype', 'pcap_id', 'filedigest', 'cloud', 'url_idx', 'user_agent', 'filetype', 'xff', 'referer', 'sender', 'subject', 'recipient', 'reportid', 'dg_hier_level_1', 'dg_hier_level_2', 'dg_hier_level_3', 'dg_hier_level_4', 'vsys_name', 'device_name']
+end
+
 # src/genericStructural.ts: PANOS_TRAFFIC_53
 def psg_k_panos_traffic_53
   @psg_k_panos_traffic_53 ||= ['domain', 'receive_time', 'serial', 'type', 'subtype', 'config_version', 'time_generated', 'src', 'dst', 'natsrc', 'natdst', 'rule', 'srcuser', 'dstuser', 'app', 'vsys', 'from', 'to', 'inbound_if', 'outbound_if', 'logset', 'time_received', 'sessionid', 'repeatcnt', 'sport', 'dport', 'natsport', 'natdport', 'flags', 'protocol', 'action', 'bytes', 'bytes_sent', 'bytes_received', 'packets', 'start_time', 'elapsed', 'category', 'seqno', 'actionflags', 'srcloc', 'dstloc', 'cpadding', 'pkts_sent', 'pkts_received', 'session_end_reason', 'dg_hier_level_1', 'dg_hier_level_2', 'dg_hier_level_3', 'dg_hier_level_4', 'vsys_name', 'device_name', 'action_source']
@@ -919,6 +929,25 @@ def psg_looks_like_malformed_timestamp(rest)
   return ((/\A[A-Z][a-z]{2} +[0-9]{1,2} +/.match?(rest) || /\A[0-9]{4}[\-\/:][0-9]{2}[\-\/:][0-9]{2}/.match?(rest)) || /\A[0-9]{1,3} +[0-9]{4}-[0-9]{2}-[0-9]{2}T/.match?(rest))
 end
 
+# src/genericStructural.ts: panosNamedFields
+def psg_panos_named_fields(values)
+  return (psg_null?(psg_t1 = (psg_null?(psg_t2 = psg_panos_traffic_fields(values)) ? psg_panos_threat_fields(values) : psg_t2)) ? psg_panos_system_fields(values) : psg_t1)
+end
+
+# src/genericStructural.ts: panosNamedMode
+def psg_panos_named_mode(values)
+  if psg_t(psg_panos_traffic_fields(values))
+    return 'panos_traffic_csv'
+  end
+  if psg_t(psg_panos_threat_fields(values))
+    return 'panos_threat_csv'
+  end
+  if psg_t(psg_panos_system_fields(values))
+    return 'panos_system_csv'
+  end
+  return :psg_null
+end
+
 # src/genericStructural.ts: panosPositionalCsvBody
 def psg_panos_positional_csv_body(text)
   values = received = columns = nil
@@ -945,6 +974,53 @@ def psg_panos_positional_csv_body(text)
   nil
 })
   return columns
+end
+
+# src/genericStructural.ts: panosSystemFields
+def psg_panos_system_fields(values)
+  datetime = fields = nil
+  if ((values.length < 15) || (values[3] != 'SYSTEM'))
+    return :psg_null
+  end
+  datetime = /\A[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\z/
+  if (((!datetime.match?((psg_null?(psg_t1 = values[1]) ? '' : psg_t1)) || !datetime.match?((psg_null?(psg_t2 = values[6]) ? '' : psg_t2))) || !/\A[A-Za-z0-9_.\-]{1,64}\z/.match?((psg_null?(psg_t3 = values[8]) ? '' : psg_t3))) || !/\A(?:informational|low|medium|high|critical)\z/.match?((psg_null?(psg_t4 = values[13]) ? '' : psg_t4)))
+    return :psg_null
+  end
+  fields = {}
+  psg_for_each(values, lambda { |value, index|
+  fields[(psg_null?(psg_t5 = psg_at(psg_k_panos_system, index)) ? ('column_' + psg_str(index)) : psg_t5)] = value
+  nil
+})
+  return fields
+end
+
+# src/genericStructural.ts: panosThreatFields
+def psg_panos_threat_fields(values)
+  datetime = ip = validIp = value = fields = nil
+  if ((values.length < 42) || (values[3] != 'THREAT'))
+    return :psg_null
+  end
+  datetime = /\A[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\z/
+  ip = /\A(?:[0-9]{1,3}\.){3}[0-9]{1,3}\z/
+  validIp = lambda { |value_2| (ip.match?(value_2) && psg_every(psg_split(value_2, '.'), lambda { |part| (psg_num(part) <= 255) })) }
+  if ((((((!datetime.match?((psg_null?(psg_t1 = values[1]) ? '' : psg_t1)) || !datetime.match?((psg_null?(psg_t2 = values[6]) ? '' : psg_t2))) || !datetime.match?((psg_null?(psg_t3 = values[21]) ? '' : psg_t3))) || !validIp.call((psg_null?(psg_t4 = values[7]) ? '' : psg_t4))) || !validIp.call((psg_null?(psg_t5 = values[8]) ? '' : psg_t5))) || !validIp.call((psg_null?(psg_t6 = values[9]) ? '' : psg_t6))) || !validIp.call((psg_null?(psg_t7 = values[10]) ? '' : psg_t7)))
+    return :psg_null
+  end
+  [24, 25, 26, 27].each do |index|
+    value = (psg_null?(psg_t8 = psg_at(values, index)) ? '' : psg_t8)
+    if (!/\A[0-9]{1,5}\z/.match?(value) || (psg_num(value) > 65535))
+      return :psg_null
+    end
+  end
+  if (((!/\A[A-Za-z0-9_.\-]{1,24}\z/.match?((psg_null?(psg_t9 = values[29]) ? '' : psg_t9)) || !/\A[A-Za-z0-9_. \-]{1,64}\z/.match?((psg_null?(psg_t10 = values[30]) ? '' : psg_t10))) || !/\A(?:informational|low|medium|high|critical)\z/.match?((psg_null?(psg_t11 = values[34]) ? '' : psg_t11))) || !/\A(?:client-to-server|server-to-client|0|1)\z/.match?((psg_null?(psg_t12 = values[35]) ? '' : psg_t12)))
+    return :psg_null
+  end
+  fields = {}
+  psg_for_each(values, lambda { |value_3, index_2|
+  fields[(psg_null?(psg_t13 = psg_at(psg_k_panos_threat, index_2)) ? ('column_' + psg_str(index_2)) : psg_t13)] = value_3
+  nil
+})
+  return fields
 end
 
 # src/genericStructural.ts: panosTrafficFields
@@ -1248,7 +1324,7 @@ end
 
 # src/genericStructural.ts: rfc3164PositionalCsv
 def psg_rfc3164_positional_csv(raw)
-  head = body = values = panosLike = ip = ips = securityCategory = panos = columns = syslog = nil
+  head = body = values = panosLike = ip = ips = securityCategory = panos = panosMode = columns = syslog = nil
   if (raw.bytesize > 8192)
     return :psg_null
   end
@@ -1277,7 +1353,8 @@ def psg_rfc3164_positional_csv(raw)
   if ((ips < 2) || !securityCategory)
     return :psg_null
   end
-  panos = psg_panos_traffic_fields(values)
+  panos = psg_panos_named_fields(values)
+  panosMode = psg_panos_named_mode(values)
   columns = {}
   psg_for_each(values, lambda { |value_3, index|
   columns[('column_' + psg_str(index))] = value_3
@@ -1287,7 +1364,7 @@ def psg_rfc3164_positional_csv(raw)
   if !head[1].nil?
     syslog['pri'] = head[1]
   end
-  return psg_with_body_text({'syslog' => syslog, 'generic' => (psg_t(panos) ? {'mode' => 'panos_traffic_csv', 'delimiter' => ',', 'source_raw' => raw, 'fields' => panos} : {'mode' => 'rfc3164_positional_csv', 'delimiter' => ',', 'source_raw' => raw, 'columns' => columns})}, 'positional_csv', body)
+  return psg_with_body_text({'syslog' => syslog, 'generic' => (psg_t(panos) ? {'mode' => panosMode, 'delimiter' => ',', 'source_raw' => raw, 'fields' => panos} : {'mode' => 'rfc3164_positional_csv', 'delimiter' => ',', 'source_raw' => raw, 'columns' => columns})}, 'positional_csv', body)
 end
 
 # src/genericStructural.ts: scanProfileTokens
@@ -1648,7 +1725,7 @@ end
 
 # src/genericStructural.ts: syslogEnvelopeStructuredFallback
 def psg_syslog_envelope_structured_fallback(raw)
-  envelope = syslog = message = parsed = vendorSyslog = juniper = bracket = watchguard = parsed_2 = parsed_3 = json = panosValues = panosLike = panos = named = positional = comma = spaced = nil
+  envelope = syslog = message = parsed = vendorSyslog = juniper = bracket = watchguard = parsed_2 = parsed_3 = json = panosValues = panosLike = panos = named = namedMode = positional = comma = spaced = nil
   envelope = psg_parse_syslog_envelope(raw)
   if (!psg_t(envelope) || (envelope['variant'] == 'colon_date'))
     return :psg_null
@@ -1715,8 +1792,9 @@ def psg_syslog_envelope_structured_fallback(raw)
   panosLike = (((((!!psg_t(panosValues) && (panosValues.length >= 7)) && /\A[0-9]{0,10}\z/.match?((psg_null?(psg_t2 = panosValues[0]) ? '' : psg_t2))) && /\A[0-9]{4}\/[0-9]{2}\/[0-9]{2} +[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?\z/.match?((psg_null?(psg_t3 = panosValues[1]) ? '' : psg_t3))) && /\A[A-Za-z0-9_.:\-]{4,64}\z/.match?((psg_null?(psg_t4 = panosValues[2]) ? '' : psg_t4))) && /\A[A-Z][A-Z0-9_]{2,31}\z/.match?((psg_null?(psg_t5 = panosValues[3]) ? '' : psg_t5)))
   panos = psg_panos_positional_csv_body(message)
   if psg_t(panos)
-    named = (psg_t(panosValues) ? psg_panos_traffic_fields(panosValues) : :psg_null)
-    return psg_with_body_text({'syslog' => syslog, 'generic' => (psg_t(named) ? {'mode' => 'panos_traffic_csv', 'profile' => 'panos', 'delimiter' => ',', 'source_raw' => raw, 'message_raw' => message, 'fields' => named} : {'mode' => 'syslog_envelope_positional_csv', 'profile' => 'panos', 'delimiter' => ',', 'source_raw' => raw, 'message_raw' => message, 'columns' => panos})}, 'positional_csv', message)
+    named = (psg_t(panosValues) ? psg_panos_named_fields(panosValues) : :psg_null)
+    namedMode = (psg_t(panosValues) ? psg_panos_named_mode(panosValues) : :psg_null)
+    return psg_with_body_text({'syslog' => syslog, 'generic' => (psg_t(named) ? {'mode' => namedMode, 'profile' => 'panos', 'delimiter' => ',', 'source_raw' => raw, 'message_raw' => message, 'fields' => named} : {'mode' => 'syslog_envelope_positional_csv', 'profile' => 'panos', 'delimiter' => ',', 'source_raw' => raw, 'message_raw' => message, 'columns' => panos})}, 'positional_csv', message)
   end
   if panosLike
     return :psg_null

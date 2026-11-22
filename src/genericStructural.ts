@@ -723,6 +723,75 @@ function panosTrafficFields(values:string[]):Record<string,string>|null{
   return fields;
 }
 
+// PAN-OS THREAT and SYSTEM records, named from the documented field order of the PAN-OS syslog field
+// descriptions (Threat Log Fields, System Log Fields). Only the prefix that is the same in every documented
+// release is named; a FUTURE_USE position and every cell after the prefix keep their position as the name.
+const PANOS_THREAT=[
+  'domain','receive_time','serial','type','subtype','config_version','time_generated',
+  'src','dst','natsrc','natdst','rule','srcuser','dstuser','app','vsys','from','to',
+  'inbound_if','outbound_if','logset','time_received','sessionid','repeatcnt','sport',
+  'dport','natsport','natdport','flags','protocol','action','misc','threatid','category',
+  'severity','direction','seqno','actionflags','srcloc','dstloc','column_40','contenttype',
+  'pcap_id','filedigest','cloud','url_idx','user_agent','filetype','xff','referer','sender',
+  'subject','recipient','reportid','dg_hier_level_1','dg_hier_level_2','dg_hier_level_3',
+  'dg_hier_level_4','vsys_name','device_name',
+] as const;
+const PANOS_SYSTEM=[
+  'domain','receive_time','serial','type','subtype','config_version','time_generated',
+  'vsys','eventid','object','column_10','column_11','module','severity','opaque','seqno',
+  'actionflags','dg_hier_level_1','dg_hier_level_2','dg_hier_level_3','dg_hier_level_4',
+  'vsys_name','device_name','column_23','column_24','high_res_timestamp',
+] as const;
+const PANOS_SEVERITY=/^(?:informational|low|medium|high|critical)$/u;
+
+function panosThreatFields(values:string[]):Record<string,string>|null{
+  if(values.length<42||values[3]!=='THREAT')return null;
+  const datetime=/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/u;
+  const ip=/^(?:\d{1,3}\.){3}\d{1,3}$/u;
+  const validIp=(value:string)=>ip.test(value)&&value.split('.').every(part=>Number(part)<=255);
+  if(!datetime.test(values[1]??'')||!datetime.test(values[6]??'')||!datetime.test(values[21]??'')||
+     !validIp(values[7]??'')||!validIp(values[8]??'')||
+     !validIp(values[9]??'')||!validIp(values[10]??''))return null;
+  for(const index of [24,25,26,27]){
+    const value=values[index]??'';
+    if(!/^\d{1,5}$/u.test(value)||Number(value)>65535)return null;
+  }
+  if(!/^[A-Za-z0-9_.-]{1,24}$/u.test(values[29]??'')||
+     !/^[A-Za-z0-9_. -]{1,64}$/u.test(values[30]??'')||
+     !PANOS_SEVERITY.test(values[34]??'')||
+     !/^(?:client-to-server|server-to-client|0|1)$/u.test(values[35]??''))return null;
+  const fields:Record<string,string>={};
+  values.forEach((value,index)=>{
+    fields[PANOS_THREAT[index]??('column_'+String(index))]=value;
+  });
+  return fields;
+}
+
+function panosSystemFields(values:string[]):Record<string,string>|null{
+  if(values.length<15||values[3]!=='SYSTEM')return null;
+  const datetime=/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/u;
+  if(!datetime.test(values[1]??'')||!datetime.test(values[6]??'')||
+     !/^[A-Za-z0-9_.-]{1,64}$/u.test(values[8]??'')||
+     !PANOS_SEVERITY.test(values[13]??''))return null;
+  const fields:Record<string,string>={};
+  values.forEach((value,index)=>{
+    fields[PANOS_SYSTEM[index]??('column_'+String(index))]=value;
+  });
+  return fields;
+}
+
+/** The generic mode of a PAN-OS record whose columns can be named, or null. */
+function panosNamedMode(values:string[]):string|null{
+  if(panosTrafficFields(values))return 'panos_traffic_csv';
+  if(panosThreatFields(values))return 'panos_threat_csv';
+  if(panosSystemFields(values))return 'panos_system_csv';
+  return null;
+}
+
+function panosNamedFields(values:string[]):Record<string,string>|null{
+  return panosTrafficFields(values)??panosThreatFields(values)??panosSystemFields(values);
+}
+
 const RX_RFC3164_POSITIONAL_CSV=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255}) +`,'u');
 function rfc3164PositionalCsv(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192)return null;
@@ -744,7 +813,8 @@ function rfc3164PositionalCsv(raw:string):Record<string,unknown>|null{
   const securityCategory=values.some(value=>
     /^(?:TRAFFIC|THREAT|SYSTEM|CONFIG|GLOBALPROTECT|USERID|CORRELATION|DECRYPTION|HIPMATCH|AUTHENTICATION)$/u.test(value));
   if(ips<2||!securityCategory)return null;
-  const panos=panosTrafficFields(values);
+  const panos=panosNamedFields(values);
+  const panosMode=panosNamedMode(values);
   const columns:Record<string,string>={};
   values.forEach((value,index)=>{columns['column_'+String(index)]=value;});
   const syslog:Record<string,unknown>={
@@ -754,7 +824,7 @@ function rfc3164PositionalCsv(raw:string):Record<string,unknown>|null{
   return withBodyText({
     syslog,
     generic:panos
-      ?{mode:'panos_traffic_csv',delimiter:',',source_raw:raw,fields:panos}
+      ?{mode:panosMode,delimiter:',',source_raw:raw,fields:panos}
       :{mode:'rfc3164_positional_csv',delimiter:',',source_raw:raw,columns},
   },'positional_csv',body);
 }
@@ -936,11 +1006,12 @@ function syslogEnvelopeStructuredFallback(raw:string):Record<string,unknown>|nul
     /^[A-Z][A-Z0-9_]{2,31}$/u.test(panosValues[3]??'');
   const panos=panosPositionalCsvBody(message);
   if(panos){
-    const named=panosValues?panosTrafficFields(panosValues):null;
+    const named=panosValues?panosNamedFields(panosValues):null;
+    const namedMode=panosValues?panosNamedMode(panosValues):null;
     return withBodyText({
       syslog,
       generic:named
-        ?{mode:'panos_traffic_csv',profile:'panos',delimiter:',',source_raw:raw,message_raw:message,fields:named}
+        ?{mode:namedMode,profile:'panos',delimiter:',',source_raw:raw,message_raw:message,fields:named}
         :{mode:'syslog_envelope_positional_csv',profile:'panos',delimiter:',',source_raw:raw,message_raw:message,columns:panos},
     },'positional_csv',message);
   }

@@ -28,7 +28,7 @@ const READING:Record<string,[string,number]>={
   h_fortigate_webfilter:['generic',12],
   h_imperva_cef:['cef',1],
   h_okta_system_log:['json',1],
-  h_panos_threat_url:['generic',1],
+  h_panos_threat_url:['generic',5],   // THREAT columns named from the documented field order (2026-11-22)
   h_panos_traffic:['generic',12],
   h_sonicwall_fw:['generic',0],
   h_sophos_xg_fw:['kv',8],

@@ -64,7 +64,7 @@ that can.
 |---|---|
 | 1. One declined event blocks the journey | Changed. When at least one event is read completely, the Auto Parser names how many events were read and how many were not, by kind, and offers to create the parser for the readable events (`src/guided/readableEvents.ts`, `tests/readable-events-20261122.spec.ts`). A sample without any readable event gets no offer. |
 | 2. RFC 3164 with a TAG and without a PRI | Read by the shared grammar when the message is a structured body (contract revision 9). Free text behind a time stamp is still not a Syslog record. |
-| 3. PAN-OS THREAT and SYSTEM column tables | Open. In a mixed sample those records are now named as "delimited record without column names" and left out; the parser covers the other events. |
+| 3. PAN-OS THREAT and SYSTEM column tables | Done after 272bd90, see "PAN-OS record types" below. |
 | 4. The verdict name DECLINED | Open (the product says UNKNOWN / ERROR, and the new panel says "could not be read"). |
 | 5. Browser versus generated Ruby | Measured, see below. |
 
@@ -117,3 +117,31 @@ failure record with the complete original text: no event is lost and no doubtful
 cleanly written pairs of a damaged event are not available as fields. Emitting them needs a tolerant reading
 in the shared grammar (browser, Python, Ruby), and a rule for which pairs are safe when free text follows a
 value (`msg=hello world port=22`: is `world` part of the value?). NOT IMPLEMENTED.
+
+### PAN-OS record types (after 272bd90)
+
+THREAT and SYSTEM records are named from the documented field order of the PAN-OS syslog field descriptions
+(Threat Log Fields, System Log Fields), in the browser grammar (`src/genericStructural.ts`, translated to the
+generated Ruby by ts2rb) and in the Python preview (`runtime/multipass/security_panos.py`). Modes:
+`panos_threat_csv`, `panos_system_csv`; TRAFFIC is unchanged (`panos_traffic_csv`).
+
+- Only the prefix that is the same in the documented releases is named: THREAT columns 0-59 (to `device_name`),
+  SYSTEM columns 0-25 (to `high_res_timestamp`). A FUTURE_USE position and every cell after the prefix keep their
+  position as the name (`column_40`, `column_60`, ...). Every cell is kept, in order; the loss guard checks the
+  cells against the line as for TRAFFIC.
+- A record is named only when documented invariants hold: THREAT needs 42 or more cells, the type THREAT, three
+  time stamps, four IPv4 addresses, four ports, a protocol and action token, a documented severity and a
+  documented direction; SYSTEM needs 15 or more cells, two time stamps, an event id token and a documented
+  severity. Otherwise the record keeps positional names, as before.
+
+Measured (SYNTHETIC lines after the documented order; real Multi-Pass witness; adoption as in AutoParser.tsx):
+
+| Sample | Before (272bd90) | After |
+|---|---|---|
+| TRAFFIC + THREAT + SYSTEM without a PRI | not adopted (THREAT, SYSTEM without names) | adopted: traffic, threat, system |
+| the same with a PRI | adopted, THREAT and SYSTEM as `column_<n>` | adopted with names |
+| THREAT x2, SYSTEM x2, TRAFFIC + SYSTEM, TRAFFIC x2 + THREAT | `column_<n>` for THREAT and SYSTEM | named |
+| holdout `h_panos_threat_url` (authored from the vendor grammar, not a vendor original) | 1 of 5 Stellar meanings mapped | 5 of 5, no wrong mapping |
+
+Not established: PAN-OS releases whose THREAT or SYSTEM layout differs inside the named prefix; no vendor
+original record was available.
