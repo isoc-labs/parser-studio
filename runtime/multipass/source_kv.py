@@ -44,23 +44,25 @@ def unescape_kv_value(text:str)->str:
     return ''.join(out)
 
 
-def _delimited_pair_unread(raw:str,start:int,end:int)->bool:
-    """True when the unquoted value raw[start:end] holds, or ends in, a list delimiter (, ; |) that the key of
-    another pair follows, with no "=" before it: "1,b=2", or "1," before " b=2". Such a value is not one value.
-    Same rule as unquotedValueEnd of src/grammar/parseStatus.ts, where the browser grades the event PARTIAL; a
-    value with "=" before the delimiter is a list of its own (a distinguished name) and is one value."""
+KEY_BEHIND_DELIMITER=re.compile(r'[^ \t\n\x0b\f\r,;|="\']+=')
+
+
+def _delimited_pair_unread(raw:str,start:int,end:int)->tuple[bool,bool]:
+    """What the list delimiters (, ; |) of the unquoted value raw[start:end] say, as (inside, last).
+    inside: a delimiter inside the value is followed by a key ("1,b=2"). Whether that is a second pair is
+    decided by the line: see decode_source_kv. last: the value ends in a delimiter and the next token is a pair
+    ("1," before " b=2"); the delimiter is not part of the value.
+    Same rule as unquotedValueEnd of src/grammar/parseStatus.ts, where the browser grades the event PARTIAL."""
+    inside=False
     for at in range(start,end):
-        ch=raw[at]
-        if ch=='=':return False
-        if ch not in ',;|':continue
+        if raw[at] not in ',;|':continue
         if at+1<end:
-            key=KEY.match(raw,at+1)
-            if key is not None and key.end()<=end:return True
+            if KEY_BEHIND_DELIMITER.match(raw,at+1) is not None:inside=True
         else:
             following=end
             while following<len(raw) and raw[following] in KV_ASCII_WHITESPACE:following+=1
-            if KEY.match(raw,following) is not None:return True
-    return False
+            if KEY.match(raw,following) is not None:return inside,True
+    return inside,False
 
 
 def _diagnose(raw:str,pos:int)->str:
@@ -103,6 +105,10 @@ def decode_source_kv(raw:str,begin:int=0,*,max_fields:int=MAX_FIELDS)->Fragment:
         out.issues.append('KV_SOURCE_SIZE_OR_NUL_INVALID');return out
     pos=begin;n=len(raw)
     listed=_is_delimited_pair_list(raw,begin)
+    # A pair behind a list delimiter that was not read as a pair: inside a value, or a delimiter kept at the end
+    # of a value. A pair that follows another pair after white space alone (bare_gap) says that the line
+    # separates its pairs with white space: a delimiter inside one of its values is then value data.
+    inside=False;last=False;bare_gap=False
     while pos<n:
         if TRAILING.fullmatch(raw,pos) is not None:
             out.covered.append((pos,n));break
@@ -126,8 +132,10 @@ def decode_source_kv(raw:str,begin:int=0,*,max_fields:int=MAX_FIELDS)->Fragment:
         if listed:value=match[group]
         # A pair behind a list delimiter was not read as a pair: every field is kept, and the event is never
         # reported as completely parsed (the browser grades it PARTIAL, src/grammar/parseStatus.ts).
-        if group=='bare' and 'KV_DELIMITED_PAIR_UNREAD' not in out.issues and _delimited_pair_unread(raw,*match.span('bare')):
-            out.issues.append('KV_DELIMITED_PAIR_UNREAD')
+        if out.primitive_fields>0 and raw[pos-1] not in ',;|':bare_gap=True
+        if group=='bare':
+            found=_delimited_pair_unread(raw,*match.span('bare'))
+            inside=inside or found[0];last=last or found[1]
         if key in out.fields:
             # Source preview keeps every occurrence of a repeated key, in order (release gate H3).
             previous=out.fields[key]
@@ -142,4 +150,7 @@ def decode_source_kv(raw:str,begin:int=0,*,max_fields:int=MAX_FIELDS)->Fragment:
         if match.start('key')>pos:out.covered.append((pos,match.start('key')))
         out.covered.append((match.start('key'),match.end()))
         pos=match.end()
+    # Every field is kept, and the event is never reported as completely parsed (the browser grades it PARTIAL,
+    # src/grammar/parseStatus.ts).
+    if last or (inside and not bare_gap):out.issues.append('KV_DELIMITED_PAIR_UNREAD')
     return out

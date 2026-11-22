@@ -31,6 +31,10 @@ const KEY_AT_TOKEN_START = /[A-Za-z_][A-Za-z0-9_.-]{0,95}=/uy;
 const GAP_RUN = /[ \t\n\x0b\f\r]*/uy;
 const TOKEN_RUN = /[^ \t\n\x0b\f\r]*/uy;
 const BACKSLASH_PAIR = /\\./gsu;
+// The key of a pair behind a list delimiter, inside a token: whatever stands before "=" that is not white space,
+// a delimiter or a quote. Wider than the keys of the grammar on purpose - a pair whose key the grammar cannot
+// read (a key written in Hangul, say) is a pair of the raw line all the same.
+const KEY_BEHIND_DELIMITER = /[^ \t\n\x0b\f\r,;|="']+=/uy;
 // List delimiters. The key=value grammar never separates pairs at one of them (contract KV_GAP: SP and TAB), and
 // that is the reason this reader must: "a=1,b=2" is two pairs whatever the grammar made of the line. A reader
 // that cut tokens at white space only shared the grammar's assumption and could not see the second pair, so a
@@ -109,37 +113,39 @@ function keyStartsAt(raw: string, at: number, end: number): boolean {
 }
 
 /**
- * Where the unquoted value of the token [from, end) stops: at a list delimiter that the key of another pair
- * follows, either inside the token ("1,b=2") or as its last character when the next token is a pair
- * ("1, b=2"). A value that holds "=" before such a delimiter is a list of its own - a distinguished name
- * "CN=a,OU=b", a cookie, a query string - and stays whole, as does a delimiter that no key follows ("a,b,c").
+ * Where the unquoted value of the token [from, end) stops. A list delimiter that is the last character of the
+ * token ends the value when the next token is a pair ("1, b=2"). A delimiter inside the token ends it only when
+ * `split` is set and a key follows ("1,b=2"); a delimiter that no key follows is value data ("a,b,c").
  */
-function unquotedValueEnd(raw: string, from: number, end: number): number {
+function unquotedValueEnd(raw: string, from: number, end: number, split: boolean): number {
   for (let at = from; at < end; at += 1) {
-    const ch = raw[at]!;
-    if (ch === '=') return end;
-    if (!isListDelimiter(ch)) continue;
-    const next = at + 1 < end ? at + 1 : matchEnd(matchAt(GAP_RUN, raw, end)!);
-    if (keyStartsAt(raw, next, at + 1 < end ? end : raw.length)) return at;
+    if (!isListDelimiter(raw[at]!)) continue;
+    if (at + 1 < end) {
+      if (split && matchAt(KEY_BEHIND_DELIMITER, raw, at + 1) !== null) return at;
+    } else if (keyStartsAt(raw, matchEnd(matchAt(GAP_RUN, raw, end)!), raw.length)) return at;
   }
   return end;
 }
 
 /**
- * Independent evidence: key=value pairs that start a whitespace-separated token
- * of the raw line, or that follow a list delimiter (, ; |) inside such a token. Values in double or single
- * quotes are consumed whole, so a '=' inside a quoted value is never reported as a pair of its own. This is
- * intentionally not the product KV parser.
+ * One reading of the raw line. A pair starts a white-space separated token, follows a list delimiter behind a
+ * quoted value, or - when `split` is set - follows a list delimiter inside an unquoted value. `bareGaps`
+ * receives the offset of every pair that follows an earlier pair after white space alone (no list delimiter
+ * before the gap): the line separates its pairs with white space.
  */
-export function independentKeyValuePairs(raw: string): RawPair[] {
+function readRawPairs(raw: string, split: boolean, bareGaps: number[]): RawPair[] {
   const pairs: RawPair[] = [];
   const length = raw.length;
   let index = positionalHeaderEnd(raw);
   while (index < length) {
+    const gapStart = index;
     index = matchEnd(matchAt(GAP_RUN, raw, index)!);
     if (index >= length) break;
-    const key = matchAt(KEY_AT_TOKEN_START, raw, index);
+    // Behind a list delimiter, inside a token, a key is whatever stands before "=".
+    const tokenStart = index > gapStart || pairs.length === 0;
+    const key = tokenStart ? matchAt(KEY_AT_TOKEN_START, raw, index) : matchAt(KEY_BEHIND_DELIMITER, raw, index);
     if (key) {
+      if (index > gapStart && pairs.length > 0 && !isListDelimiter(raw[gapStart - 1]!)) bareGaps.push(index);
       index += key[0].length;
       const quote = raw[index];
       if (quote === '"' || quote === "'") {
@@ -152,8 +158,8 @@ export function independentKeyValuePairs(raw: string): RawPair[] {
           pairs.push({ key: key[0].slice(0, -1), value, rawValue, quoted: true });
           index = cursor + 1;
           // A list delimiter between the closing quote and the next key separates two pairs.
-          if (index < length && isListDelimiter(raw[index]!) &&
-            keyStartsAt(raw, matchEnd(matchAt(GAP_RUN, raw, index + 1)!), length)) index += 1;
+          if (index < length && isListDelimiter(raw[index]!) && (matchAt(KEY_BEHIND_DELIMITER, raw, index + 1) !== null ||
+            keyStartsAt(raw, matchEnd(matchAt(GAP_RUN, raw, index + 1)!), length))) index += 1;
           continue;
         }
       }
@@ -161,7 +167,7 @@ export function independentKeyValuePairs(raw: string): RawPair[] {
       // rule here: this reader must not share the grammar's idea of an escape (a backslash that carried the
       // next SP made the grammar swallow the following pair, and a reader with the same rule could not see it).
       const end = matchEnd(matchAt(TOKEN_RUN, raw, index)!);
-      const stop = unquotedValueEnd(raw, index, end);
+      const stop = unquotedValueEnd(raw, index, end, split);
       const value = raw.slice(index, stop);
       pairs.push({ key: key[0].slice(0, -1), value, rawValue: value, quoted: false });
       index = stop < end ? stop + 1 : end;
@@ -170,6 +176,26 @@ export function independentKeyValuePairs(raw: string): RawPair[] {
     index = matchEnd(matchAt(TOKEN_RUN, raw, index)!);
   }
   return pairs;
+}
+
+/**
+ * Independent evidence: the key=value pairs of the raw line. Values in double or single quotes are consumed
+ * whole, so a '=' inside a quoted value is never reported as a pair of its own. This is intentionally not the
+ * product KV parser.
+ *
+ * What a list delimiter (, ; |) inside an unquoted value means is decided by the line itself. A line in which
+ * a pair follows another pair after white space alone separates its pairs with white space, and a delimiter
+ * inside one of its values is value data: "content_type=text/html;charset=utf-8", "opts=rw,uid=1000" and a
+ * distinguished name stay whole (independent audit 2026-11-22, G-05). In every other line - one token, or
+ * tokens whose gaps all follow a delimiter - a delimiter that a key follows separates two pairs, whatever the
+ * value before it holds ("url=/login?user=bob,src=10.0.0.1": G-01) and whatever characters the key is written
+ * with (G-02). One token cannot say whether "dn=CN=a,OU=b" is one value or three pairs; it is reported as
+ * pairs, so the event is PARTIAL unless the grammar read them.
+ */
+export function independentKeyValuePairs(raw: string): RawPair[] {
+  const bareGaps: number[] = [];
+  const whole = readRawPairs(raw, false, bareGaps);
+  return bareGaps.length > 0 ? whole : readRawPairs(raw, true, bareGaps);
 }
 
 function collectLeaves(value: unknown, key: string, out: Map<string, string[]>): void {

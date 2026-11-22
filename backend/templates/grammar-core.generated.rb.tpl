@@ -890,42 +890,10 @@ end
 
 # src/grammar/parseStatus.ts: independentKeyValuePairs
 def psg_independent_key_value_pairs(raw)
-  pairs = length = index = key = quote = cursor = rawValue = value = v_end = stop = value_2 = nil
-  pairs = []
-  length = psg_len(raw)
-  index = psg_positional_header_end(raw)
-  while (index < length)
-    index = psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, index))
-    if (index >= length)
-      break
-    end
-    key = psg_match_at(/\G(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)/, raw, index)
-    if psg_t(key)
-      index += psg_len(key[0])
-      quote = psg_at(raw, index)
-      if ((quote == '"') || (quote == '\''))
-        cursor = psg_closing_quote(raw, quote, (index + 1))
-        if (cursor >= 0)
-          rawValue = psg_slice(raw, (index + 1), cursor)
-          value = (rawValue.include?('\\') ? psg_replace(rawValue, /\\(?m:.)/, true, lambda { |pair| psg_slice(pair, 1) }) : rawValue)
-          pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value, 'rawValue' => rawValue, 'quoted' => true})
-          index = (cursor + 1)
-          if (((index < length) && psg_is_list_delimiter(psg_at(raw, index))) && psg_key_starts_at(raw, psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, (index + 1))), length))
-            index += 1
-          end
-          next
-        end
-      end
-      v_end = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
-      stop = psg_unquoted_value_end(raw, index, v_end)
-      value_2 = psg_slice(raw, index, stop)
-      pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value_2, 'rawValue' => value_2, 'quoted' => false})
-      index = ((stop < v_end) ? (stop + 1) : v_end)
-      next
-    end
-    index = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
-  end
-  return pairs
+  bareGaps = whole = nil
+  bareGaps = []
+  whole = psg_read_raw_pairs(raw, false, bareGaps)
+  return ((bareGaps.length > 0) ? whole : psg_read_raw_pairs(raw, true, bareGaps))
 end
 
 # src/guided/declaredForwarder.ts: inspectDeclaredForwarders
@@ -1388,6 +1356,51 @@ def psg_read_event(raw, settings)
   return {'fields' => extraction['fields'], 'errors' => extraction['errors'], 'status' => verdict['status'], 'reasons' => verdict['reasons'], 'lostKeys' => psg_map(verdict['lostPairs'], lambda { |pair| pair['key'] }), 'forwarderHops' => relay['hops']}
 end
 
+# src/grammar/parseStatus.ts: readRawPairs
+def psg_read_raw_pairs(raw, split, bareGaps)
+  pairs = length = index = gapStart = tokenStart = key = quote = cursor = rawValue = value = v_end = stop = value_2 = nil
+  pairs = []
+  length = psg_len(raw)
+  index = psg_positional_header_end(raw)
+  while (index < length)
+    gapStart = index
+    index = psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, index))
+    if (index >= length)
+      break
+    end
+    tokenStart = ((index > gapStart) || (pairs.length == 0))
+    key = (tokenStart ? psg_match_at(/\G(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)/, raw, index) : psg_match_at(/\G(?:[^ \t\n\x0b\f\r,;|="']+=)/, raw, index))
+    if psg_t(key)
+      if (((index > gapStart) && (pairs.length > 0)) && !psg_is_list_delimiter(psg_at(raw, (gapStart - 1))))
+        bareGaps.push(index)
+      end
+      index += psg_len(key[0])
+      quote = psg_at(raw, index)
+      if ((quote == '"') || (quote == '\''))
+        cursor = psg_closing_quote(raw, quote, (index + 1))
+        if (cursor >= 0)
+          rawValue = psg_slice(raw, (index + 1), cursor)
+          value = (rawValue.include?('\\') ? psg_replace(rawValue, /\\(?m:.)/, true, lambda { |pair| psg_slice(pair, 1) }) : rawValue)
+          pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value, 'rawValue' => rawValue, 'quoted' => true})
+          index = (cursor + 1)
+          if (((index < length) && psg_is_list_delimiter(psg_at(raw, index))) && (!psg_match_at(/\G(?:[^ \t\n\x0b\f\r,;|="']+=)/, raw, (index + 1)).equal?(:psg_null) || psg_key_starts_at(raw, psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, (index + 1))), length)))
+            index += 1
+          end
+          next
+        end
+      end
+      v_end = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
+      stop = psg_unquoted_value_end(raw, index, v_end, split)
+      value_2 = psg_slice(raw, index, stop)
+      pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value_2, 'rawValue' => value_2, 'quoted' => false})
+      index = ((stop < v_end) ? (stop + 1) : v_end)
+      next
+    end
+    index = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
+  end
+  return pairs
+end
+
 # src/structuredFamilies.ts: regexBody
 def psg_regex_body(message, pattern = nil)
   return psg_x_portable_regex_fields(message, (psg_null?(psg_t1 = pattern) ? '' : psg_t1))
@@ -1793,22 +1806,21 @@ def psg_unescape_kv_value(raw)
 end
 
 # src/grammar/parseStatus.ts: unquotedValueEnd
-def psg_unquoted_value_end(raw, from, v_end)
-  at = ch = v_next = nil
+def psg_unquoted_value_end(raw, from, v_end, split)
+  at = nil
   at = from
   psg_t1 = true
   while true
     if psg_t1 then psg_t1 = false else at += 1 end
     break unless (at < v_end)
-    ch = psg_at(raw, at)
-    if (ch == '=')
-      return v_end
-    end
-    if !psg_is_list_delimiter(ch)
+    if !psg_is_list_delimiter(psg_at(raw, at))
       next
     end
-    v_next = (((at + 1) < v_end) ? (at + 1) : psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, v_end)))
-    if psg_key_starts_at(raw, v_next, (((at + 1) < v_end) ? v_end : psg_len(raw)))
+    if ((at + 1) < v_end)
+      if (split && !psg_match_at(/\G(?:[^ \t\n\x0b\f\r,;|="']+=)/, raw, (at + 1)).equal?(:psg_null))
+        return at
+      end
+    elsif psg_key_starts_at(raw, psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, v_end)), psg_len(raw))
       return at
     end
   end

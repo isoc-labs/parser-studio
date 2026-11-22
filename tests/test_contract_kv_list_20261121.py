@@ -42,13 +42,17 @@ class DelimitedKeyValueList(unittest.TestCase):
         unread = ["KV_DELIMITED_PAIR_UNREAD"]
         for raw, expected, issues in (
             ("list=a,b,c", {"list": "a,b,c"}, []),
-            ("dn=CN=John,OU=Users,DC=corp", {"dn": "CN=John,OU=Users,DC=corp"}, []),
-            ("url=http://x/?a=1,b=2", {"url": "http://x/?a=1,b=2"}, []),
             ("a=1 b=2\tc=3", {"a": "1", "b": "2", "c": "3"}, []),
-            # Not one list (white space between pairs, two delimiters, an empty last item): the white space
-            # grammar reads it as before, and the pair it left inside a value keeps the event from being
-            # reported as completely parsed.
-            ("a=1 b=2,c=3", {"a": "1", "b": "2,c=3"}, unread),
+            # Pairs separated by white space: a delimiter inside one of their values is value data
+            # (independent audit 2026-11-22, G-05).
+            ("a=1 b=2,c=3", {"a": "1", "b": "2,c=3"}, []),
+            ("dn=CN=John,OU=Users,DC=corp srcip=10.1.1.1", {"dn": "CN=John,OU=Users,DC=corp", "srcip": "10.1.1.1"}, []),
+            # Not one list (a value that holds "=", two delimiters, an empty last item) and nothing but one
+            # token: the white space grammar reads it as before, and the pair it left inside the value keeps
+            # the event from being reported as completely parsed. One token cannot say whether a
+            # distinguished name or a query string is one value or a list (G-01).
+            ("dn=CN=John,OU=Users,DC=corp", {"dn": "CN=John,OU=Users,DC=corp"}, unread),
+            ("url=http://x/?a=1,b=2", {"url": "http://x/?a=1,b=2"}, unread),
             ("a=1,b=2;c=3", {"a": "1,b=2;c=3"}, unread),
             ("a=1,b=2,", {"a": "1,b=2,"}, unread),
         ):
