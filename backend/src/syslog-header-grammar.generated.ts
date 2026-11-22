@@ -1,11 +1,11 @@
 // GENERATED FILE - DO NOT EDIT.
-// Source: contracts/syslog-header-grammar.v1.json (revision 8); regenerate with
+// Source: contracts/syslog-header-grammar.v1.json (revision 9); regenerate with
 //   node scripts/grammar/generate-grammar.mjs --write
 // CI runs the generator with --verify, so a hand edit of this file fails the gate.
-export const GRAMMAR_CONTRACT_SHA256 = "00625f9ae3acc3a7f8d4649fc8e0da414b72a4abd4f4c17c780501ba401a5c51";
+export const GRAMMAR_CONTRACT_SHA256 = "1f5a17568901796d5ad9da33a38abf81f1b2ab252024a0640a370a89fc78b574";
 /** Template placeholder -> Ruby source text (Ruby 2.4 compatible). */
 export const RUBY_GRAMMAR_PLACEHOLDERS: Readonly<Record<string, string>> = {
-  "__PS_GRAMMAR_RX_RFC3164_TAGGED__": "\\A<(?<pri>[0-9]{1,3})>(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)\\z",
+  "__PS_GRAMMAR_RX_RFC3164_TAGGED__": "\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)\\z",
   "__PS_GRAMMAR_RX_RFC3164_TAGLESS__": "\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)\\z",
   "__PS_GRAMMAR_RX_RFC3164_HOSTLESS__": "\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)\\z",
   "__PS_GRAMMAR_RX_RFC5424__": "\\A<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\\r\\n]+)\\z",
@@ -57,7 +57,7 @@ export const RUBY_GRAMMAR_PLACEHOLDERS: Readonly<Record<string, string>> = {
   "__PS_GRAMMAR_TOKEN_CEF_BACKSLASH__": "\\\\",
   "__PS_GRAMMAR_TOKEN_LEEF_DELIMITER_LITERAL__": "[\\t!-<>-\\[\\]-~]",
   "__PS_GRAMMAR_TOKEN_LEEF_HEX_DIGITS__": "[0-9A-Fa-f]{1,4}",
-  "__PS_GRAMMAR_RFC3164_ALTERNATIVES__": "[['rfc3164_tagged', /\\A<(?<pri>[0-9]{1,3})>(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)\\z/], ['rfc3164_tagless', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)\\z/], ['rfc3164_hostless', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)\\z/]]",
+  "__PS_GRAMMAR_RFC3164_ALTERNATIVES__": "[['rfc3164_tagged', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)\\z/], ['rfc3164_tagless', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)\\z/], ['rfc3164_hostless', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)\\z/]]",
   "__PS_GRAMMAR_LEEF_DELIMITER_VERSIONS__": "['2.0']",
   "__PS_GRAMMAR_LEEF_HEADER_FIELDS__": "4",
   "__PS_GRAMMAR_LEEF_EXTRA_DELIMITERS__": "[166]",

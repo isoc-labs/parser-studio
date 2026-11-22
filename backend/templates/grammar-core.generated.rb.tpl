@@ -26,7 +26,12 @@ end
 
 # src/grammar/syslogHeader.ts: COMPILED_RULES
 def psg_k_compiled_rules
-  @psg_k_compiled_rules ||= {'rfc3164_tagged' => /\A<(?<pri>[0-9]{1,3})>(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.\-]{0,95})(?:\[(?<procid>[0-9]{1,8})\])?:[ ]+(?<message>[^\r\n]+)\z/, 'rfc3164_tagless' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\r\n]+)\z/, 'rfc3164_hostless' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)[^\r\n]*)\z/, 'rfc5424' => /\A<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\r\n]+)\z/}
+  @psg_k_compiled_rules ||= {'rfc3164_tagged' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.\-]{0,95})(?:\[(?<procid>[0-9]{1,8})\])?:[ ]+(?<message>[^\r\n]+)\z/, 'rfc3164_tagless' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\r\n]+)\z/, 'rfc3164_hostless' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)[^\r\n]*)\z/, 'rfc5424' => /\A<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\r\n]+)\z/}
+end
+
+# src/grammar/syslogHeader.ts: COMPILED_TOKENS
+def psg_k_compiled_tokens
+  @psg_k_compiled_tokens ||= {'PRI' => /\A(?:[0-9]{1,3})\z/, 'BSD_MONTH' => /\A(?:[A-Z][a-z]{2})\z/, 'BSD_DAY' => /\A(?:[0-9]{1,2})\z/, 'CLOCK2' => /\A(?:[0-9]{2})\z/, 'BSD_HOSTNAME' => /\A(?:(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])\z/, 'TAG' => /\A(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95})\z/, 'PROCID_NUM' => /\A(?:[0-9]{1,8})\z/, 'REST' => /\A(?:[^\r\n]+)\z/, 'STRUCTURED_BODY' => /\A(?:(?:\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)[^\r\n]*)\z/, 'RFC5424_VERSION' => /\A(?:[1-9][0-9]{0,2})\z/, 'RFC5424_TIMESTAMP' => /\A(?:[!-~]{1,64})\z/, 'RFC5424_HOSTNAME' => /\A(?:[!-~]{1,255})\z/, 'RFC5424_APPNAME' => /\A(?:[!-~]{1,48})\z/, 'RFC5424_PROCID' => /\A(?:[!-~]{1,128})\z/, 'RFC5424_MSGID' => /\A(?:[!-~]{1,32})\z/, 'KV_GAP' => /\A(?:[ \t]*)\z/, 'KV_KEY' => /\A(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95})\z/, 'KV_DQ' => /\A(?:(?:\\[^\r\n]|[^"\\])*)\z/, 'KV_SQ' => /\A(?:(?:\\[^\r\n]|[^'\\])*)\z/, 'KV_BARE' => /\A(?:(?:\\[^ \t\n\r\f\x0b\x1c-\x1f]|[^ \t\n\r\f\x0b\x1c-\x1f"'\\]|\\)+)\z/, 'KV_LIST_BARE' => /\A(?:[^ \t\n\r\f\x0b\x1c-\x1f"',;|=]+)\z/, 'KV_LIST_DQ' => /\A(?:[^"]*)\z/, 'KV_LIST_SQ' => /\A(?:[^']*)\z/, 'KV_LIST_DELIMITER' => /\A(?:[,;|])\z/, 'KV_TRAILING' => /\A(?:[ \t\n\r\f\x0b]*)\z/, 'RFC3339_DATE_PREFIX' => /\A(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T)\z/, 'FAMILY_NAME' => /\A(?:(?:CEF|LEEF))\z/, 'ASCII_DIGIT' => /\A(?:[0-9])\z/, 'CEF_KEY' => /\A(?:[A-Za-z_][A-Za-z0-9_.\-]{0,127})\z/, 'LEEF_KEY' => /\A(?:[A-Za-z_][A-Za-z0-9_.\-]*)\z/, 'CEF_WS' => /\A(?:[ \t])\z/, 'CEF_WS_RUN' => /\A(?:[ \t]+)\z/, 'CEF_NOT_WS' => /\A(?:[^ \t])\z/, 'CEF_ESCAPE' => /\A(?:\\[^ \t])\z/, 'CEF_PLAIN' => /\A(?:[^\\ \t])\z/, 'CEF_BACKSLASH' => /\A(?:\\)\z/, 'LEEF_DELIMITER_LITERAL' => /\A(?:[\t!-<>-\[\]-~])\z/, 'LEEF_HEX_DIGITS' => /\A(?:[0-9A-Fa-f]{1,4})\z/}
 end
 
 # src/grammar/extractEvent.ts: CSV_DELIMITERS
@@ -86,7 +91,7 @@ end
 
 # src/grammar/syslogHeaderGrammar.generated.ts: SYSLOG_HEADER_RULES
 def psg_k_syslog_header_rules
-  @psg_k_syslog_header_rules ||= {'rfc3164_tagged' => {'source' => '^<(?<pri>[0-9]{1,3})>(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'hostname', 'tag', 'procid', 'message']}, 'rfc3164_tagless' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'hostname', 'message']}, 'rfc3164_hostless' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'message']}, 'rfc5424' => {'source' => '^<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\\r\\n]+)$', 'captures' => ['pri', 'version', 'timestamp', 'hostname', 'appname', 'procid', 'msgid', 'rest']}}
+  @psg_k_syslog_header_rules ||= {'rfc3164_tagged' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'hostname', 'tag', 'procid', 'message']}, 'rfc3164_tagless' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'hostname', 'message']}, 'rfc3164_hostless' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'message']}, 'rfc5424' => {'source' => '^<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\\r\\n]+)$', 'captures' => ['pri', 'version', 'timestamp', 'hostname', 'appname', 'procid', 'msgid', 'rest']}}
 end
 
 # src/grammar/syslogHeaderGrammar.generated.ts: SYSLOG_HEADER_SEMANTICS
@@ -1152,6 +1157,9 @@ def psg_match_rfc3164_header(text)
     if !psg_t(captures)
       next
     end
+    if (((rule == 'rfc3164_tagged') && captures['pri'].nil?) && !psg_matches_header_token('STRUCTURED_BODY', captures['message']))
+      next
+    end
     pri = (captures['pri'].nil? ? nil : psg_num(captures['pri']))
     if (!pri.nil? && (pri > 191))
       return {'ok' => false, 'reason' => 'PRI_OUT_OF_RANGE'}
@@ -1182,6 +1190,11 @@ def psg_match_rfc5424_header(text)
     return {'ok' => false, 'reason' => 'VERSION_UNSUPPORTED'}
   end
   return {'ok' => true, 'pri' => pri, 'version' => captures['version'], 'timestamp' => captures['timestamp'], 'hostname' => captures['hostname'], 'appname' => captures['appname'], 'procid' => captures['procid'], 'msgid' => captures['msgid'], 'rest' => captures['rest']}
+end
+
+# src/grammar/syslogHeader.ts: matchesHeaderToken
+def psg_matches_header_token(token, text)
+  return psg_k_compiled_tokens[token].match?(text)
 end
 
 # src/javaStacktrace.ts: parseJavaStacktrace

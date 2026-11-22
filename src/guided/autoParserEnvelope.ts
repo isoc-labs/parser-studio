@@ -160,7 +160,9 @@ function analyzeRecord(text:string,sequence:number,line:number,boundary:EventBou
   // token, and the form whose HOSTNAME is omitted) comes from
   // contracts/syslog-header-grammar.v1.json, like the extractor and the Ruby export.
   const bsd=matchRfc3164Header(raw);
-  if(bsd.ok&&bsd.rule!=='rfc3164_tagged'&&matchesHeaderToken('STRUCTURED_BODY',bsd.message)){
+  // A tagged record without a PRI belongs to the same bounded subset (matchRfc3164Header accepts it only
+  // before a structured body); with a PRI the tagged record is judged by the strict rule below.
+  if(bsd.ok&&(bsd.rule!=='rfc3164_tagged'||bsd.pri===undefined)&&matchesHeaderToken('STRUCTURED_BODY',bsd.message)){
     const classified=classifyBody(bsd.message);
     return {...base,envelope:'rfc3164',...classified,
       timePolicy:'YEAR_AND_ZONE_UNKNOWN',rfc3164Profile:'tagless_structured_security'};

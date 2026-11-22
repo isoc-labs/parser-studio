@@ -69,7 +69,9 @@ describe('a headerless positional CSV sample and the bounded compiler (independe
   const BIGIP='Oct 15 00:14:27 bigip-waf01 ASM: unit_hostname="bigip-waf01",management_ip_address="10.1.1.10",request_status="blocked",ip_client="203.0.113.210",route_domain="0",method="POST",protocol="HTTPS",date_time="2026-10-15T00:14:27+09:00",dest_port="443",dest_ip="10.20.1.25",uri="/api/login"';
   const flags=(source:string)=>headerlessCsvEvents(analyzeLogEnvelopes(source,'single-line').events);
   it('flags the events the first scan takes for a delimited record without an envelope',()=>{
-    expect(flags(BIGIP)).toEqual([true]);
+    // The BIG-IP record is an RFC 3164 record without a PRI (TAG "ASM:") since the tagged header rule reads
+    // that form: the first scan no longer takes it for a delimited record without an envelope.
+    expect(flags(BIGIP)).toEqual([false]);
     expect(flags(PAN)).toEqual([true]);
     for(const source of Object.values(MISREAD).slice(0,3))expect(flags(source).every(Boolean),source.slice(0,40)).toBe(true);
     expect(flags('<14>'+PAN)).toEqual([false]);

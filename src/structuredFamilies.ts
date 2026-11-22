@@ -45,7 +45,11 @@ export function detectStructuredFamily(input: string): StructuredFamily | null {
   // Detection is syntax only on the first line, like the PRI check above;
   // calendar and PRI range errors are reported by extraction.
   const first = input.split(/\r?\n/u, 1)[0] ?? '';
-  const bsd = matchHeaderRule('rfc3164_tagged', first) ? null
+  const tagged = matchHeaderRule('rfc3164_tagged', first);
+  // The tagged form without a PRI, like the forms without a TAG below, only before a structured body.
+  if (tagged && tagged.pri === undefined && matchesHeaderToken('STRUCTURED_BODY', tagged.message ?? ''))
+    return 'syslog_rfc3164';
+  const bsd = tagged && tagged.pri !== undefined ? null
     : matchHeaderRule('rfc3164_tagless', first) ?? matchHeaderRule('rfc3164_hostless', first);
   if (bsd && matchesHeaderToken('STRUCTURED_BODY', bsd.message ?? ''))
     return 'syslog_rfc3164';

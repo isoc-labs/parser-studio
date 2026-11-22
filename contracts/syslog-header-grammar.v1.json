@@ -1,7 +1,7 @@
 {
   "schema": "parserstudio.grammar-contract.v1",
   "id": "syslog-header",
-  "revision": 8,
+  "revision": 9,
   "purpose": "Single declarative definition of the Syslog header grammar and of the strict key=value body grammar (fragments.kv_pair). The browser TypeScript and the generated Ruby Fragment take their structured-path header regular expressions, capture names and semantic limits from the code generated from this file (scripts/grammar/generate-grammar.mjs). Not migrated yet (Issue #249 W4, W5): the Generic Structural sites and the Python Multi-Pass engine, which still carry hand-written copies; those copies are counted and ratcheted down by scripts/verification/grammar-duplication-ratchet.mjs.",
   "authority": [
     "RFC 3164 section 4.1 (PRI, HEADER = TIMESTAMP HOSTNAME, MSG = TAG CONTENT)",
@@ -156,17 +156,21 @@
   },
   "rules": {
     "rfc3164_tagged": {
-      "description": "<PRI>Mmm dd hh:mm:ss HOSTNAME TAG[PID]: MSG",
+      "description": "[<PRI>]Mmm dd hh:mm:ss HOSTNAME TAG[PID]: MSG (without a PRI the record is accepted only before a structured body: matchRfc3164Header)",
       "sequence": [
         {
-          "lit": "<"
-        },
-        {
-          "token": "PRI",
-          "cap": "pri"
-        },
-        {
-          "lit": ">"
+          "optional": [
+            {
+              "lit": "<"
+            },
+            {
+              "token": "PRI",
+              "cap": "pri"
+            },
+            {
+              "lit": ">"
+            }
+          ]
         },
         {
           "token": "BSD_MONTH",

@@ -13,6 +13,7 @@
  */
 import {describe,expect,it} from 'vitest';
 import {createDraft} from '../model';
+import {preview} from '../parser';
 import {analyzeLogEnvelopes} from './autoParserEnvelope';
 import {buildSourceReviewedBoundedDraft,headerlessCsvEvents,nativelyReadEvents,
   type GenericStructuralSourceReview} from './genericStructuralAutoDraft';
@@ -75,8 +76,24 @@ describe('F-08: a reading that keeps the cells and names them from the record is
   const QUOTED='Oct 15 00:14:28 bigip-waf01 ASM: unit_hostname="bigip-waf01",management_ip_address="10.1.1.10",request_status="blocked",violations="SQL-Injection,Cross Site Scripting",ip_client="203.0.113.211",route_domain="0",method="POST",protocol="HTTPS",dest_port="443",dest_ip="10.20.1.25",uri="/api/login?a=1,b=2"';
   const UNQUOTED='Oct 15 00:14:27 bigip-waf01 ASM: unit_hostname=bigip-waf01,management_ip_address=10.1.1.10,request_status=blocked,ip_client=203.0.113.210,route_domain=0,method=POST,protocol=HTTPS,dest_port=443,dest_ip=10.20.1.25,uri=/api/login';
 
+  // "ASM: " is the TAG of an RFC 3164 record without a PRI, which the native grammar reads since the tagged
+  // header rule accepts that form: the bounded compiler is not asked for it any more (next test). The record
+  // whose message follows the colon directly ("ASM:unit_hostname=...") is still the compiler's.
+  const ADJACENT=(line:string)=>line.replace('ASM: ','ASM:');
+  it('the native grammar reads the record with a blank after the TAG, delimiters inside quoted values kept',()=>{
+    for(const line of [QUOTED,UNQUOTED]){
+      const report=analyzeLogEnvelopes(line,'single-line');
+      expect(report.events[0]).toMatchObject({envelope:'rfc3164',body:'kv',status:'RECOGNIZED'});
+      expect(report.unsupported).toBe(0);
+    }
+    const event=preview(QUOTED,{...createDraft(),format:'auto'}).events[0]!;
+    expect(event.parseStatus).toBe('FULL');
+    expect(event.fields).toMatchObject({syslog_hostname:'bigip-waf01',syslog_appname:'ASM',
+      body:{violations:'SQL-Injection,Cross Site Scripting',uri:'/api/login?a=1,b=2',ip_client:'203.0.113.211'}});
+  });
+
   it('keeps a delimiter inside a quoted value in its value',()=>{
-    const adopted=adopt(QUOTED);
+    const adopted=adopt(ADJACENT(QUOTED));
     expect(adopted).not.toBeNull();
     const fields=(adopted!.suite.events[0]!.fields.generic as {mode:string;fields:Record<string,string>});
     expect(fields.mode).toBe('delimited_kv');
@@ -86,7 +103,7 @@ describe('F-08: a reading that keeps the cells and names them from the record is
   });
 
   it('adopts the quoted and the unquoted line of one family together',()=>{
-    expect(modes(UNQUOTED+'\n'+QUOTED.replace(',violations="SQL-Injection,Cross Site Scripting"','').replace('?a=1,b=2',''))).toEqual(['delimited_kv','delimited_kv']);
+    expect(modes(ADJACENT(UNQUOTED)+'\n'+ADJACENT(QUOTED).replace(',violations="SQL-Injection,Cross Site Scripting"','').replace('?a=1,b=2',''))).toEqual(['delimited_kv','delimited_kv']);
   });
 });
 

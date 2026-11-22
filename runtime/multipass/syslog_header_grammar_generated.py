@@ -1,9 +1,9 @@
 # GENERATED FILE - DO NOT EDIT.
-# Source: contracts/syslog-header-grammar.v1.json (revision 8); regenerate with
+# Source: contracts/syslog-header-grammar.v1.json (revision 9); regenerate with
 #   node scripts/grammar/generate-grammar.mjs --write
 # CI runs the generator with --verify, so a hand edit of this file fails the gate.
 # Syslog header grammar for the Multi-Pass engine, generated from the shared grammar contract.
-GRAMMAR_CONTRACT_SHA256 = "00625f9ae3acc3a7f8d4649fc8e0da414b72a4abd4f4c17c780501ba401a5c51"
+GRAMMAR_CONTRACT_SHA256 = "1f5a17568901796d5ad9da33a38abf81f1b2ab252024a0640a370a89fc78b574"
 TOKENS = {
   "PRI": "[0-9]{1,3}",
   "BSD_MONTH": "[A-Z][a-z]{2}",
@@ -46,7 +46,7 @@ TOKENS = {
 }
 RULES = {
   "rfc3164_tagged": {
-    "source": "\\A<(?P<pri>[0-9]{1,3})>(?P<month>[A-Z][a-z]{2})[ ]+(?P<day>[0-9]{1,2})[ ]+(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2}):(?P<second>[0-9]{2})[ ]+(?P<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?P<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?P<procid>[0-9]{1,8})\\])?:[ ]+(?P<message>[^\\r\\n]+)\\Z",
+    "source": "\\A(?:<(?P<pri>[0-9]{1,3})>)?(?P<month>[A-Z][a-z]{2})[ ]+(?P<day>[0-9]{1,2})[ ]+(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2}):(?P<second>[0-9]{2})[ ]+(?P<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?P<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?P<procid>[0-9]{1,8})\\])?:[ ]+(?P<message>[^\\r\\n]+)\\Z",
     "captures": [
       "pri",
       "month",

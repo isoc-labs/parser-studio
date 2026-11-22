@@ -59,7 +59,8 @@ export type Rfc3164Header =
 
 /**
  * Ordered alternatives of the RFC 3164 header: the tagged rule is tried before
- * the tagless rule because every tagged line is also a tagless one. The hostless
+ * the tagless rule because every tagged line is also a tagless one. A relay or a log file
+ * drops the PRI; the tagged rule reads such a record as well ("Nov 21 10:00:03 fw1 traffic: srcip=..."). The hostless
  * rule is disjoint from both by construction: BSD_HOSTNAME cannot contain '=' or
  * open a structured body, so a line without HOSTNAME never donates its first
  * field to the header.
@@ -68,6 +69,11 @@ export function matchRfc3164Header(text: string): Rfc3164Header {
   for (const rule of SYSLOG_HEADER_ALTERNATIVES.rfc3164) {
     const captures = matchHeaderRule(rule, text);
     if (!captures) continue;
+    // Without a PRI a tagged line is a Syslog record only before a structured body - the bound of every
+    // PRI-less form. "Nov 21 10:00:03 the service restarted: see the log" is free text behind a time stamp;
+    // it is left to the next alternatives, as it was while this rule required the PRI.
+    if (rule === 'rfc3164_tagged' && captures.pri === undefined &&
+        !matchesHeaderToken('STRUCTURED_BODY', captures.message!)) continue;
     const pri = captures.pri === undefined ? undefined : Number(captures.pri);
     if (pri !== undefined && pri > SYSLOG_HEADER_SEMANTICS.priMax) return { ok: false, reason: 'PRI_OUT_OF_RANGE' };
     const month = captures.month!;
