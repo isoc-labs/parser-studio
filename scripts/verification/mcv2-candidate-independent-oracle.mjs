@@ -324,6 +324,33 @@ assert.deepEqual(read('generic_structural',[{parserstudio_source:{syslog:{hostna
 // A web URL beside the host in the container of the reading (a proxy line read by Generic Structural).
 assert.deepEqual(read('generic_structural',[{generic:{kv:{client:'10.0.0.5',host:'example.com',url:'http://example.com/a'}}}],'generic.kv.host'),['REVIEW'],'web URL beside the host in a reader container');
 assert.deepEqual(read('generic_structural',[{generic:{kv:{host:'fw01',action:'allow'}},note:'http://example.com/a'}],'generic.kv.host'),['HIGH'],'web URL outside the container of the host');
+// A URL of the event that names the host says whose host it is; a URL of another host says nothing (audit 2, G-08).
+high({client_ip:'192.0.2.70',action:'deny',host_name:'edge-01',url:'https://shop.example.invalid/login',severity:75},'host_name','hostname','string');
+high({host:'fw01',referer:'https://portal.example.com/start',action:'allow'},'host','hostname','string');
+high({host:'fw01',url:'https://fw01.example.com/a',action:'allow'},'host','hostname','string');
+high({host:'fw01',peer:'fw01',action:'allow'},'host','hostname','string');
+review({client:'10.0.0.5',host:'example.com:8443',url:'https://example.com:8443/a'},'host','hostname');
+review({client:'10.0.0.5',host:'Example.COM',url:'https://bob@example.com/a'},'host','hostname');
+review({src:'10.0.0.5',host:'example.com',url:'example.com/a'},'host','hostname');
+review({src:'10.0.0.5',host:'example.com',url:'example.com:8080/a'},'host','hostname');
+review({host:'example.com',request:{url:'https://example.com/a'}},'host','hostname');
+// The events of a request are those that carry the field which says so in some event; another record family
+// with the same host value confirms the host, one event with an unusual method does not (audit 2, G-04).
+assert.deepEqual(rv([{method:'GET',host:'a.example',uri:'/'},{method:'GET',host:'b.example',uri:'/'},{method:'PROPFIND',host:'c.example',uri:'/dav'}],'host'),['REVIEW'],'a method outside the known tokens');
+assert.deepEqual(rv([{method:'GET',host:'a.example',uri:'/'},{method:'-',host:'a.example',uri:'/'}],'host'),['REVIEW'],'a placeholder in the method field');
+assert.deepEqual(rv([{host:'example.com',method:'GET',uri:'/'},{host:'proxy01',type:'system',msg:'started'}],'host'),['REVIEW'],'requested host and device host in one field');
+assert.deepEqual(rv([{host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw01',type:'traffic',action:'allow'}],'host'),['HIGH'],'device host confirmed by another record family');
+assert.deepEqual(rv([{host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw02',type:'webfilter',method:'GET',url:'/y'},{host:'fw01',type:'traffic',action:'allow'}],'host'),['REVIEW'],'one request host without confirmation');
+review({method:'get',host:'example.com',uri:'/index.html'},'host','hostname');
+review({host:'shop.example.com',request:'GET /cart',status:200},'host','hostname');
+review({host:'shop.example.com',request:'post https://shop.example.com/cart HTTP/2'},'host','hostname');
+high({host:'fw01',level:'trace',msg:'link up'},'host','hostname','string');
+high({host:'fw01',msg:'Connect failed'},'host','hostname','string');
+high({host:'srv01',action:'delete',user:'bob'},'host','hostname','string');
+high({host:'srv01',msg:'GET lost'},'host','hostname','string');
+// A literal dotted protocol key in the object that holds the port (audit 2, G-07).
+assert.deepEqual(read('syslog_rfc3164',[{body:{'flow.sport':8,'flow.dport':0,'flow.proto':'icmp'}}],'body.flow.sport'),['REVIEW'],'literal dotted protocol key in a Syslog body');
+assert.deepEqual(read('syslog_rfc3164',[{body:{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'}}],'body.flow.sport'),['HIGH'],'literal dotted protocol key in a Syslog body that names TCP');
 // A protocol field without a value says nothing. One that holds an object or a list says what its scalar members
 // say, and an unknown protocol beside the port is evidence, never silence (independent audit 2026-11-21, F-04).
 assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:null}],'srcport'),['HIGH'],'null protocol field');

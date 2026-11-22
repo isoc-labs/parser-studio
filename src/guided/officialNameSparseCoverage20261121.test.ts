@@ -303,3 +303,61 @@ describe('protocol evidence beside a port',()=>{
     expect(candidate('srcport',tcp,tcp)).toMatchObject({confidence:'HIGH'});
   });
 });
+
+// Independent audit of 2026-11-22 (G-04, G-07, G-08) and the browser acceptance of an edge and a proxy device.
+// 03415d1 took any absolute web URL beside a host for a request and so refused the name of the device that
+// logged it; cde614c asked every carrier for a method it knows, so one unusual event approved the requested host.
+describe('whose host a record names is decided on what a URL and the other events say',()=>{
+  const high=(...events:Record<string,unknown>[])=>expect(candidate('hostname',...events)).toMatchObject({confidence:'HIGH'});
+  const review=(...events:Record<string,unknown>[])=>expect(candidate('hostname',...events)).toMatchObject({confidence:'REVIEW'});
+  it('keeps the name of a device beside a web URL of another host',()=>{
+    high({client_ip:'192.0.2.70',action:'deny',host_name:'edge-01',url:'https://shop.example.invalid/login',severity:75},
+      {client_ip:'192.0.2.71',action:'monitor',host_name:'edge-02',url:'https://shop.example.invalid/api',severity:25});
+    high({sourceIp:'192.0.2.150',destinationIp:'198.51.100.150',action:'allowed',deviceName:'zia-01',url:'https://example.invalid/a'});
+    high({host:'fw01',referer:'https://portal.example.com/start',action:'allow'});
+    // Another host whose name merely begins with the value
+    high({host:'fw01',url:'https://fw01.example.com/a',action:'allow'});
+  });
+  it('does not approve a host that a URL of the same record names',()=>{
+    review({client:'10.0.0.5',host:'example.com:8443',url:'https://example.com:8443/a',status:200});
+    review({client:'10.0.0.5',host:'Example.COM',url:'https://bob@example.com/a',status:200});
+    // A URL written without its scheme (a proxy access line)
+    review({src:'10.0.0.5',host:'example.com',url:'example.com/a',action:'allowed'});
+    review({src:'10.0.0.5',host:'example.com',url:'example.com:8080/a',action:'allowed'});
+    // The URL one level deeper than the host
+    review({host:'example.com',request:{url:'https://example.com/a'},status:200});
+    // The same value that is not a URL says nothing
+    high({host:'fw01',peer:'fw01',action:'allow'});
+  });
+  it('is not approved because one event writes its method in an unusual way',()=>{
+    review({method:'GET',host:'a.example',uri:'/'},{method:'GET',host:'b.example',uri:'/'},{method:'PROPFIND',host:'c.example',uri:'/dav'});
+    review({method:'GET',host:'a.example',uri:'/'},{method:'-',host:'a.example',uri:'/'});
+    // The requested host of the request events and the device of another record share one field
+    review({host:'example.com',method:'GET',uri:'/'},{host:'proxy01',type:'system',msg:'started'});
+    // A device whose other records carry the same name keeps it
+    high({host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw01',type:'traffic',action:'allow'});
+    review({host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw02',type:'webfilter',method:'GET',url:'/y'},
+      {host:'fw01',type:'traffic',action:'allow'});
+  });
+  it('reads a request that is written in lower case or without a version',()=>{
+    review({method:'get',host:'example.com',uri:'/index.html',status:200});
+    review({host:'shop.example.com',request:'GET /cart',status:200});
+    review({host:'shop.example.com',request:'post https://shop.example.com/cart HTTP/2',status:200});
+  });
+  it('does not take an everyday word for a request',()=>{
+    high({host:'fw01',level:'trace',msg:'link up'},{host:'fw02',level:'debug',msg:'link down'});
+    high({host:'fw01',msg:'Connect failed'},{host:'fw01',action:'Delete file'});
+    high({host:'srv01',action:'delete',user:'bob'});
+    high({host:'srv01',msg:'GET lost'});
+  });
+});
+
+describe('protocol evidence for a literal dotted key inside an object of the event',()=>{
+  const body=(kv:Record<string,unknown>)=>({syslog_hostname:'fw01',body:kv});
+  it('is read in the object that holds the key',()=>{
+    const icmp=body({'flow.src':'10.0.0.3','flow.dst':'8.8.8.8','flow.sport':8,'flow.dport':0,'flow.proto':'icmp'});
+    const tcp=body({'flow.src':'10.0.0.1','flow.dst':'10.0.0.2','flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'});
+    expect(candidateRead('syslog_rfc3164','srcport',tcp,icmp)).toMatchObject({source:'body.flow.sport',confidence:'REVIEW'});
+    expect(candidateRead('syslog_rfc3164','srcport',tcp,tcp)).toMatchObject({source:'body.flow.sport',confidence:'HIGH'});
+  });
+});

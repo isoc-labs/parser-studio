@@ -112,6 +112,22 @@ function oracle(mod){
   }
   assert.equal(runSuite(mod,[{host:'fw01',url:'/admin',action:'login'}]).find(c=>c.source==='host')?.safeForBulk,true,
     'host field beside a path, which is not a web URL');
+  // A URL of another host says nothing about the host beside it; the host of request events is confirmed only by
+  // another record family that carries the same value; one event with an unusual method confirms nothing.
+  assert.equal(runSuite(mod,[{client_ip:'192.0.2.70',action:'deny',host_name:'edge-01',url:'https://shop.example.invalid/login'}])
+    .find(c=>c.source==='host_name')?.safeForBulk,true,'device host beside a web URL of another host');
+  const hostOf=events=>runSuite(mod,events).find(c=>c.source==='host');
+  assert.equal(hostOf([{method:'GET',host:'a.example',uri:'/'},{method:'-',host:'a.example',uri:'/'}])?.confidence,'REVIEW',
+    'requested host beside a placeholder method');
+  assert.equal(hostOf([{host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw02',type:'webfilter',method:'GET',url:'/y'},
+    {host:'fw01',type:'traffic',action:'allow'}])?.confidence,'REVIEW','one request host that no other record family carries');
+  assert.equal(hostOf([{host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw01',type:'traffic',action:'allow'}])?.safeForBulk,true,
+    'device host confirmed by another record family');
+  // A literal dotted protocol key is read in the object that holds the port (the body of a Syslog reading).
+  const inBody=kv=>({fields:{body:kv},effectiveFormat:'syslog_rfc3164'});
+  assert.equal(mod.suggestNormalizationCandidatesFromSuite({events:[
+    inBody({'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'}),inBody({'flow.sport':8,'flow.dport':0,'flow.proto':'icmp'})]},[])
+    .find(c=>c.source==='body.flow.sport')?.confidence,'REVIEW','ICMP named by a literal dotted key in a Syslog body');
   assert.deepEqual(runSuite(mod,[]),[],'empty data has no candidates');
 }
 const variants=[
@@ -130,12 +146,24 @@ const variants=[
   ['approve a host field that lives inside an object of the record',
     'if(!recordLevelSource(local,carrierFormats))return true;',
     ''],
-  ['ignore an absolute web URL beside a host field',
-    'carriers.every(fields=>saysHttpRequest(fields)||webUrlBeside(fields,source));',
-    'carriers.every(fields=>saysHttpRequest(fields));'],
+  ['ignore a URL of the record that names the host',
+    'if(carriers.some(({host,leaves})=>leaves.some(([,text])=>urlHost(text)===host)))return true;',
+    ''],
+  ['take any web URL beside a host for a request to that host',
+    'leaves.some(([,text])=>urlHost(text)===host)',
+    'leaves.some(([,text])=>urlHost(text)!==undefined)'],
   ['take a field called method for an HTTP request whatever its value says',
-    'return HTTP_METHOD_TOKENS.has(text)||HTTP_REQUEST_LINE.test(text)||HTTP_VERSION.test(text);',
-    'return text.length>0;'],
+    'HTTP_METHOD_TOKENS.has(targeted?text.toUpperCase():text)).map(([path])=>path);',
+    'text.length>0).map(([path])=>path);'],
+  ['approve the requested host when one event carries no known method',
+    'return carriers.some(({host,leaves})=>ofRequest(leaves)&&!elsewhere.has(host));',
+    'return carriers.length>0&&carriers.every(({leaves})=>requestEvidencePaths(leaves).length>0);'],
+  ['let any event of another family confirm the host of a request',
+    'ofRequest(leaves)&&!elsewhere.has(host));',
+    'ofRequest(leaves)&&elsewhere.size===0);'],
+  ['look for the protocol of a literal dotted key at the root of the event only',
+    'const containers=new Map<Record<string,unknown>,string>([[holder.container,holder.written]]);',
+    "const containers=new Map<Record<string,unknown>,string>([[fields,source.slice(0,source.lastIndexOf('.')+1).toLowerCase()]]);"],
   ['ignore a non-transport protocol beside the port',
     'informative>0&&!nonTransportPort&&!lacksTransportEvidence;',
     'informative>0&&!lacksTransportEvidence;'],

@@ -110,19 +110,34 @@ function scalarLeaves(value:unknown,out:string[]):void{
   }
   if(value!==null&&value!==undefined)out.push(String(value).trim().toLowerCase());
 }
-function protocolValuesBeside(fields:Record<string,unknown>,source:string,withRoot:boolean):string[]{
-  // What the source is written with up to its last dot ("flow." of "flow.sport"; nothing for "sport").
-  const writtenPrefix=source.slice(0,source.lastIndexOf('.')+1).toLowerCase();
-  const containers=new Set<Record<string,unknown>>();
-  for(const prefix of protocolContextPrefixes(source)){
-    const container=objectAt(fields,prefix.endsWith('.')?prefix.slice(0,-1):prefix);
-    if(container)containers.add(container);
+/** The object of the event that holds `source` - the deepest one its path leads to - and what the source is
+ * written with inside that object up to its last dot ("flow." of the literal key "flow.sport", in the root of
+ * the event or in the body of a Syslog reading alike: independent audit 2026-11-22, G-07). */
+function holderOf(fields:Record<string,unknown>,source:string):{container:Record<string,unknown>;written:string}{
+  let head=source;
+  for(;;){
+    head=head.slice(0,Math.max(0,head.lastIndexOf('.')));
+    // The root of the event (an empty path) is always an object.
+    const container=objectAt(fields,head);
+    if(container){
+      const key=source.slice(head?head.length+1:0);
+      return {container,written:key.slice(0,key.lastIndexOf('.')+1).toLowerCase()};
+    }
   }
-  if(withRoot||containers.size===0)containers.add(fields);
+}
+function protocolValuesBeside(fields:Record<string,unknown>,source:string,withRoot:boolean):string[]{
+  const holder=holderOf(fields,source);
+  const containers=new Map<Record<string,unknown>,string>([[holder.container,holder.written]]);
+  for(const prefix of protocolContextPrefixes(source).slice(1)){
+    const container=objectAt(fields,prefix.slice(0,-1));
+    if(container)containers.set(container,'');
+  }
+  // From the root of the event the source is written with everything up to its last dot.
+  if(withRoot&&!containers.has(fields))containers.set(fields,source.slice(0,source.lastIndexOf('.')+1).toLowerCase());
   const values:string[]=[];
-  for(const container of containers)for(const key of Object.keys(container)){
+  for(const [container,written] of containers)for(const key of Object.keys(container)){
     const name=key.toLowerCase();
-    const local=name.startsWith(writtenPrefix)?name.slice(writtenPrefix.length):name;
+    const local=name.startsWith(written)?name.slice(written.length):name;
     if(PROTOCOL_EVIDENCE_NAMES.includes(local))scalarLeaves(container[key],values);
   }
   return values;
@@ -192,19 +207,30 @@ function suricataAlertEvidence(fields:Record<string,unknown>,source:string):bool
       lookupFieldValue(fields,prefix+'alert.signature_id').found;
   });
 }
-// HTTP request methods (RFC 9110 section 9, and PATCH of RFC 5789) as a request writes them, a request line
-// and a protocol version: what a VALUE of the record says, whatever the field that holds it is called.
+// HTTP request methods (RFC 9110 section 9, and PATCH of RFC 5789), a request target (origin form or absolute
+// form, RFC 9112 section 3.2), a request line and a protocol version: what a VALUE of the record says, whatever
+// the field that holds it is called.
 const HTTP_METHOD_TOKENS=new Set(['GET','HEAD','POST','PUT','DELETE','CONNECT','OPTIONS','TRACE','PATCH']);
-const HTTP_REQUEST_LINE=/^(?:GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE|PATCH) \S+ HTTP\/\d(?:\.\d)?$/u;
+const REQUEST_TARGET=/^(?:\/\S*|(?:https?|wss?):\/\/\S+)$/iu;
+const HTTP_REQUEST_LINE=/^(?:GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE|PATCH) (?:\/\S*|(?:https?|wss?):\/\/\S+)(?: HTTP\/\d(?:\.\d)?)?$/iu;
 const HTTP_VERSION=/^HTTP\/\d(?:\.\d)?$/u;
-/** True when a value of the event, at any depth, is an HTTP method, a request line or an HTTP version: the
- * event describes an HTTP request. */
-function saysHttpRequest(value:unknown):boolean{
-  // Object.values gives the members of an object and the items of a list alike.
-  if(value!==null&&typeof value==='object')return Object.values(value as Record<string,unknown>).some(saysHttpRequest);
-  if(typeof value!=='string')return false;
-  const text=value.trim();
-  return HTTP_METHOD_TOKENS.has(text)||HTTP_REQUEST_LINE.test(text)||HTTP_VERSION.test(text);
+type Leaf=readonly [path:string,text:string];
+/** Every scalar of the event, at any depth, with the path that leads to it. */
+function leavesOf(value:unknown,path:string,out:Leaf[]):void{
+  if(value!==null&&typeof value==='object'){
+    // Object.entries gives the members of an object and the items of a list alike.
+    for(const [key,child] of Object.entries(value as Record<string,unknown>))leavesOf(child,path+'.'+key,out);
+    return;
+  }
+  if(value!==null&&value!==undefined)out.push([path,String(value).trim()]);
+}
+/** The paths of the event whose value says that the event describes an HTTP request: an HTTP version, a request
+ * line (with or without its version), a method as a request writes it, or a method in any case when a value of
+ * the same event is a request target (`method=get uri=/index.html`; `level=trace` alone is a log level). */
+function requestEvidencePaths(leaves:readonly Leaf[]):string[]{
+  const targeted=leaves.some(([,text])=>REQUEST_TARGET.test(text));
+  return leaves.filter(([,text])=>HTTP_VERSION.test(text)||HTTP_REQUEST_LINE.test(text)||
+    HTTP_METHOD_TOKENS.has(targeted?text.toUpperCase():text)).map(([path])=>path);
 }
 // The HOSTNAME of a Syslog header: its position in the header names the sender (RFC 3164 4.1.2, RFC 5424 6.2.4).
 const SYSLOG_HEADER_HOST_SOURCES=['syslog_hostname','syslog.hostname','syslog.host'];
@@ -217,31 +243,38 @@ const syslogHeaderHostIn=(fields:Record<string,unknown>):boolean=>
  * A host field whose meaning as the official hostname (the host the record is about) is not established.
  * In a record of an HTTP request a host field is, as a rule, the host the client ASKED FOR (the Host header:
  * Zeek http.log `host`, nginx `host`, Suricata `http.hostname`, `req.headers.host`), and nothing in the record
- * tells the two apart. So a field that is carried only by events that describe an HTTP request is offered for
- * review and never approved. Decided on what the values say, not on the names of the fields beside it: the
+ * tells the two apart. So a field of events that describe an HTTP request is offered for review and not
+ * approved, unless events of another record family carry the same host (see hostNameUnconfirmed). Decided on what the values say, not on the names of the fields beside it: the
  * earlier rule (a field called `host` beside fields called method and uri) missed every other naming and
  * refused a device host name outright (independent audit 2026-11-21, F-05, F-06). A field that events without
  * a request carry as well (host=fw01 in the traffic, web filter and system lines of one device) is an
  * attribute of the record, and a Syslog header host is never asked. Where a Syslog header names the sender,
  * the host field of the request beside it is another host and is not proposed at all.
  */
-// An absolute web URL: the record refers to a resource on a web host.
-const WEB_URL=/^(?:https?|wss?):\/\/\S+$/iu;
-/** True when a value beside `source`, in the object that holds it, is an absolute web URL. */
-function webUrlBeside(fields:Record<string,unknown>,source:string):boolean{
-  const dot=source.lastIndexOf('.');
-  // Object() of "no such object" is an empty object: nothing beside the field.
-  const container=Object(dot>0?objectAt(fields,source.slice(0,dot)):fields) as Record<string,unknown>;
-  return Object.values(container).some(value=>typeof value==='string'&&WEB_URL.test(value.trim()));
-}
+// The host of a URL: after the scheme and the user information, or - written without a scheme, as proxy access
+// lines write it - before the first slash.
+const URL_WITH_SCHEME=/^[a-z][a-z0-9+.-]*:\/\/(?:[^\/?#@\s]*@)?([^\/?#:\s]+)/iu;
+const URL_WITHOUT_SCHEME=/^([^\/?#:@\s]+)(?::\d+)?\/\S*$/u;
+const urlHost=(text:string):string|undefined=>
+  (URL_WITH_SCHEME.exec(text)??URL_WITHOUT_SCHEME.exec(text))?.[1]?.toLowerCase();
+/** A host value as it is compared: without regard to case and without a port (`Host: example.com:8443`). */
+const hostText=(value:unknown):string=>String(value).trim().toLowerCase().replace(/:\d+$/u,'');
 /**
- * Two further grounds (the first is above): the field does not stand for the record at all - it lives inside
- * an object of the record (`http.hostname`, `req.headers.host`, `transaction.request.headers.Host`) or is
- * written with such a prefix as a literal key (`http.host`), so it is an attribute of that object, and which
- * host an `agent`, an `observer` or a `request` names is exactly what a name cannot tell; or every event that
- * carries it also carries an absolute web URL beside it (a proxy or web-filter record without a method), which
- * is the same evidence of a request as a method is. What remains undecidable from the record itself - a
- * request written with a path only, no method, no version - is still approved; nothing in it says HTTP.
+ * Three further grounds (the first is above).
+ * The field does not stand for the record at all: it lives inside an object of the record (`http.hostname`,
+ * `req.headers.host`, `transaction.request.headers.Host`) or is written with such a prefix as a literal key
+ * (`http.host`), so it is an attribute of that object, and which host an `agent`, an `observer` or a `request`
+ * names is exactly what a name cannot tell.
+ * A URL of the same event names this very host (`host=example.com url=https://example.com/a`): it is the host
+ * that was asked for. A URL of another host says nothing about the field - an edge or proxy device logs its own
+ * name beside the URL it served, and a referrer is a URL too (independent audit 2026-11-22, G-08).
+ * The events that describe a request are those that carry a field which, in some event, holds request evidence:
+ * the field is the method (or request line, or version) of the record family, whatever one event writes in it
+ * (`PROPFIND`, `-`). A host of such events is confirmed only by an event of another family that carries the
+ * same host value: host=fw01 in the web filter and in the traffic lines of one device. One event without a
+ * known method does not confirm the requested hosts of the others (G-04).
+ * What remains undecidable from the record itself - a request written with a path only, no method, no version,
+ * no URL that names the host - is still approved; nothing in it says HTTP.
  */
 function hostNameUnconfirmed(source:string,events:readonly Record<string,unknown>[],
   formats:readonly (string|undefined)[]):boolean{
@@ -249,8 +282,18 @@ function hostNameUnconfirmed(source:string,events:readonly Record<string,unknown
   if(SYSLOG_HEADER_HOST_SOURCES.includes(local))return false;
   const carrierFormats=events.flatMap((fields,index)=>lookupFieldValue(fields,source).found?[formats[index]]:[]);
   if(!recordLevelSource(local,carrierFormats))return true;
-  const carriers=events.filter(fields=>lookupFieldValue(fields,source).found);
-  return carriers.length>0&&carriers.every(fields=>saysHttpRequest(fields)||webUrlBeside(fields,source));
+  const carriers=events.flatMap(fields=>{
+    const held=lookupFieldValue(fields,source);
+    if(!held.found)return [];
+    const leaves:Leaf[]=[];
+    leavesOf(fields,'',leaves);
+    return [{host:hostText(held.value),leaves}];
+  });
+  if(carriers.some(({host,leaves})=>leaves.some(([,text])=>urlHost(text)===host)))return true;
+  const requestPaths=new Set(carriers.flatMap(({leaves})=>requestEvidencePaths(leaves)));
+  const ofRequest=(leaves:readonly Leaf[]):boolean=>leaves.some(([path])=>requestPaths.has(path));
+  const elsewhere=new Set(carriers.filter(({leaves})=>!ofRequest(leaves)).map(({host})=>host));
+  return carriers.some(({host,leaves})=>ofRequest(leaves)&&!elsewhere.has(host));
 }
 function incompatibleVendorMeaning(
   source:string,target:string,events:Record<string,unknown>[],
