@@ -19,10 +19,11 @@ from source_kv import decode_source_kv
 class DelimitedPairUnread(unittest.TestCase):
     def test_a_pair_behind_a_list_delimiter_is_not_completely_parsed(self):
         for raw in (
-            "src=10.0.0.1,dst=10.0.0.2,action=allow",
-            "src=10.0.0.1;dst=10.0.0.2",
-            "src=10.0.0.1|dst=10.0.0.2",
+            # (A body that is one delimited list - "src=10.0.0.1,dst=10.0.0.2,action=allow" - is read as its
+            # pairs by the list grammar: tests/test_contract_kv_list_20261121.py.)
             "src=10.0.0.1, dst=10.0.0.2 action=allow",
+            "src=10.0.0.1,dst=10.0.0.2;action=allow",
+            "src=10.0.0.1,dst=10.0.0.2,",
             "a=1 b=2;c=3",
             "actioL=vEF:2.0|n=denydeny srcip=10.9.9.9",
         ):

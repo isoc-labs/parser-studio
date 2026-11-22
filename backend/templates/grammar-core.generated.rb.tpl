@@ -969,6 +969,39 @@ def psg_inspect_declared_forwarders(raw, config = nil)
   return (psg_t(hops.length) ? {'status' => 'UNWRAPPED', 'payload' => text, 'payloadStartByte' => startByte, 'hops' => hops, 'reason' => 'DECLARED_SYSLOG_RELAY'} : direct)
 end
 
+# src/grammar/kvBody.ts: isDelimitedPairList
+def psg_is_delimited_pair_list(input)
+  delimiter = count = cursor = match = separator = found = nil
+  delimiter = ''
+  count = 0
+  cursor = 0
+  while (cursor <= psg_len(input))
+    match = psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)'|(?<bare>[^ \t\n\r\f\x0b\x1c-\x1f"',;|=]+)))/, input, cursor)
+    if (!psg_t(match) || (psg_match_end(match) <= cursor))
+      return false
+    end
+    count += 1
+    if (count > 100)
+      return true
+    end
+    cursor = psg_match_end(match)
+    if /\A(?:[ \t\n\r\f\x0b]*)\z/.match?(psg_slice(input, cursor))
+      return (count >= 2)
+    end
+    separator = psg_match_at(/\G(?:(?<delimiter>[,;|]))/, input, cursor)
+    if !psg_t(separator)
+      return false
+    end
+    found = psg_group(separator, 'delimiter')
+    if ((delimiter != '') && (found != delimiter))
+      return false
+    end
+    delimiter = found
+    cursor = psg_match_end(separator)
+  end
+  return false
+end
+
 # src/grammar/parseStatus.ts: isListDelimiter
 def psg_is_list_delimiter(ch)
   return (((ch == ',') || (ch == ';')) || (ch == '|'))
@@ -1273,15 +1306,23 @@ end
 
 # src/grammar/kvBody.ts: parseStrictKeyValues
 def psg_parse_strict_key_values(input)
-  pairs = seen = cursor = match = key = quoted = nil
+  pairs = seen = listed = cursor = separator = match = key = quoted = value = nil
   pairs = []
   seen = {}
+  listed = psg_is_delimited_pair_list(input)
   cursor = 0
   while (cursor < psg_len(input))
     if /\A(?:[ \t\n\r\f\x0b]*)\z/.match?(psg_slice(input, cursor))
       break
     end
-    match = psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>(?:\\[^\r\n]|[^"\\])*)"|'(?<sq>(?:\\[^\r\n]|[^'\\])*)'|(?<bare>(?:\\[^ \t\n\r\f\x0b\x1c-\x1f]|[^ \t\n\r\f\x0b\x1c-\x1f"'\\]|\\)+)))/, input, cursor)
+    if (listed && (pairs.length > 0))
+      separator = psg_match_at(/\G(?:(?<delimiter>[,;|]))/, input, cursor)
+      if !psg_t(separator)
+        return {'ok' => false, 'reason' => 'MALFORMED_PAIR'}
+      end
+      cursor = psg_match_end(separator)
+    end
+    match = (listed ? psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)'|(?<bare>[^ \t\n\r\f\x0b\x1c-\x1f"',;|=]+)))/, input, cursor) : psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>(?:\\[^\r\n]|[^"\\])*)"|'(?<sq>(?:\\[^\r\n]|[^'\\])*)'|(?<bare>(?:\\[^ \t\n\r\f\x0b\x1c-\x1f]|[^ \t\n\r\f\x0b\x1c-\x1f"'\\]|\\)+)))/, input, cursor))
     if (!psg_t(match) || (psg_match_end(match) <= cursor))
       return {'ok' => false, 'reason' => 'MALFORMED_PAIR'}
     end
@@ -1297,7 +1338,8 @@ def psg_parse_strict_key_values(input)
     end
     seen[key] = true
     quoted = (psg_null?(psg_t1 = psg_group(match, 'dq')) ? psg_group(match, 'sq') : psg_t1)
-    pairs.push([key, (quoted.nil? ? (psg_null?(psg_t2 = psg_group(match, 'bare')) ? '' : psg_t2) : psg_unescape_kv_value(quoted))])
+    value = (quoted.nil? ? (psg_null?(psg_t2 = psg_group(match, 'bare')) ? '' : psg_t2) : psg_unescape_kv_value(quoted))
+    pairs.push([key, ((listed && !quoted.nil?) ? quoted : value)])
     cursor = psg_match_end(match)
   end
   return ((pairs.length > 0) ? {'ok' => true, 'pairs' => pairs} : {'ok' => false, 'reason' => 'NO_PAIRS'})

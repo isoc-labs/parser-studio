@@ -20,6 +20,8 @@ from structured_source import Fragment
 from syslog_header_grammar_generated import FRAGMENTS,SEMANTICS,TOKENS,KV_ASCII_WHITESPACE
 
 PAIR=re.compile(FRAGMENTS['kv_pair']['source'])
+LIST_PAIR=re.compile(FRAGMENTS['kv_list_pair']['source'])
+LIST_SEPARATOR=re.compile(FRAGMENTS['kv_list_separator']['source'])
 TRAILING=re.compile('(?:'+TOKENS['KV_TRAILING']+')')
 GAP=re.compile('(?:'+TOKENS['KV_GAP']+')')
 KEY=re.compile('(?:'+TOKENS['KV_KEY']+')=')
@@ -72,6 +74,26 @@ def _diagnose(raw:str,pos:int)->str:
     return 'KV_VALUE_MALFORMED'
 
 
+def _is_delimited_pair_list(raw:str,begin:int)->bool:
+    """True when the body is a delimited list (contract fragments.kv_list_pair): two or more list pairs,
+    each separated from the next by the same list delimiter, and only white space after the last one.
+    Same control flow as isDelimitedPairList of src/grammar/kvBody.ts."""
+    delimiter='';count=0;pos=begin
+    while pos<=len(raw):
+        match=LIST_PAIR.match(raw,pos)
+        if match is None or match.end()<=pos:return False
+        count+=1
+        if count>MAX_FIELDS:return True
+        pos=match.end()
+        if TRAILING.fullmatch(raw,pos) is not None:return count>=2
+        separator=LIST_SEPARATOR.match(raw,pos)
+        if separator is None:return False
+        found=separator['delimiter']
+        if delimiter!='' and found!=delimiter:return False
+        delimiter=found;pos=separator.end()
+    return False
+
+
 def decode_source_kv(raw:str,begin:int=0,*,max_fields:int=MAX_FIELDS)->Fragment:
     if not isinstance(raw,str):raise TypeError('KV_SOURCE_NOT_TEXT')
     if not (0<=begin<=len(raw) and 1<=max_fields<=MAX_FIELDS):
@@ -80,10 +102,16 @@ def decode_source_kv(raw:str,begin:int=0,*,max_fields:int=MAX_FIELDS)->Fragment:
     if len(raw.encode('utf8'))>MAX_BYTES or '\x00' in raw:
         out.issues.append('KV_SOURCE_SIZE_OR_NUL_INVALID');return out
     pos=begin;n=len(raw)
+    listed=_is_delimited_pair_list(raw,begin)
     while pos<n:
         if TRAILING.fullmatch(raw,pos) is not None:
             out.covered.append((pos,n));break
-        match=PAIR.match(raw,pos)
+        if listed and out.primitive_fields>0:
+            separator=LIST_SEPARATOR.match(raw,pos)
+            if separator is None:
+                out.issues.append(_diagnose(raw,pos));break
+            out.covered.append(separator.span());pos=separator.end()
+        match=(LIST_PAIR if listed else PAIR).match(raw,pos)
         if match is None or match.end()<=pos:
             out.issues.append(_diagnose(raw,pos));break
         key=match['key']
@@ -94,6 +122,8 @@ def decode_source_kv(raw:str,begin:int=0,*,max_fields:int=MAX_FIELDS)->Fragment:
         group=next(name for name in ('dq','sq','bare') if match[name] is not None)
         # An unquoted value has no quoting syntax to escape from: it is the text as written.
         value=match[group] if group=='bare' else unescape_kv_value(match[group])
+        # In a delimited list a quoted value is the text between its quotes (contract KV_LIST_DQ).
+        if listed:value=match[group]
         # A pair behind a list delimiter was not read as a pair: every field is kept, and the event is never
         # reported as completely parsed (the browser grades it PARTIAL, src/grammar/parseStatus.ts).
         if group=='bare' and 'KV_DELIMITED_PAIR_UNREAD' not in out.issues and _delimited_pair_unread(raw,*match.span('bare')):

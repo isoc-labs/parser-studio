@@ -31,15 +31,32 @@ EXPECTED={'unit_hostname':'bigip-4.pme-ds.f5.com','management_ip_address':'172.1
           'severity':'Informational'}
 
 
+# Phase 3 (Issue #315): a body that is one delimited list of key=value pairs is read by the strict key=value
+# grammar (contract fragments.kv_list_pair) before the adjacent comma_kv frame is asked. The record is the same
+# record under either reader; these are the readers that may take it.
+RECORD_SYNTAXES=('GENERIC_RFC3164_BODY+COMMA_KV','SECURITY_SYSLOG_ENVELOPE+KV','SYSLOG_RFC3164+KV')
+
+
+def record_fields(result):
+    """The fields of the record, where the reader that took it puts them."""
+    fields=result['fields']
+    return fields['body'] if isinstance(fields.get('body'),dict) else fields['generic']['fields']
+
+
+def syslog_host(result):
+    syslog=result['fields']['syslog']
+    return syslog.get('host') or syslog.get('hostname')
+
+
 class Rfc3164AdjacentTag(unittest.TestCase):
     def test_every_field_is_read_with_and_without_a_blank_after_the_tag(self):
         for raw in (HEAD+BODY,HEAD+' '+BODY):
             result=preview(raw)
             self.assertEqual(result['status'],'SOURCE_PARSED',raw[:60])
             self.assertEqual(result['issues'],[])
-            self.assertEqual(result['fields']['generic']['fields'],EXPECTED)
+            self.assertEqual(record_fields(result),EXPECTED)
             self.assertEqual(result['fields']['syslog']['tag'],'ASM')
-            self.assertEqual(result['fields']['syslog']['host'],'bigip-4.pme-ds.f5.com')
+            self.assertEqual(syslog_host(result),'bigip-4.pme-ds.f5.com')
 
     def test_the_adjacent_frame_is_narrow(self):
         self.assertIsNone(extract_rfc3164(HEAD+BODY))
@@ -130,8 +147,8 @@ class Rfc3164AdjacentTag(unittest.TestCase):
                     'ip_client="10.4.1.101",x_forwarded_for_header_value="N/A", sig_ids=""')
         result=preview(documented)
         self.assertEqual(result['status'],'SOURCE_PARSED')
-        self.assertEqual(result['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV')
-        self.assertEqual(result['fields']['generic']['fields'],{
+        self.assertIn(result['syntax'],RECORD_SYNTAXES)
+        self.assertEqual(record_fields(result),{
             'unit_hostname':'bigip-4.pme-ds.f5.com','management_ip_address':'172.16.73.34',
             'http_class_name':'/Common/topaz4-web4','policy_name':'topaz4-web4',
             'policy_apply_date':'2012-09-19 11:38:36','violations':'','support_id':'18205860747014045701',
@@ -141,8 +158,8 @@ class Rfc3164AdjacentTag(unittest.TestCase):
         # (found by the third audit pass: the value class excluded every backslash and the record was declined).
         result=preview(F5_DOCUMENTED)
         self.assertEqual(result['status'],'SOURCE_PARSED')
-        self.assertEqual(result['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV')
-        fields=result['fields']['generic']['fields']
+        self.assertIn(result['syntax'],RECORD_SYNTAXES)
+        fields=record_fields(result)
         self.assertEqual(len(fields),31)
         self.assertEqual(fields['request'],'GET / HTTP/1.0\\r\\nUser-Agent: Wget/1.12 (linux-gnu)\\r\\nAccept: */*'
                          '\\r\\nHost: 10.4.1.200\\r\\nConnection: Keep-Alive\\r\\n\\r\\n')
@@ -152,8 +169,8 @@ class Rfc3164AdjacentTag(unittest.TestCase):
         raw=head+'portal:user="o\'brien",note="a,b=c",empty="",src="203.0.113.5",dst="10.1.1.9"'
         result=preview(raw)
         self.assertEqual(result['status'],'SOURCE_PARSED')
-        self.assertEqual(result['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV')
-        self.assertEqual(result['fields']['generic']['fields'],
+        self.assertIn(result['syntax'],RECORD_SYNTAXES)
+        self.assertEqual(record_fields(result),
                          {'user':"o'brien",'note':'a,b=c','empty':'','src':'203.0.113.5','dst':'10.1.1.9'})
 
     def test_every_object_member_name_keeps_the_record_out_and_a_backslash_is_text(self):
@@ -164,16 +181,16 @@ class Rfc3164AdjacentTag(unittest.TestCase):
                  '__lookupSetter__')
         head='<134>Nov 16 10:15:04 web01 portal:'
         rest=',src="203.0.113.5",dst="10.1.1.9",port="443",result="ok"'
-        self.assertEqual(preview(head+'user="bob"'+rest)['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV')
+        self.assertIn(preview(head+'user="bob"'+rest)['syntax'],RECORD_SYNTAXES)
         for name in members:
             for raw in (head+name+'="bob"'+rest,head+'user="bob"'+rest+','+name+'="x"'):
                 self.assertNotIn('GENERIC_RFC3164_BODY',preview(raw).get('syntax') or '',raw)
         for value in ('a\\ b','a\\,b','a\\=b','\\1','\\\\x','\\/etc','x\\\u00e9','\\ ','a\\,k="v'[:5]):
             raw=head+'path="'+value+'"'+rest
             result=preview(raw)
-            self.assertEqual(result['syntax'],'GENERIC_RFC3164_BODY+COMMA_KV',raw)
-            self.assertEqual(result['fields']['generic']['fields']['path'],value,raw)
-            self.assertEqual(result['fields']['generic']['fields']['src'],'203.0.113.5',raw)
+            self.assertIn(result['syntax'],RECORD_SYNTAXES,raw)
+            self.assertEqual(record_fields(result)['path'],value,raw)
+            self.assertEqual(record_fields(result)['src'],'203.0.113.5',raw)
 
     def test_cef_behind_an_adjacent_tag_is_still_read_as_cef(self):
         raw=HEAD+'CEF:0|F5|ASM|11.3.0|Successful Request|Successful Request|2| act=passed src=10.4.1.101 spt=52963 dst=10.4.1.200 dpt=80'

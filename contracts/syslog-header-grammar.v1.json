@@ -1,7 +1,7 @@
 {
   "schema": "parserstudio.grammar-contract.v1",
   "id": "syslog-header",
-  "revision": 7,
+  "revision": 8,
   "purpose": "Single declarative definition of the Syslog header grammar and of the strict key=value body grammar (fragments.kv_pair). The browser TypeScript and the generated Ruby Fragment take their structured-path header regular expressions, capture names and semantic limits from the code generated from this file (scripts/grammar/generate-grammar.mjs). Not migrated yet (Issue #249 W4, W5): the Generic Structural sites and the Python Multi-Pass engine, which still carry hand-written copies; those copies are counted and ratcheted down by scripts/verification/grammar-duplication-ratchet.mjs.",
   "authority": [
     "RFC 3164 section 4.1 (PRI, HEADER = TIMESTAMP HOSTNAME, MSG = TAG CONTENT)",
@@ -65,7 +65,7 @@
     },
     "KV_GAP": {
       "pattern": "[ \\t]*",
-      "semantic": "Pairs are separated by SP or TAB only. Any other character, including NBSP and U+2028, is value data."
+      "semantic": "Pairs are separated by SP or TAB only. Any other character, including NBSP and U+2028, is value data. The one exception is a body that is a delimited list as a whole (fragments.kv_list_pair, kv_list_separator)."
     },
     "KV_KEY": {
       "pattern": "[A-Za-z_][A-Za-z0-9_.-]{0,95}"
@@ -80,6 +80,22 @@
     "KV_BARE": {
       "pattern": "(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+",
       "semantic": "Unquoted value: ends at ASCII white space or a quote, also after a backslash (a backslash takes the next character with it unless that character is white space, and a backslash at the end of the value is a character of the value: a directory path). The value is the text as written: nothing is decoded in an unquoted value, so a UNC path keeps both leading backslashes; the information separators U+001C..U+001F are never value data (issue #214)"
+    },
+    "KV_LIST_BARE": {
+      "pattern": "[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"',;|=]+",
+      "semantic": "Unquoted value of a pair in a delimited list: ends at ASCII white space, a quote, a list delimiter (, ; |) or \"=\". The value is the text as written, a backslash included. A value with \"=\" is not read by the list grammar, so a value that is a list of its own (a distinguished name CN=a,OU=b, a cookie, a query string) is never cut into pairs"
+    },
+    "KV_LIST_DQ": {
+      "pattern": "[^\"]*",
+      "semantic": "Double-quoted value of a pair in a delimited list: the text between the quotes, exactly as written. Nothing is decoded and a backslash is a character like any other, so a value cannot hold its own quote; a body that needs one is not a delimited list. This is how the comma separated key=\"value\" records of a Syslog tag were read before the list grammar existed"
+    },
+    "KV_LIST_SQ": {
+      "pattern": "[^']*",
+      "semantic": "Single-quoted value of a pair in a delimited list: as KV_LIST_DQ"
+    },
+    "KV_LIST_DELIMITER": {
+      "pattern": "[,;|]",
+      "semantic": "The delimiter of a delimited list of pairs. One body uses one delimiter throughout"
     },
     "KV_TRAILING": {
       "pattern": "[ \\t\\n\\r\\f\\v]*",
@@ -525,6 +541,64 @@
               }
             ]
           ]
+        }
+      ]
+    },
+    "kv_list_pair": {
+      "description": "One key=value pair of a delimited list at the current position: KEY=\"...\" | KEY='...' | KEY=bare. A body is a delimited list when it is two or more of these pairs, each separated from the next by the same kv_list_separator, and nothing but white space follows the last one (a,b: \"a=1,b=2\", \"a=1; b=2\"). Any other body is read with kv_pair. A quoted value is the text between its quotes; nothing is decoded",
+      "sequence": [
+        {
+          "token": "KV_GAP"
+        },
+        {
+          "token": "KV_KEY",
+          "cap": "key"
+        },
+        {
+          "lit": "="
+        },
+        {
+          "alt": [
+            [
+              {
+                "lit": "\""
+              },
+              {
+                "token": "KV_LIST_DQ",
+                "cap": "dq"
+              },
+              {
+                "lit": "\""
+              }
+            ],
+            [
+              {
+                "lit": "'"
+              },
+              {
+                "token": "KV_LIST_SQ",
+                "cap": "sq"
+              },
+              {
+                "lit": "'"
+              }
+            ],
+            [
+              {
+                "token": "KV_LIST_BARE",
+                "cap": "bare"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    "kv_list_separator": {
+      "description": "The list delimiter between two pairs of a delimited list, directly after the value. SP and TAB may follow it (the gap of the next kv_list_pair)",
+      "sequence": [
+        {
+          "token": "KV_LIST_DELIMITER",
+          "cap": "delimiter"
         }
       ]
     },
