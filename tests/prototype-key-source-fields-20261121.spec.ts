@@ -28,12 +28,14 @@ for(const key of KEYS){
 
     const editor=page.getByLabel('Field mapping editor');
     const row=(source:string)=>editor.locator('article.normalization-map-row[data-source-path="'+source+'"]');
+    // The quoted comma list is read by the key=value list grammar, so the fields are the fields of the Syslog
+    // body (until 88c0768 the bounded compiler read the line and they were generic.fields.*).
     // The source key keeps its own name; it is neither renamed nor dropped.
-    await expect(row('generic.fields.'+key)).toHaveCount(1);
-    await expect(row('generic.fields.'+key).locator('input[aria-label^="Stellar field "]')).toHaveValue(key);
+    await expect(row('body.'+key)).toHaveCount(1);
+    await expect(row('body.'+key).locator('input[aria-label^="Stellar field "]')).toHaveValue(key);
     // Neighbouring fields keep their official meaning.
-    await expect(row('generic.fields.src').locator('input[aria-label^="Stellar field "]')).toHaveValue('srcip');
-    await expect(row('generic.fields.dst').locator('input[aria-label^="Stellar field "]')).toHaveValue('dstip');
+    await expect(row('body.src').locator('input[aria-label^="Stellar field "]')).toHaveValue('srcip');
+    await expect(row('body.dst').locator('input[aria-label^="Stellar field "]')).toHaveValue('dstip');
 
     // Both values of the field reach the browser output preview under the unchanged name.
     const preview=page.getByLabel('Final event preview');

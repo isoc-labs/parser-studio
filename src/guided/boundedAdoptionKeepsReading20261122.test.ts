@@ -110,3 +110,29 @@ describe('F-02: a natively and completely read event is not replaced by a readin
     expect(modes(PAN+'\n'+PAN.replace('10.10.20.15','10.10.20.16'))).toEqual(['panos_traffic_csv','panos_traffic_csv']);
   });
 });
+
+// Independent audit of 2026-11-22, G-03: the rule knew cells separated by a comma or a semicolon, and three or
+// more of them. The same record with pipes, or with two cells before the first white space, was still adopted
+// with three cells in the official url.
+describe('G-03: pipe cells and two header cells are the cells of a delimited record as well',()=>{
+  it.each([
+    ['pipe cells',
+      '2026-11-21 10:00:00|web01|request user="bob" src=10.0.0.5 method=GET status=200 url=/index.html|10.0.0.9|8443|ok'],
+    ['pipe cells behind a PRI',
+      '<14>2026-11-21 10:00:00|web01|request user="bob" src=10.0.0.5 method=GET status=200 url=/index.html|10.0.0.9|8443|ok'],
+    ['two header cells behind a PRI',
+      '<14>2026-11-21 10:00:00,web01 user=bob src=10.0.0.5 method=GET status=200 url=/index.html,10.0.0.9,8443,ok'],
+    ['two header cells without a PRI',
+      '2026-11-21 10:00:00,web01 user=bob src=10.0.0.5 method=GET status=200 url=/index.html,10.0.0.9,8443,ok'],
+  ])('%s',(_name,source)=>{
+    expect(adopt(source)).toBeNull();
+  });
+
+  it.each([
+    '<14>2026-11-21 10:00:00,123 user=bob src=10.0.0.5 method=GET status=200 url=/index.html',
+    '<14>2026-11-21 10:00:00,123+09:00 user=bob src=10.0.0.5 method=GET status=200 url=/index.html',
+    '<14>2026-11-21 10:00:00,123Z user=bob src=10.0.0.5 method=GET status=200 url=/index.html',
+  ])('does not take the decimal fraction of a time for a second cell: %s',source=>{
+    expect(modes(source)).toEqual(['space_kv']);
+  });
+});

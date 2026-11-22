@@ -230,14 +230,20 @@ function topLevelCells(raw:string,delimiter:string):string[]{
   return cells;
 }
 
-// A positional piece of a reading (a prefix token, a Syslog header field) that holds three or more cells of a
-// delimited record: "10:00:00,web01,request". One delimiter is not evidence ("10:00:00,123" is a time).
+// A positional piece of a reading (a prefix token, a Syslog header field) that holds cells of a delimited
+// record: "10:00:00,web01,request", "10:00:00|web01|request", "10:00:00,web01". The decimal fraction of a time,
+// which ISO 8601 writes with a comma as well ("10:00:00,123", "10:00:00,123+09:00"), is not a second cell
+// (independent audit 2026-11-22, G-03: pipes and two cells were not seen).
+const SECOND_FRACTION=/^\d+(?:Z|[+-]\d{2}(?::?\d{2})?)?$/u;
 const holdsCells=(piece:string):boolean=>
-  [',',';'].some(delimiter=>piece.split(delimiter).filter(part=>part.length>0).length>=3);
+  [',',';','|'].some(delimiter=>{
+    const parts=piece.split(delimiter).filter(part=>part.length>0);
+    return parts.length>=3||(parts.length===2&&!SECOND_FRACTION.test(parts[1]!));
+  });
 
 /**
  * True when a positional piece of the reading holds the cells of a delimited record: the reading cut the line
- * at white space although its header is separated by commas or semicolons, so what it calls one field is
+ * at white space although its header is separated by commas, semicolons or pipes, so what it calls one field is
  * several cells. Values of key=value pairs are not asked here: "flags=SYN,ACK" is one value.
  */
 function mergesDelimitedCells(fields:Record<string,unknown>):boolean{
