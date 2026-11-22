@@ -309,9 +309,19 @@ high({host:'fw01',method:'https'},'host','hostname','string');
 high({host:'fw01',url:'/admin'},'host','hostname','string');
 review({host:'proxy01',request:{method:'GET',uri:'/'}},'host','hostname');
 high({host:'api-node-3',method:'GetUser',status_code:0},'host','hostname','string');
-// A protocol field without a scalar value says nothing.
+// A protocol field without a value says nothing. One that holds an object or a list says what its scalar members
+// say, and an unknown protocol beside the port is evidence, never silence (independent audit 2026-11-21, F-04).
 assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:null}],'srcport'),['HIGH'],'null protocol field');
-assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:{name:'x'}}],'srcport'),['HIGH'],'object protocol field');
+assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:{name:'x'}}],'srcport'),['REVIEW'],'object protocol field of an unknown protocol');
+assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:{name:'tcp'}}],'srcport'),['HIGH'],'object protocol field that names TCP');
+assert.deepEqual(rv([{sport:8,dport:0,protocol:{name:'icmp',number:1}}],'sport'),['REVIEW'],'object protocol field that names ICMP');
+assert.deepEqual(rv([{'flow.sport':8,'flow.dport':0,'flow.proto':'icmp'}],'flow.sport'),['REVIEW'],'literal dotted protocol key beside the port');
+assert.deepEqual(rv([{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'}],'flow.sport'),['HIGH'],'literal dotted protocol key that names TCP');
+// Zeek conn.log: the port is a literal dotted key, the protocol a plain key of the same record.
+assert.deepEqual(rv([{'id.orig_h':'192.168.1.10','id.orig_p':51234,'id.resp_h':'8.8.8.8','id.resp_p':53,proto:'udp'}],'id.orig_p'),['HIGH'],'Zeek port alias beside proto');
+assert.deepEqual(rv([{'id.orig_h':'192.168.1.10','id.orig_p':8,'id.resp_h':'8.8.8.8','id.resp_p':0,proto:'icmp'}],'id.orig_p'),['REVIEW'],'Zeek port alias beside an ICMP proto');
+// A null member of a structured protocol field says nothing, as a null field does.
+assert.deepEqual(rv([{sport:51234,dport:443,protocol:{name:'tcp',alias:null}}],'sport'),['HIGH'],'null member of an object protocol field');
 assert.deepEqual(rv([{url:'category-db-2026.11'},{note:'x'}],'url'),['REVIEW'],'url that is not a URL');
 assert.deepEqual(rv([{url:'/index.html'},{url:'https://example.com/a'},{note:'x'}],'url'),['HIGH'],'URL-shaped url');
 assert.deepEqual(rv([{'source-port':'12','destination-port':'2048','protocol-id':'1'},{note:'x'}],'source-port'),['REVIEW'],'sparse explicit label');

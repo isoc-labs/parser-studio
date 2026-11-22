@@ -258,3 +258,30 @@ describe('a host field of an HTTP request record is not confirmed as the officia
     expect(hosts({syslog:{hostname:'web01'},generic:{kv:{method:'GET',host:'example.com',uri:'/'}}})).toEqual([['syslog.hostname','HIGH']]);
   });
 });
+
+// Independent audit of 2026-11-21, F-03 and F-04: 714d272 looked for the protocol in the object that holds the
+// port and compared whole key names, so a literal dotted key and a structured protocol field said nothing.
+describe('protocol evidence beside a port',()=>{
+  it('is found for a literal dotted key written with the prefix of the port',()=>{
+    const events=[{'flow.src':'10.0.0.1','flow.dst':'10.0.0.2','flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'},
+      {'flow.src':'10.0.0.3','flow.dst':'8.8.8.8','flow.sport':8,'flow.dport':0,'flow.proto':'icmp'}];
+    expect(candidate('srcport',...events)).toMatchObject({source:'flow.sport',confidence:'REVIEW'});
+    expect(candidate('dstport',...events)).toMatchObject({source:'flow.dport',confidence:'REVIEW'});
+    const numeric=[{'net.sport':8,'net.dport':0,'net.protocol':1}];
+    expect(candidate('srcport',...numeric)).toMatchObject({source:'net.sport',confidence:'REVIEW'});
+  });
+  it('still approves the same record when every event names TCP or UDP',()=>{
+    const events=[{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'},{'flow.sport':53001,'flow.dport':53,'flow.proto':'udp'}];
+    expect(candidate('srcport',...events)).toMatchObject({source:'flow.sport',confidence:'HIGH'});
+  });
+  it('reads a protocol field that holds an object or a list',()=>{
+    const icmp={src:'10.0.0.1',dst:'10.0.0.2',sport:8,dport:0,protocol:{name:'icmp',number:1}};
+    expect(candidate('srcport',icmp,icmp)).toMatchObject({confidence:'REVIEW'});
+    expect(candidate('srcport',{...icmp,protocol:['icmp']})).toMatchObject({confidence:'REVIEW'});
+    // An empty object says nothing, exactly as a null field does.
+    expect(candidate('srcport',{...icmp,protocol:{}})?.confidence).toBe(candidate('srcport',{...icmp,protocol:null})?.confidence);
+    expect(candidate('srcport',{...icmp,protocol:{name:null}})?.confidence).toBe(candidate('srcport',{...icmp,protocol:null})?.confidence);
+    const tcp={src:'10.0.0.1',dst:'10.0.0.2',sport:51234,dport:443,protocol:{name:'tcp',number:6}};
+    expect(candidate('srcport',tcp,tcp)).toMatchObject({confidence:'HIGH'});
+  });
+});

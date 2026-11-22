@@ -99,8 +99,20 @@ function objectAt(fields:Record<string,unknown>,path:string):Record<string,unkno
 /** What the record says about its IP protocol beside `source`: the values of the protocol fields in the object
  * that holds the source (for an atom also in the key=value carrier beside it). Field names are compared without
  * regard to case, as the aliases are (`Protocol=ICMP` beside `SrcPort`). `withRoot` adds the root of the event;
- * a source whose path names no object (a literal dotted key such as Zeek's id.orig_p) is at the root. */
+ * a source whose path names no object (a literal dotted key such as Zeek's id.orig_p) is at the root, and a
+ * literal key that is written with the same prefix ("flow.proto" beside "flow.sport") is its sibling. A protocol
+ * field that holds an object or a list says what its scalar members say ({name:'icmp',number:1}); a null
+ * member, like a null field, says nothing (independent audit 2026-11-21, F-03, F-04). */
+function scalarLeaves(value:unknown,out:string[]):void{
+  if(value!==null&&typeof value==='object'){
+    for(const child of Object.values(value as Record<string,unknown>))scalarLeaves(child,out);
+    return;
+  }
+  if(value!==null&&value!==undefined)out.push(String(value).trim().toLowerCase());
+}
 function protocolValuesBeside(fields:Record<string,unknown>,source:string,withRoot:boolean):string[]{
+  // What the source is written with up to its last dot ("flow." of "flow.sport"; nothing for "sport").
+  const writtenPrefix=source.slice(0,source.lastIndexOf('.')+1).toLowerCase();
   const containers=new Set<Record<string,unknown>>();
   for(const prefix of protocolContextPrefixes(source)){
     const container=objectAt(fields,prefix.endsWith('.')?prefix.slice(0,-1):prefix);
@@ -109,10 +121,9 @@ function protocolValuesBeside(fields:Record<string,unknown>,source:string,withRo
   if(withRoot||containers.size===0)containers.add(fields);
   const values:string[]=[];
   for(const container of containers)for(const key of Object.keys(container)){
-    if(!PROTOCOL_EVIDENCE_NAMES.includes(key.toLowerCase()))continue;
-    const value=container[key];
-    if(value===null||value===undefined||typeof value==='object')continue;
-    values.push(String(value).trim().toLowerCase());
+    const name=key.toLowerCase();
+    const local=name.startsWith(writtenPrefix)?name.slice(writtenPrefix.length):name;
+    if(PROTOCOL_EVIDENCE_NAMES.includes(local))scalarLeaves(container[key],values);
   }
   return values;
 }
