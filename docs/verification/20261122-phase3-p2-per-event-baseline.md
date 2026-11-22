@@ -53,3 +53,35 @@ measurement and a set of characterization tests. No product code was changed for
 5. Browser versus generated Ruby per event: measured by the Chromium journeys for the single-family and
    mixed-type samples of the Phase 3 set (see the E2E evidence, tag recorded in the handoff); not yet measured
    for samples whose journey is blocked, because no parser is generated for them.
+
+
+## Update: what changed after this baseline (77bbe39, 64642a0, 16707e7)
+
+Owner decision of 2026-11-22: events that cannot be parsed do not stop the creation of a parser for the events
+that can.
+
+| Open item above | State at 16707e7 |
+|---|---|
+| 1. One declined event blocks the journey | Changed. When at least one event is read completely, the Auto Parser names how many events were read and how many were not, by kind, and offers to create the parser for the readable events (`src/guided/readableEvents.ts`, `tests/readable-events-20261122.spec.ts`). A sample without any readable event gets no offer. |
+| 2. RFC 3164 with a TAG and without a PRI | Read by the shared grammar when the message is a structured body (contract revision 9). Free text behind a time stamp is still not a Syslog record. |
+| 3. PAN-OS THREAT and SYSTEM column tables | Open. In a mixed sample those records are now named as "delimited record without column names" and left out; the parser covers the other events. |
+| 4. The verdict name DECLINED | Open (the product says UNKNOWN / ERROR, and the new panel says "could not be read"). |
+| 5. Browser versus generated Ruby | Measured, see below. |
+
+### Run-time evidence (Chromium journey, downloaded parser, Ruby 2.4.9; SYNTHETIC samples; E2E tag T16)
+
+| Sample | Result |
+|---|---|
+| RFC 3164 key=value without a PRI, 3 events | 3 events, 0 error records, every value from its own line |
+| RFC 3164 with a PRI + without a PRI + with a PRI | 3 events, 0 error records (the journey stopped here before 77bbe39) |
+| Parser created from the 3 readable events of a 5-event sample, then given all 5 original lines | 5 lines in, 5 records out: 3 parsed events (33 values, each from its own line, no value from another line) and 2 error records for the damaged and the free-text line. Nothing is dropped and nothing is invented. |
+| The golden, holdout and public sets (119 journeys) | identical to the baseline of 3172362 |
+
+### What is not established
+
+- An error record carries `parser_err_msg` and no raw text (owner decision D-4). That the receiver then keeps
+  the event as an unparsed raw log is known from the source of the patched Fluentd inputs only; it is NOT
+  VERIFIED on a Stellar Cyber system. The notice in the UI says so.
+- A partly read event (PARTIAL) is treated like an unread one at run time: its extracted fields are not kept.
+  Keeping them, or copying the original text into the record, conflicts with D-4 and needs an owner decision.
+- PAN-OS mixed with CEF (audit F-02 / G-09) was not changed in these commits.
