@@ -235,8 +235,8 @@ function topLevelCells(raw:string,delimiter:string):string[]{
 // which ISO 8601 writes with a comma as well ("10:00:00,123", "10:00:00,123+09:00"), is not a second cell
 // (independent audit 2026-11-22, G-03: pipes and two cells were not seen).
 const SECOND_FRACTION=/^\d+(?:Z|[+-]\d{2}(?::?\d{2})?)?$/u;
-const holdsCells=(piece:string):boolean=>
-  [',',';','|'].some(delimiter=>{
+const cellDelimiters=(piece:string):string[]=>
+  [',',';','|'].filter(delimiter=>{
     const parts=piece.split(delimiter).filter(part=>part.length>0);
     return parts.length>=3||(parts.length===2&&!SECOND_FRACTION.test(parts[1]!));
   });
@@ -257,7 +257,14 @@ function mergesDelimitedCells(fields:Record<string,unknown>):boolean{
   // (structured_data_raw) is not a positional piece, and its quoted values may hold any character.
   if(isRecord(fields.syslog))
     for(const [key,value] of Object.entries(fields.syslog))if(!key.endsWith('_raw'))pieces.push(value);
-  return pieces.some(piece=>typeof piece==='string'&&holdsCells(piece));
+  // A header whose cells are separated by pipes stands before the pairs of a CEF or LEEF record ("CEF: 0|Vendor|
+  // Product|..." read as positional pieces): pipes in a positional piece alone do not show a merged record. A
+  // pair value of the same reading that holds a pipe as well does ("url=/index.html|10.0.0.9|8443|ok").
+  const pairValues=new Map<string,string[]>();
+  if(isRecord(generic))for(const value of Object.values(generic))if(isRecord(value))leavesByName(value,'',pairValues);
+  const pipeInValue=[...pairValues.values()].some(list=>list.some(value=>value.includes('|')));
+  return pieces.some(piece=>typeof piece==='string'&&
+    cellDelimiters(piece).some(delimiter=>delimiter!=='|'||pipeInValue));
 }
 
 /** True when every value of a keyed reading lies inside one cell of the line it was read from. */

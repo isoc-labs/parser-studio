@@ -136,3 +136,16 @@ describe('G-03: pipe cells and two header cells are the cells of a delimited rec
     expect(modes(source)).toEqual(['space_kv']);
   });
 });
+
+// E2E T12 (golden case fortinet_cef): the pipe rule of G-03 refused a record that was adopted before. A header
+// whose cells are separated by pipes stands before the pairs of a CEF record; pipes in a positional piece
+// alone do not show merged cells. A pair value that holds the pipe as well does (the G-03 samples).
+describe('a pipe-separated header before key=value pairs is not a merged record',()=>{
+  // Fortinet documents this form: a space after "CEF:" and no Syslog PRI.
+  const FORTINET_CEF='Dec 27 11:07:55 FGT-A-LOG CEF: 0|Fortinet|Fortigate|v6.0.3|00013|traffic:forward close|3|deviceExternalId=FGT5HD3915800610 FTNTFGTlogid=0000000013 cat=traffic:forward src=10.1.100.11 spt=54190 dst=52.53.140.235 dpt=443 proto=6 act=close app=HTTPS out=3652 in=146668';
+  it('stays adopted, every event completely parsed',()=>{
+    const adopted=adopt(FORTINET_CEF+'\n'+FORTINET_CEF.replace('54190','58843').replace('dpt=443','dpt=53'));
+    expect(adopted).not.toBeNull();
+    expect(adopted!.suite.events.map(event=>event.parseStatus)).toEqual(['FULL','FULL']);
+  });
+});
