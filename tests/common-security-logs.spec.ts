@@ -106,6 +106,8 @@ test('BIG-IP ASM KV maps network fields but keeps HTTPS application label vendor
   await analyze(page,BIGIP);
   await openMappings(page);
   const editor=page.getByLabel('Field mapping editor');
+  // The record is an RFC 3164 record without a PRI (TAG "ASM:") with a key=value list: the native grammar
+  // reads it, so its fields are the fields of the Syslog body (until 77bbe39: generic.fields.*).
   // A mapping row is identified by its canonical source path (data-source-path),
   // the value the generated parser reads, not by the label shown to the user.
   const expectMapping=async(source:string,target:string)=>{
@@ -114,19 +116,19 @@ test('BIG-IP ASM KV maps network fields but keeps HTTPS application label vendor
     await expect(row.locator('input[aria-label^="Source field "]')).toHaveValue(source);
     await expect(row.locator('input[aria-label^="Stellar field "]')).toHaveValue(target);
   };
-  await expectMapping('generic.fields.ip_client','srcip');
-  await expectMapping('generic.fields.dest_ip','dstip');
+  await expectMapping('body.ip_client','srcip');
+  await expectMapping('body.dest_ip','dstip');
   // The observed HTTPS application label cannot establish TCP/UDP transport.
   // Preserve the vendor port instead of silently claiming Stellar L4 semantics.
-  await expectMapping('generic.fields.dest_port','dest_port');
+  await expectMapping('body.dest_port','dest_port');
   // BIG-IP's HTTPS value is an application-layer label, not a transport
   // protocol name. Preserve it as a vendor field rather than claiming Stellar
   // L4 proto_name compatibility.
-  await expectMapping('generic.fields.protocol','protocol');
+  await expectMapping('body.protocol','protocol');
   const vendorSources=await editor.locator('article.normalization-map-row.custom')
     .evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-source-path')));
-  expect(vendorSources).toContain('generic.fields.protocol');
-  expect(vendorSources).toContain('generic.fields.dest_port');
+  expect(vendorSources).toContain('body.protocol');
+  expect(vendorSources).toContain('body.dest_port');
 });
 
 
