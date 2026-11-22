@@ -103,6 +103,15 @@ function oracle(mod){
   }
   assert.equal(runSuite(mod,[{host:'api-node-3',method:'GetUser',status_code:0}]).find(c=>c.source==='host')?.safeForBulk,true,
     'host field beside a method that is not an HTTP method');
+  // Neither a method nor a version: a host inside an object of the record, and a host beside an absolute web URL.
+  for(const fields of [{agent:{hostname:'collector-7'},message:'started'},
+    {client:'10.0.0.5',host:'example.com',url:'http://example.com/a',status:200}]){
+    const hosts=runSuite(mod,[fields]).filter(c=>c.target==='hostname');
+    assert.equal(hosts.length===1&&hosts[0].confidence==='REVIEW'&&!hosts[0].safeForBulk,true,
+      'host field without request words '+JSON.stringify(fields));
+  }
+  assert.equal(runSuite(mod,[{host:'fw01',url:'/admin',action:'login'}]).find(c=>c.source==='host')?.safeForBulk,true,
+    'host field beside a path, which is not a web URL');
   assert.deepEqual(runSuite(mod,[]),[],'empty data has no candidates');
 }
 const variants=[
@@ -116,8 +125,14 @@ const variants=[
     'const compatibleObserved=informativeValues.filter(result=>',
     'const compatibleObserved=informativeValues.filter(result=>false&&'],
   ['approve a host field of an HTTP request record as the official hostname',
-    "const unconfirmedHost=target==='hostname'&&hostNameUnconfirmed(source,events);",
+    "const unconfirmedHost=target==='hostname'&&hostNameUnconfirmed(source,events,formats);",
     'const unconfirmedHost=false;'],
+  ['approve a host field that lives inside an object of the record',
+    'if(!recordLevelSource(local,carrierFormats))return true;',
+    ''],
+  ['ignore an absolute web URL beside a host field',
+    'carriers.every(fields=>saysHttpRequest(fields)||webUrlBeside(fields,source));',
+    'carriers.every(fields=>saysHttpRequest(fields));'],
   ['take a field called method for an HTTP request whatever its value says',
     'return HTTP_METHOD_TOKENS.has(text)||HTTP_REQUEST_LINE.test(text)||HTTP_VERSION.test(text);',
     'return text.length>0;'],

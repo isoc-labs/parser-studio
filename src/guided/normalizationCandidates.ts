@@ -200,7 +200,7 @@ const HTTP_VERSION=/^HTTP\/\d(?:\.\d)?$/u;
 /** True when a value of the event, at any depth, is an HTTP method, a request line or an HTTP version: the
  * event describes an HTTP request. */
 function saysHttpRequest(value:unknown):boolean{
-  if(Array.isArray(value))return value.some(saysHttpRequest);
+  // Object.values gives the members of an object and the items of a list alike.
   if(value!==null&&typeof value==='object')return Object.values(value as Record<string,unknown>).some(saysHttpRequest);
   if(typeof value!=='string')return false;
   const text=value.trim();
@@ -208,8 +208,11 @@ function saysHttpRequest(value:unknown):boolean{
 }
 // The HOSTNAME of a Syslog header: its position in the header names the sender (RFC 3164 4.1.2, RFC 5424 6.2.4).
 const SYSLOG_HEADER_HOST_SOURCES=['syslog_hostname','syslog.hostname','syslog.host'];
+// A normalized event keeps the source record under this name; its paths are the source paths one level down.
+const SOURCE_COPY='parserstudio_source.';
+const withoutSourceCopy=(source:string):string=>source.startsWith(SOURCE_COPY)?source.slice(SOURCE_COPY.length):source;
 const syslogHeaderHostIn=(fields:Record<string,unknown>):boolean=>
-  SYSLOG_HEADER_HOST_SOURCES.some(path=>lookupFieldValue(fields,path).found);
+  SYSLOG_HEADER_HOST_SOURCES.some(path=>lookupFieldValue(fields,path).found||lookupFieldValue(fields,SOURCE_COPY+path).found);
 /**
  * A host field whose meaning as the official hostname (the host the record is about) is not established.
  * In a record of an HTTP request a host field is, as a rule, the host the client ASKED FOR (the Host header:
@@ -222,10 +225,32 @@ const syslogHeaderHostIn=(fields:Record<string,unknown>):boolean=>
  * attribute of the record, and a Syslog header host is never asked. Where a Syslog header names the sender,
  * the host field of the request beside it is another host and is not proposed at all.
  */
-function hostNameUnconfirmed(source:string,events:readonly Record<string,unknown>[]):boolean{
-  if(SYSLOG_HEADER_HOST_SOURCES.includes(source))return false;
+// An absolute web URL: the record refers to a resource on a web host.
+const WEB_URL=/^(?:https?|wss?):\/\/\S+$/iu;
+/** True when a value beside `source`, in the object that holds it, is an absolute web URL. */
+function webUrlBeside(fields:Record<string,unknown>,source:string):boolean{
+  const dot=source.lastIndexOf('.');
+  // Object() of "no such object" is an empty object: nothing beside the field.
+  const container=Object(dot>0?objectAt(fields,source.slice(0,dot)):fields) as Record<string,unknown>;
+  return Object.values(container).some(value=>typeof value==='string'&&WEB_URL.test(value.trim()));
+}
+/**
+ * Two further grounds (the first is above): the field does not stand for the record at all - it lives inside
+ * an object of the record (`http.hostname`, `req.headers.host`, `transaction.request.headers.Host`) or is
+ * written with such a prefix as a literal key (`http.host`), so it is an attribute of that object, and which
+ * host an `agent`, an `observer` or a `request` names is exactly what a name cannot tell; or every event that
+ * carries it also carries an absolute web URL beside it (a proxy or web-filter record without a method), which
+ * is the same evidence of a request as a method is. What remains undecidable from the record itself - a
+ * request written with a path only, no method, no version - is still approved; nothing in it says HTTP.
+ */
+function hostNameUnconfirmed(source:string,events:readonly Record<string,unknown>[],
+  formats:readonly (string|undefined)[]):boolean{
+  const local=withoutSourceCopy(source);
+  if(SYSLOG_HEADER_HOST_SOURCES.includes(local))return false;
+  const carrierFormats=events.flatMap((fields,index)=>lookupFieldValue(fields,source).found?[formats[index]]:[]);
+  if(!recordLevelSource(local,carrierFormats))return true;
   const carriers=events.filter(fields=>lookupFieldValue(fields,source).found);
-  return carriers.length>0&&carriers.every(saysHttpRequest);
+  return carriers.length>0&&carriers.every(fields=>saysHttpRequest(fields)||webUrlBeside(fields,source));
 }
 function incompatibleVendorMeaning(
   source:string,target:string,events:Record<string,unknown>[],
@@ -319,7 +344,7 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
   if((target==='srcport'||target==='dstport')&&sourceHasExcludedPortSegment(source))return null;
   if(incompatibleVendorMeaning(source,target,events))return null;
   // The Syslog header names the sender; a host field of the HTTP request it carries is the requested host.
-  if(target==='hostname'&&hostNameUnconfirmed(source,events)&&events.some(syslogHeaderHostIn))return null;
+  if(target==='hostname'&&hostNameUnconfirmed(source,events,formats)&&events.some(syslogHeaderHostIn))return null;
   const catalog=findStellarMetadataField(target);
   if(!catalog?.mappable||!catalog.mappingType||!catalog.group)return null;
   const current=existing.find(rule=>rule.source===source);
@@ -365,7 +390,7 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
     return value.found&&!ignored(value.value)&&!transportEvidenceInEvent(fields,source);
   });
   // The official hostname needs more than a name: see hostNameUnconfirmed.
-  const unconfirmedHost=target==='hostname'&&hostNameUnconfirmed(source,events);
+  const unconfirmedHost=target==='hostname'&&hostNameUnconfirmed(source,events,formats);
   const high=!unconfirmedHost&&compatibleObserved===informative&&(values.length===events.length||namedAsTarget)&&
     informative>0&&!nonTransportPort&&!lacksTransportEvidence;
   // Auto-generated provenance is explicit; field names and IDs cannot prove

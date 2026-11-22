@@ -309,6 +309,21 @@ high({host:'fw01',method:'https'},'host','hostname','string');
 high({host:'fw01',url:'/admin'},'host','hostname','string');
 review({host:'proxy01',request:{method:'GET',uri:'/'}},'host','hostname');
 high({host:'api-node-3',method:'GetUser',status_code:0},'host','hostname','string');
+// Without a method or a version: a host inside an object of the record names that object's host, and an absolute
+// web URL beside the host is the same evidence of a request as a method.
+review({agent:{hostname:'collector-7'},message:'started'},'agent.hostname','hostname');
+review({'http.host':'example.com','http.uri':'/index.html','http.status_code':200},'http.host','hostname');
+review({client:'10.0.0.5',host:'example.com',url:'http://example.com/a',status:200},'host','hostname');
+high({host:'fw01',url:'/admin',action:'login'},'host','hostname','string');
+// The Syslog header host names the sender whatever the body is; the host of the request in the body is not
+// proposed beside it. The same holds in the source copy of a normalized event (parserstudio_source.*).
+assert.deepEqual(read('syslog_rfc3164',[{syslog_hostname:'web01',body:{method:'GET',host:'example.com',uri:'/'}}],'syslog_hostname'),['HIGH'],'Syslog header host beside an HTTP body');
+assert.deepEqual(read('syslog_rfc3164',[{syslog_hostname:'web01',body:{method:'GET',host:'example.com',uri:'/'}}],'body.host'),[],'host of the request beside a Syslog header host');
+high({parserstudio_source:{syslog:{host:'bigip-waf01',time:'00:14:27'}}},'parserstudio_source.syslog.host','hostname','string');
+assert.deepEqual(read('generic_structural',[{parserstudio_source:{syslog:{hostname:'web01'},generic:{kv:{method:'GET',host:'example.com'}}}}],'parserstudio_source.generic.kv.host'),[],'host of the request beside a header host, in the source copy');
+// A web URL beside the host in the container of the reading (a proxy line read by Generic Structural).
+assert.deepEqual(read('generic_structural',[{generic:{kv:{client:'10.0.0.5',host:'example.com',url:'http://example.com/a'}}}],'generic.kv.host'),['REVIEW'],'web URL beside the host in a reader container');
+assert.deepEqual(read('generic_structural',[{generic:{kv:{host:'fw01',action:'allow'}},note:'http://example.com/a'}],'generic.kv.host'),['HIGH'],'web URL outside the container of the host');
 // A protocol field without a value says nothing. One that holds an object or a list says what its scalar members
 // say, and an unknown protocol beside the port is evidence, never silence (independent audit 2026-11-21, F-04).
 assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:null}],'srcport'),['HIGH'],'null protocol field');
@@ -352,7 +367,9 @@ absent({body:fortiWeb},'body.hostname');
 absent({generic:{kv:{hostname:'bad.example.net',logid:'0316013056',srcintf:'internal',type:'utm'}}},'generic.kv.hostname');
 absent({hostname:'bad.example.net',logid:'0316013056',srcintf:'internal',type:'utm'},'hostname');
 absent({body:{logid:'0316013056',vd:'root',type:'utm',request:{hostname:'bad.example.net'}}},'body.request.hostname');
-high({generic:{kv:{hostname:'sensor1',vd:'root',type:'utm'}}},'generic.kv.hostname','hostname','string');
+// generic.kv is the record itself under the reading that produces it, and only under that reading.
+assert.deepEqual(read('generic_structural',[{generic:{kv:{hostname:'sensor1',vd:'root',type:'utm'}}}],'generic.kv.hostname'),['HIGH'],'host in the reader container of its reading');
+assert.deepEqual(read('json',[{generic:{kv:{hostname:'sensor1',vd:'root',type:'utm'}}}],'generic.kv.hostname'),['REVIEW'],'host in an object of a JSON log');
 high({hostname:'sensor1',other:{logid:'0316013056',vd:'root',type:'utm'}},'hostname','hostname','string');
 assert.equal(mod.fortiGateFalseFriend('generic.kv.hostname',[{generic:{kv:fortiWeb}}]),true);
 assert.equal(mod.fortiGateFalseFriend('hostname',[fortiWeb]),true);
@@ -362,7 +379,8 @@ absent({body:{event_type:'alert',alert:{signature_id:99,severity:2}}},'body.aler
 high({body:{event_type:'flow',alert:{signature_id:99,severity:2}}},'body.alert.severity','severity','integer');
 // The evidence of a record is in one container: pieces at different levels do not make a FortiGate record, and
 // a key of the same name deeper inside does not hide the alert that contains it.
-high({type:'alert',agent:{logid:'0316013056',vd:'root',hostname:'sensor1'}},'agent.hostname','hostname','string');
+// (Still proposed, so not taken for a FortiGate false friend; a host inside an object is offered for review.)
+review({type:'alert',agent:{logid:'0316013056',vd:'root',hostname:'sensor1'}},'agent.hostname','hostname');
 absent({event_type:'alert',alert:{signature_id:99,severity:2,event_type:'x'}},'alert.severity');
 // Imperva Cloud WAF writes the client port as cpt and uses spt for the server port: spt beside cpt is not the
 // source port. Without cpt the CEF dictionary stands (asserted above: spt with protocol tcp is srcport).

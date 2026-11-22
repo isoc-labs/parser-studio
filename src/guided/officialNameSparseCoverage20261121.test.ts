@@ -238,6 +238,24 @@ describe('a host field of an HTTP request record is not confirmed as the officia
     // A host that may well be the device (a shipper added it): still not established, so it is offered, not dropped
     review({host:'web01',vhost:'shop.example.com',method:'GET',uri:'/cart',status_code:200});
   });
+  it('is not approved without a method either, when the structure of the record says whose host it is',()=>{
+    // Inside an object of the record: the host of that object (a WAF transaction, an agent, an observer).
+    review({transaction:{client_ip:'10.0.0.5',request:{headers:{host:'shop.example.com'},uri:'/login'}},rule:942100});
+    review({agent:{hostname:'collector-7'},message:'pipeline started'});
+    // Written with the prefix of such an object as a literal key
+    review({'http.host':'example.com','http.uri':'/index.html','http.status_code':200});
+    // A proxy or web-filter record without a method: an absolute web URL beside the host
+    review({ts:'2026-11-21T10:00:00Z',client:'10.0.0.5',host:'example.com',url:'http://example.com/a',status:200,bytes:512});
+    review({time:'10:00:00',src:'10.0.0.5',hostname:'cdn.example.net',url:'https://cdn.example.net/x.js',action:'allowed'});
+  });
+  it('a path beside the host is not a web URL: a device that logs an admin page keeps its host name',()=>{
+    expect(candidate('hostname',{host:'fw01',url:'/admin',action:'login'},{host:'fw02',url:'/login',action:'login'})).toMatchObject({confidence:'HIGH'});
+    expect(candidate('hostname',{host:'srv01',exe:'/usr/sbin/sshd',msg:'accepted'})).toMatchObject({confidence:'HIGH'});
+  });
+  it('a web URL in some of the events that carry the field does not decide',()=>{
+    expect(candidate('hostname',{host:'fw01',type:'traffic',action:'allow'},
+      {host:'fw01',type:'webfilter',url:'http://example.com/a',action:'block'})).toMatchObject({source:'host',confidence:'HIGH'});
+  });
   it('is decided on every event that carries the field: one request among the records of a device does not decide',()=>{
     expect(candidate('hostname',{host:'fw01',type:'traffic',action:'allow'},
       {host:'fw01',type:'webfilter',method:'GET',url:'http://example.com/a',action:'allow'},
