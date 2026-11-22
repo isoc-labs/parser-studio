@@ -13,6 +13,7 @@ import {fetchBackendSchemaGuide} from './backendSchemaGuide';
 import {validateBackendProject,generateBackendPair,type GeneratedPair} from './backendClient';
 import {verifyGeneratedPair,packageGeneratedPair} from './artifactPackageClient';
 import {analyzeLogEnvelopes,assessEnvelopeCompilation} from './autoParserEnvelope';
+import {describeExcluded,readableEvents,type ExcludedEvents} from './readableEvents';
 import {prepareAutoParserDraft} from './autoParserDraft';
 import {selectDraftFormat} from './draftFormatTransition';
 import {buildReviewableRecipe} from './parserRecipeV2';
@@ -81,6 +82,8 @@ type Zip={key:string;filename:string;sha256:string};
 type ParserSetOrigin={
  source:string;datasetName:string;sourceCount:number;draft:ParserDraft;
  fingerprint:string;groupCount:number;groupSource:string;
+ /** Set when the subset is the readable events of the sample: the events left out, by kind. */
+ excluded?:ExcludedEvents[];
 };
 type MultiPassReview={raw:string;events:Array<{startByte:number;endByte:number;preview:MultiPassSourcePreview}>;metadataLines?:number;transportFramingParts?:number};
 function download(filename:string,content:string|ArrayBuffer,binary=false){
@@ -414,6 +417,16 @@ export default function AutoParser({
    suite.counts.extracted===suite.counts.total&&suite.counts.failures===0;
  const neutralCsvComplete=csvReviewActive&&csvApproved&&csvNamesValid&&browserExtractionComplete;
  const beginnerResolved=beginnerAuthoritativeComplete||reviewedCandidateComplete||neutralCsvComplete;
+ // Owner decision 2026-11-22: events that cannot be read do not stop the parser for the events that can.
+ // Offered when the sample as a whole cannot go on and at least one event was read completely.
+ const readable=useMemo(()=>!advanced&&!parserSetOrigin&&report.boundary==='single-line'
+   ?readableEvents(sample,suite,report.events):null,[advanced,parserSetOrigin,report,sample,suite]);
+ const analyzeReadableEvents=useRef(false);
+ useEffect(()=>{
+   if(!analyzeReadableEvents.current||!parserSetOrigin?.excluded||sample!==parserSetOrigin.groupSource)return;
+   analyzeReadableEvents.current=false;
+   void previewMultiPass();
+ },[sample,parserSetOrigin]);
  const explicitBackendProject=useMemo(()=>draft.format==='auto'?null:toBackendProject(draft),[draft]);
  const explicitDraftCompilable=useMemo(()=>{
    if(!browserSuiteComplete||!explicitBackendProject?.ok||capability?.source!==sample)return false;
@@ -600,6 +613,18 @@ export default function AutoParser({
    setDraft(origin.draft);setStep(0);setSelected(0);setMultiPass(null);setMultiPassEvent(0);
    setSelectedMultiPass(null);setMultiPassNotice('');setMessage('');
  }
+ /** Goes on with the events that were read completely; the others stay in the original sample (Return). */
+ function continueWithReadableEvents(){
+   if(parserSetOrigin||busy||pending||!readable)return;
+   const origin:ParserSetOrigin={source:sample,datasetName,sourceCount:readable.total,draft,
+     fingerprint:'readable-events',groupCount:readable.count,groupSource:readable.source,excluded:readable.excluded};
+   parserSetOriginRef.current=origin;setParserSetOrigin(origin);
+   setSample(readable.source);
+   setDatasetName((datasetName||'Logs')+' \u00b7 Readable events');
+   setStep(0);setSelected(0);setMultiPass(null);setMultiPassEvent(0);
+   setSelectedMultiPass(null);setMultiPassNotice('');setMessage('');
+   analyzeReadableEvents.current=true;
+ }
  async function zipPair(){
    if(!currentPair||!capability||!draft.guided||busy)return;
    const token=++epoch.current,expected=identity;
@@ -722,6 +747,19 @@ export default function AutoParser({
        Go to log input
      </button>}
    </header>
+   {parserSetOrigin?.excluded&&<div className="auto-parser-note beginner-essential-note" aria-label="Events not covered by this parser">
+     <strong>This parser covers {parserSetOrigin.groupCount} of your {parserSetOrigin.sourceCount} events</strong>
+     <p>{parserSetOrigin.sourceCount-parserSetOrigin.groupCount} event
+       {parserSetOrigin.sourceCount-parserSetOrigin.groupCount===1?'':'s'} could not be read and
+       {parserSetOrigin.sourceCount-parserSetOrigin.groupCount===1?' is':' are'} not parsed by this parser:
+       {' '}{describeExcluded(parserSetOrigin.excluded)}. They are not shown as parsed. When the generated parser
+       receives such an event it extracts nothing and invents nothing: it marks the event as not parsed
+       (parser_err_msg), and the receiver is expected to keep it as an unparsed raw log. That hand-over is
+       NOT VERIFIED on a Stellar Cyber system. For a parser that reads these events, use ChatGPT Assisted Parser.</p>
+     <button type="button" onClick={restoreParserSetSource}>
+       Return to all {parserSetOrigin.sourceCount} logs
+     </button>
+   </div>}
    <nav aria-label="Auto Parser steps" className="auto-parser-steps">
      {STEPS.map((label,index)=>{
        const locked=index>furthestStep;
@@ -757,7 +795,7 @@ export default function AutoParser({
          </label>
          <small>{datasetName} · Maximum 64 KiB / 500 events</small>
        </div>
-       {parserSetOrigin&&<div className="auto-parser-note beginner-essential-note" aria-label="Separate log group context">
+       {parserSetOrigin&&!parserSetOrigin.excluded&&<div className="auto-parser-note beginner-essential-note" aria-label="Separate log group context">
          <strong>Working on one matching log group · {parserSetOrigin.groupCount} events
            <HelpTip label="Why is this a separate group?"
              text="These events repeat the same basic structure. Parser Studio separated them so a parser for one shape does not accidentally break different-looking events."/></strong>
@@ -1073,6 +1111,16 @@ export default function AutoParser({
          <AutoParserAIReview raw={sample} status="unsupported" onChatGPT={onChatGPT} source={sample} draft={draft} suite={suite}
            protectedSourceValuesByEvent={protectedSourceValuesByEvent}
            protectedResidualTextByEvent={protectedResidualTextByEvent}/>
+       </div>}
+       {readable&&!beginnerResolved&&<div className="auto-parser-warning" aria-label="Readable events">
+         <strong>{readable.count} of {readable.total} events were read completely</strong>
+         <p>{readable.total-readable.count} event{readable.total-readable.count===1?'':'s'} could not be read:
+           {' '}{describeExcluded(readable.excluded)}. You can create the parser for the readable events now.
+           The other events are left out of this parser and are never shown as parsed.</p>
+         <button type="button" aria-label="Continue with readable events" disabled={busy||pending}
+           onClick={continueWithReadableEvents}>
+           Create the parser for the {readable.count} readable events
+         </button>
        </div>}
        {report.unsupported>0&&!beginnerResolved&&<p className="auto-parser-note beginner-essential-note">
          Some events could not be understood safely. Parser Studio keeps those events unchanged and will not let you continue until they are reviewed.
