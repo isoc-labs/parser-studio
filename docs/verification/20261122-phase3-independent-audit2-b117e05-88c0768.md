@@ -35,10 +35,10 @@ Method: `git archive 88c0768` to `/home/aella/.local/state/ps-audit-20261122/tre
 ### G-02 (P1) a pair whose key is outside `[A-Za-z_][A-Za-z0-9_.-]{0,95}` is not seen behind a delimiter
 - Where: `parseStatus.ts:25,106-125` (delimiter not followed by a KV_KEY is skipped, then the foreign key's "=" ends the scan), `source_kv.py:52-58`.
 - Inputs, FULL (TS, RB) / SOURCE_PARSED (PY), one field:
-  - `src=10.0.0.1,사용자=bob,dst=10.0.0.2` (Korean key) -> `src="10.0.0.1,사용자=bob,dst=10.0.0.2"`; also behind `<134>Nov 21 10:00:01 fw1 app: `
-  - `user=홍길동;부서=보안;ip=10.0.0.1` -> one field `user`
+  - `src=10.0.0.1,\uC0AC\uC6A9\uC790=bob,dst=10.0.0.2` (Korean key) -> `src="10.0.0.1,\uC0AC\uC6A9\uC790=bob,dst=10.0.0.2"`; also behind `<134>Nov 21 10:00:01 fw1 app: `
+  - `user=\uD64D\uAE38\uB3D9;\uBD80\uC11C=\uBCF4\uC548;ip=10.0.0.1` -> one field `user`
   - `src=10.0.0.1,3gpp=x,dst=10.0.0.2`, `src=10.0.0.1,@ts=2026,dst=10.0.0.2`, `a=1,<97 x k>=2,c=3`
-- Expected: not FULL. The white-space form `src=10.0.0.1 사용자=bob dst=10.0.0.2` is UNKNOWN (TS) / PARTIAL (PY).
+- Expected: not FULL. The white-space form `src=10.0.0.1 \uC0AC\uC6A9\uC790=bob dst=10.0.0.2` is UNKNOWN (TS) / PARTIAL (PY).
 
 ### G-03 (P1) F-01 is closed only for `,` and `;` and for three or more header cells
 - Where: `src/guided/genericStructuralAutoDraft.ts:235-236` (`holdsCells`: `,` `;`, >=3 parts), `:190-194` (the first scan knows CSV only for `, ; TAB`).
@@ -131,7 +131,9 @@ Method: `git archive 88c0768` to `/home/aella/.local/state/ps-audit-20261122/tre
 
 ## 7. Disposition (added by the implementer after the audit, 2026-11-22)
 
-The sections above are the auditor's report, unchanged. This section records what was done with each finding.
+The sections above are the auditor's report. The only edit: a key written in Hangul in the inputs of G-02 is shown
+as \u escapes, because the repository checks that authored prose is English. This section records what was done
+with each finding.
 "Fixed" means: a reproduction test was written first and failed, the change made it pass, and the mapping
 mutation checks and the local battery were run afterwards. Nothing here has been verified by a second
 independent audit yet.
