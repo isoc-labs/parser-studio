@@ -361,3 +361,18 @@ describe('protocol evidence for a literal dotted key inside an object of the eve
     expect(candidateRead('syslog_rfc3164','srcport',tcp,tcp)).toMatchObject({source:'body.flow.sport',confidence:'HIGH'});
   });
 });
+
+// E2E T13 (public sample p_watchguard_traffic): since 03415d1 a host inside an object of the record is not
+// approved, and the WatchGuard reader writes the HOSTNAME of the Syslog header into its own header object.
+// The header host lost its official mapping, and the requested host of a proxy event competed with it.
+describe('the Syslog header host that a reader of this product wrote',()=>{
+  const header={month:'May',day:'10',time:'15:19:06',hostname:'WatchGuard-Firebox',app_tag:'firewall[10]',pri:'142'};
+  const event=(kv:Record<string,unknown>)=>({fields:{watchguard_header:header,watchguard:{kv}},effectiveFormat:'generic_structural'});
+  const hosts=(...kv:Record<string,unknown>[])=>suggestNormalizationCandidatesFromSuite(
+    {events:kv.map(event)} as unknown as SuiteResult,[]).filter(item=>item.target==='hostname').map(item=>[item.source,item.confidence]);
+  it('is the official hostname, and the requested host of a proxy event beside it is not proposed',()=>{
+    expect(hosts({msg_id:'3000-0148',disposition:'Allow'},{msg_id:'1AFF-0024',op:'GET',host:'www.example.com',arg:'/index.html'}))
+      .toEqual([['watchguard_header.hostname','HIGH']]);
+    expect(hosts({msg_id:'3000-0148',disposition:'Allow'})).toEqual([['watchguard_header.hostname','HIGH']]);
+  });
+});

@@ -351,6 +351,11 @@ high({host:'srv01',msg:'GET lost'},'host','hostname','string');
 // A literal dotted protocol key in the object that holds the port (audit 2, G-07).
 assert.deepEqual(read('syslog_rfc3164',[{body:{'flow.sport':8,'flow.dport':0,'flow.proto':'icmp'}}],'body.flow.sport'),['REVIEW'],'literal dotted protocol key in a Syslog body');
 assert.deepEqual(read('syslog_rfc3164',[{body:{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'}}],'body.flow.sport'),['HIGH'],'literal dotted protocol key in a Syslog body that names TCP');
+// The header object of the WatchGuard reading holds the HOSTNAME of the Syslog header.
+const wg=kv=>({watchguard_header:{hostname:'WatchGuard-Firebox',app_tag:'firewall[10]'},watchguard:{kv}});
+const wgSample=[wg({msg_id:'3000-0148'}),wg({msg_id:'1AFF-0024',op:'GET',host:'www.example.com',arg:'/index.html'})];
+assert.deepEqual(read('generic_structural',wgSample,'watchguard_header.hostname'),['HIGH'],'Syslog header host of the WatchGuard reading');
+assert.deepEqual(read('generic_structural',wgSample,'watchguard.kv.host'),[],'requested host beside the header host of the WatchGuard reading');
 // A protocol field without a value says nothing. One that holds an object or a list says what its scalar members
 // say, and an unknown protocol beside the port is evidence, never silence (independent audit 2026-11-21, F-04).
 assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:null}],'srcport'),['HIGH'],'null protocol field');

@@ -233,7 +233,9 @@ function requestEvidencePaths(leaves:readonly Leaf[]):string[]{
     HTTP_METHOD_TOKENS.has(targeted?text.toUpperCase():text)).map(([path])=>path);
 }
 // The HOSTNAME of a Syslog header: its position in the header names the sender (RFC 3164 4.1.2, RFC 5424 6.2.4).
-const SYSLOG_HEADER_HOST_SOURCES=['syslog_hostname','syslog.hostname','syslog.host'];
+// These are the places where the readers of this product write it: the native Syslog readers, the Generic
+// Structural envelope, and the header object of the WatchGuard reading (src/genericStructural.ts).
+const SYSLOG_HEADER_HOST_SOURCES=['syslog_hostname','syslog.hostname','syslog.host','watchguard_header.hostname'];
 // A normalized event keeps the source record under this name; its paths are the source paths one level down.
 const SOURCE_COPY='parserstudio_source.';
 const withoutSourceCopy=(source:string):string=>source.startsWith(SOURCE_COPY)?source.slice(SOURCE_COPY.length):source;
