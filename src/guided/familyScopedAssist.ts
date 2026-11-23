@@ -75,7 +75,9 @@ export function projectFamilyDraft(draft:ParserDraft,name:string):ParserDraft|nu
 }
 
 const groupOf=(draft:ParserDraft,rule:MappingRule):FieldGroup=>draft.guided?.groups[rule.id]??'vendor_fields';
-const keyOf=(draft:ParserDraft,rule:MappingRule)=>JSON.stringify([rule.source,rule.target,rule.type,groupOf(draft,rule),rule.when??null]);
+// The source path kind is part of what a mapping reads (literal key "a.b" vs nested a.b): re-audit A3.
+const keyOf=(draft:ParserDraft,rule:MappingRule)=>JSON.stringify([rule.source,rule.target,rule.type,groupOf(draft,rule),rule.when??null,
+  rule.sourcePathKind??null]);
 const outputOf=(draft:ParserDraft,rule:MappingRule)=>(groupOf(draft,rule)==='vendor_fields'?'\u0000vendor.':'')+rule.target;
 const overlaps=(a:string,b:string)=>a===b||a.startsWith(b+'.')||b.startsWith(a+'.');
 

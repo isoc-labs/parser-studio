@@ -263,6 +263,10 @@ high({spt:443,protocol:['tcp','udp']},'spt','srcport','integer');
 review({spt:443,protocol:['tcp','icmp']},'spt','srcport');
 // A non-transport protocol at the root of the record keeps a port of a nested object in review.
 review({flow:{spt:443},protocol:'icmp'},'flow.spt','srcport');
+// Re-audit A1: ECS network.protocol is the application protocol, not the IP protocol.
+high({spt:443,network:{transport:'tcp',protocol:'http'}},'spt','srcport','integer');
+high({spt:443,'network.transport':'udp','network.protocol':'dns'},'spt','srcport','integer');
+review({spt:8,network:{transport:'icmp',protocol:'http'}},'spt','srcport');
 review({flow:{spt:443,proto:1}},'flow.spt','srcport');
 review({flow:{spt:443,proto_name:'icmp'}},'flow.spt','srcport');
 high({flow:{spt:443,'protocol-id':6}},'flow.spt','srcport','integer');

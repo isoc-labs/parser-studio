@@ -157,7 +157,9 @@ function protocolLeaves(value:unknown,path:string[],out:string[]):void{
     return;
   }
   // ECS network.transport names the protocol; a bare transport field does not (FortiGate transport= is a port).
-  const at=path.findIndex((segment,i)=>PROTOCOL_EVIDENCE_NAMES.includes(segment)||
+  // ECS network.protocol is the application protocol (http, dns, tls), not the IP protocol (re-audit A1).
+  const at=path.findIndex((segment,i)=>(PROTOCOL_EVIDENCE_NAMES.includes(segment)&&
+    !(segment==='protocol'&&i>0&&path[i-1]==='network'))||
     (segment==='transport'&&i>0&&path[i-1]==='network'));
   if(at<0)return;
   if(at<path.length-1&&PROTOCOL_NON_IDENTITY_MEMBERS.has(path[path.length-1]!))return;

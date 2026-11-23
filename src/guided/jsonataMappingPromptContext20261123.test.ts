@@ -37,7 +37,6 @@ describe('the ChatGPT mapping prompt',()=>{
       expect(entries.filter(entry=>entry.name===name)).toHaveLength(1);
     expect(entries.every(entry=>findStellarMetadataField(entry.name)?.mappable)).toBe(true);
     const unmapped=section(prompt,'Source fields without an official Stellar Cyber mapping: ') as string[];
-    expect(unmapped).toContain('body.act');
     expect(unmapped).toContain('body.cef_name');
     expect(unmapped).not.toContain('body.src');
   });

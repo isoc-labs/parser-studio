@@ -175,8 +175,11 @@ function familyRoutedDraft(
     const present=new Set(events.flatMap(event=>listSafeLeafPaths(event.fields)));
     const decided=new Map<string,Decision|null>();
     for(const mapping of candidate.mappings)if(present.has(mapping.source))decided.set(mapping.source,null);
+    // Only the mappings of this family are its taken destinations: the vendor name another family keeps
+    // (generic.kv.srcip as vendor "srcip") does not block body.src -> srcip here (golden mixed_envelope_cef_kv).
     const high=suggestNormalizationCandidatesFromSuite({...suite,events},
-      candidate.mappings.map(mapping=>vendorMappings.get(mapping.source)!),{}).filter(item=>item.confidence==='HIGH');
+      candidate.mappings.filter(mapping=>present.has(mapping.source)).map(mapping=>vendorMappings.get(mapping.source)!),{})
+      .filter(item=>item.confidence==='HIGH');
     for(const item of high)if(decided.has(item.source))
       decided.set(item.source,{target:item.target,type:item.type,group:item.group});
     decisions.set(name,decided);

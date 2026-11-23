@@ -25,4 +25,15 @@ describe('protocol evidence written in other common ways (G-13)',()=>{
     const flagged={src_ip:'10.0.0.1',dst_ip:'10.0.0.2',sport:51235,dport:443,protocol:{name:'tcp',number:6,flags:'SYN'}};
     expect(port(flagged,flagged)).toMatchObject({source:'sport',confidence:'HIGH'});
   });
+  // Re-audit A1: ECS network.protocol is the application protocol (http, dns, tls), not the IP protocol.
+  it.each([
+    ['nested',{network:{transport:'tcp',protocol:'http'}}],
+    ['flat keys',{'network.transport':'tcp','network.protocol':'http'}],
+    ['udp dns',{network:{transport:'udp',protocol:'dns'}}],
+  ])('an ECS record with an application protocol keeps its TCP/UDP ports approved (%s)',(_name,network)=>{
+    const ecs={source:{ip:'10.0.0.1',port:51234},destination:{ip:'10.0.0.2',port:443},...network};
+    const read={events:[{fields:ecs,effectiveFormat:'json'}]} as unknown as SuiteResult;
+    const found=suggestNormalizationCandidatesFromSuite(read,[]).filter(item=>item.target==='srcport'||item.target==='dstport');
+    expect(found.map(item=>[item.source,item.confidence])).toEqual([['source.port','HIGH'],['destination.port','HIGH']]);
+  });
 });

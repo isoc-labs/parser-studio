@@ -37,10 +37,10 @@ test('ChatGPT Assisted improves one event type of a multi-type parser and genera
   const baseline=/----- BEGIN VALIDATED BASELINE RECIPE -----\n([\s\S]+?)\n----- END VALIDATED BASELINE RECIPE -----/.exec(prompt);
   expect(baseline).toBeTruthy();
   const recipe=JSON.parse(baseline![1]!) as {stages:Stage[]};
-  // One bounded correction: the CEF act value becomes the Stellar Cyber action field.
-  const act=recipe.stages.find(stage=>stage.op==='map_field'&&stage.source==='body.act');
-  expect(act).toBeTruthy();
-  act!.target='action';act!.group='top_fields';
+  // One bounded correction: the CEF name becomes the Stellar Cyber event_name field.
+  const name=recipe.stages.find(stage=>stage.op==='map_field'&&stage.source==='body.cef_name');
+  expect(name).toBeTruthy();
+  name!.target='event_name';name!.group='top_fields';
   await page.getByLabel('ChatGPT result JSON').fill(JSON.stringify(recipe));
   await page.getByRole('button',{name:'Check ChatGPT Result'}).click();
   await expect(page.getByLabel('ChatGPT result ready for testing')).toBeVisible({timeout:15000});
@@ -74,11 +74,11 @@ test('ChatGPT Assisted improves one event type of a multi-type parser and genera
   expect(variants.map(variant=>variant.name)).toEqual(['panos_traffic_csv','structured_family_cef']);
   const of=(name:string)=>variants.find(variant=>variant.name===name)!;
   const sources=(group:Group)=>[...Object.keys(group.topFields),...Object.keys(group.nsFields),...Object.keys(group.vendorFields)];
-  // The corrected CEF action is a Stellar Cyber field of the CEF type only.
-  expect(of('structured_family_cef').topFields['body.act']?.normalized_name).toBe('action');
-  expect(of('structured_family_cef').vendorFields['body.act']).toBeUndefined();
+  // The corrected CEF name is a Stellar Cyber field of the CEF type only.
+  expect(of('structured_family_cef').topFields['body.cef_name']?.normalized_name).toBe('event_name');
+  expect(of('structured_family_cef').vendorFields['body.cef_name']).toBeUndefined();
   // PAN-OS TRAFFIC keeps its own mappings; nothing moved to the shared mappings.
-  expect(sources(of('panos_traffic_csv'))).not.toContain('body.act');
+  expect(sources(of('panos_traffic_csv'))).not.toContain('body.cef_name');
   expect(of('panos_traffic_csv').topFields['generic.fields.src']?.normalized_name).toBe('srcip');
-  expect(sources(compiled.normalization)).not.toContain('body.act');
+  expect(sources(compiled.normalization)).not.toContain('body.cef_name');
 });

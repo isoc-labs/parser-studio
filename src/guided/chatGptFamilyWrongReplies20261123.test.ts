@@ -84,12 +84,12 @@ const official=(draft:ParserDraft,source:string)=>preview(source,draft).events.m
 
 describe('wrong ChatGPT replies for one event type are blocked before anything changes',()=>{
   it('a correct one-field correction passes every check and changes only that event type',async()=>{
-    const verdict=await check(edit(recipe=>{const act=mapOf(recipe,'body.act');act.target='action';act.group='top_fields';}));
+    const verdict=await check(edit(recipe=>{const name=mapOf(recipe,'body.cef_name');name.target='event_name';name.group='top_fields';}));
     expect(verdict.accepted,JSON.stringify(verdict)).toBe(true);
     if(!verdict.accepted)return;
     const before=official(routed,FULL),after=official(verdict.draft,FULL);
     expect(after[0]).toEqual(before[0]);expect(after[2]).toEqual(before[2]);
-    expect((after[1] as Record<string,unknown>).action).toBe('allow');
+    expect((after[1] as Record<string,unknown>).event_name).toBe('Login');
   });
   const wrong:[string,()=>string,string[]][]=[
     ['a missing field (an existing mapping removed)',()=>edit(recipe=>{
@@ -129,7 +129,7 @@ describe('wrong ChatGPT replies for one event type are blocked before anything c
       expect(expected,JSON.stringify(verdict)).toContain(verdict.stage+':'+verdict.reason);
     });
   it('blocks a correct CEF result applied to the wrong event type',async()=>{
-    const verdict=await check(edit(recipe=>{const act=mapOf(recipe,'body.act');act.target='action';act.group='top_fields';}),
+    const verdict=await check(edit(recipe=>{const name=mapOf(recipe,'body.cef_name');name.target='event_name';name.group='top_fields';}),
       'panos_traffic_csv');
     expect(verdict).toEqual({accepted:false,stage:'merge',reason:'SOURCE_NOT_IN_FAMILY'});
   });

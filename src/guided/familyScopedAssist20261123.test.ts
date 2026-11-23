@@ -175,4 +175,11 @@ describe('audit F1 and F3: family records and shared mappings',()=>{
     expect(mergeFamilyCandidate(draft,'structured_family_cef',cef,preview(SAMPLE,draft)))
       .toEqual({ok:false,reason:'NO_FAMILY_CHANGE'});
   });
+  it('treats a changed source path kind as a change (re-audit A3)',()=>{
+    const draft=routed();
+    const cef=projectFamilyDraft(draft,'structured_family_cef')!;
+    const changed={...cef,mappings:cef.mappings.map((rule,i)=>i===cef.mappings.length-1?{...rule,sourcePathKind:'literal_root' as const}:rule)};
+    const merged=mergeFamilyCandidate(draft,'structured_family_cef',changed,preview(SAMPLE,draft));
+    expect(merged.ok?'APPLIED':merged.reason).not.toBe('NO_FAMILY_CHANGE');
+  });
 });
