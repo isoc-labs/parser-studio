@@ -241,6 +241,28 @@ assert.equal(mod.valueFitsNormalizationTarget('srcport','integer',' '),true);
 assert.equal(mod.valueFitsNormalizationTarget('srcport','integer','\u00a0'),false);
 // Per-container protocol evidence must not disappear when root fields differ.
 review({flow:{spt:443,'protocol-id':1}},'flow.spt','srcport');
+// Audit G-13: protocol evidence written in other common ways; a protocol object's non-protocol member is not
+// evidence; another object of the record is another family; a bare transport= (FortiGate) is a port.
+review({spt:8,'protocol.name':'icmp'},'spt','srcport');
+review({spt:8,'flow.l4.proto':'icmp'},'spt','srcport');
+review({spt:8,ip_protocol:'icmp'},'spt','srcport');
+review({spt:8,l4_proto:'icmp'},'spt','srcport');
+review({spt:8,network:{transport:'icmp'}},'spt','srcport');
+review({spt:8,protocol:{name:'icmp',flags:'SYN'}},'spt','srcport');
+review({spt:8,protocol:{meta:{name:'icmp'}}},'spt','srcport');
+high({spt:443,protocol:{name:'tcp',number:6,flags:'SYN'}},'spt','srcport','integer');
+high({spt:443,protocol:{name:'tcp',state:'ESTABLISHED',direction:'in'}},'spt','srcport','integer');
+high({spt:443,proto:6,network:{transport:'tcp'}},'spt','srcport','integer');
+high({spt:443,proto:6,other:{protocol:'icmp'}},'spt','srcport','integer');
+high({spt:443,proto:6,transport:8080},'spt','srcport','integer');
+high({spt:443,proto:6,network:{bytes:10}},'spt','srcport','integer');
+// A literal key written with a protocol-named prefix: only the sibling's own name is read ('proto.' is how the
+// source is written), and a list of transport names is transport evidence.
+high({'proto.sport':443,'proto.note':'x'},'proto.sport','srcport','integer');
+high({spt:443,protocol:['tcp','udp']},'spt','srcport','integer');
+review({spt:443,protocol:['tcp','icmp']},'spt','srcport');
+// A non-transport protocol at the root of the record keeps a port of a nested object in review.
+review({flow:{spt:443},protocol:'icmp'},'flow.spt','srcport');
 review({flow:{spt:443,proto:1}},'flow.spt','srcport');
 review({flow:{spt:443,proto_name:'icmp'}},'flow.spt','srcport');
 high({flow:{spt:443,'protocol-id':6}},'flow.spt','srcport','integer');

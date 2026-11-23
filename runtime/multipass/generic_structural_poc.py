@@ -80,6 +80,8 @@ MONTH_DAYS={
     'Jul':31,'Aug':31,'Sep':30,'Oct':31,'Nov':30,'Dec':31,
 }
 MAX_FIELDS=1024
+# Pair limit of the key=value grammar (contracts SYSLOG_HEADER_SEMANTICS.kvMaxPairs).
+KV_LIST_MAX_PAIRS=100
 
 
 def _networkish(value:str)->bool:
@@ -205,6 +207,9 @@ def _adaptive_comma_kv(raw:str,start:int)->tuple[dict[str,Any],list[ValueSpan],i
         if aa==bb:continue
         if not any(p[4]==aa and p[5]==bb for p in parsed):
             return None
+    # Same limits as the browser and Ruby key=value grammar (src/grammar/kvBody.ts): more than 100 pairs
+    # (TOO_MANY_PAIRS) or a repeated key (DUPLICATE_KEY) declines the list (audit G-10).
+    if len(parsed)>KV_LIST_MAX_PAIRS or len({p[1] for p in parsed})!=len(parsed):return None
     fields={};spans=[]
     for _part_index,key,va,vb,a,b in parsed:
         value=raw[va:vb];_append(fields,key,value)
@@ -330,6 +335,8 @@ def _adaptive_delimited_kv(
         if index==0:continue
         if aa==bb:continue
         if not any(p[0]==index for p in parsed):return None
+    # Same limits as the browser and Ruby key=value grammar (audit G-10): see _adaptive_comma_kv.
+    if len(parsed)>KV_LIST_MAX_PAIRS or len({p[1] for p in parsed})!=len(parsed):return None
     fields={};spans=[]
     for _index,key,va,vb,_key_start,_a,_b in parsed:
         _append(fields,key,raw[va:vb])

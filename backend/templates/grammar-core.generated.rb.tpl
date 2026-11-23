@@ -1820,13 +1820,25 @@ end
 
 # src/grammar/parseStatus.ts: unquotedValueEnd
 def psg_unquoted_value_end(raw, from, v_end, split)
-  at = nil
+  query = at = ch = nil
+  query = false
   at = from
   psg_t1 = true
   while true
     if psg_t1 then psg_t1 = false else at += 1 end
     break unless (at < v_end)
-    if !psg_is_list_delimiter(psg_at(raw, at))
+    ch = psg_at(raw, at)
+    if (ch == '?')
+      query = true
+      next
+    end
+    if (ch == '&')
+      if (((split && !query) && ((at + 1) < v_end)) && !psg_match_at(/\G(?:[^ \t\n\x0b\f\r,;|="']+=)/, raw, (at + 1)).equal?(:psg_null))
+        return at
+      end
+      next
+    end
+    if !psg_is_list_delimiter(ch)
       next
     end
     if ((at + 1) < v_end)

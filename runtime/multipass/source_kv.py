@@ -53,8 +53,14 @@ def _delimited_pair_unread(raw:str,start:int,end:int)->tuple[bool,bool]:
     decided by the line: see decode_source_kv. last: the value ends in a delimiter and the next token is a pair
     ("1," before " b=2"); the delimiter is not part of the value.
     Same rule as unquotedValueEnd of src/grammar/parseStatus.ts, where the browser grades the event PARTIAL."""
-    inside=False
+    inside=False;query=False
     for at in range(start,end):
+        # "&" separates pairs inside one token too ("a=1&b=2", audit G-11), except after a "?" that opened a
+        # URL query ("url=/a?x=1&y=2"). Same rule as unquotedValueEnd of src/grammar/parseStatus.ts.
+        if raw[at]=='?':query=True;continue
+        if raw[at]=='&':
+            if not query and at+1<end and KEY_BEHIND_DELIMITER.match(raw,at+1) is not None:inside=True
+            continue
         if raw[at] not in ',;|':continue
         if at+1<end:
             if KEY_BEHIND_DELIMITER.match(raw,at+1) is not None:inside=True

@@ -58,7 +58,9 @@ function sparseSafeSource(source:string,target:string,values:readonly Looked[],
 /** Field names under which a record states its IP protocol. `transport` is not one of them: FortiGate writes
  * the translated source port under that name. */
 const PROTOCOL_EVIDENCE_NAMES=['protocol-id','protocol_id','protocol','proto','proto_name','protocol_name',
-  'ipproto','ip_proto','l4proto'];
+  'ipproto','ip_proto','l4proto','ip_protocol','l4_proto','l4_protocol'];
+/** Members of a protocol object that are not the protocol itself ({name:'tcp',flags:'SYN'}: audit G-13). */
+const PROTOCOL_NON_IDENTITY_MEMBERS=new Set(['flags','tcp_flags','flag','state','direction']);
 /** Aliases whose documented meaning depends on the protocol: Zeek writes the ICMP type and code in
  * id.orig_p and id.resp_p. They are ports only beside a TCP or UDP protocol. */
 const PROTOCOL_DEPENDENT_PORT_ALIASES=new Set(['id.orig_p','id.resp_p']);
@@ -138,9 +140,28 @@ function protocolValuesBeside(fields:Record<string,unknown>,source:string,withRo
   for(const [container,written] of containers)for(const key of Object.keys(container)){
     const name=key.toLowerCase();
     const local=name.startsWith(written)?name.slice(written.length):name;
-    if(PROTOCOL_EVIDENCE_NAMES.includes(local))scalarLeaves(container[key],values);
+    protocolLeaves(container[key],local.split('.'),values);
   }
   return values;
+}
+/** The protocol values of one field, by the path of each scalar: a segment that names a protocol field
+ * ("protocol", "flow.l4.proto", a literal key "protocol.name", ECS network.transport) makes the scalars at or
+ * below it protocol evidence, except members that are not the protocol itself (flags). Audit G-13. */
+function protocolLeaves(value:unknown,path:string[],out:string[]):void{
+  if(value!==null&&typeof value==='object'&&!Array.isArray(value)){
+    // Only a protocol object, or the ECS network object, is read: another object of the event is another
+    // family of the record, whose protocol says nothing about this port.
+    if(!path.some(segment=>PROTOCOL_EVIDENCE_NAMES.includes(segment))&&path[path.length-1]!=='network')return;
+    for(const [key,child] of Object.entries(value as Record<string,unknown>))
+      protocolLeaves(child,[...path,...key.toLowerCase().split('.')],out);
+    return;
+  }
+  // ECS network.transport names the protocol; a bare transport field does not (FortiGate transport= is a port).
+  const at=path.findIndex((segment,i)=>PROTOCOL_EVIDENCE_NAMES.includes(segment)||
+    (segment==='transport'&&i>0&&path[i-1]==='network'));
+  if(at<0)return;
+  if(at<path.length-1&&PROTOCOL_NON_IDENTITY_MEMBERS.has(path[path.length-1]!))return;
+  scalarLeaves(value,out);
 }
 const isTransport=(value:string):boolean=>TRANSPORT_NUMERIC.has(value)||TRANSPORT_NAMES.has(value);
 /** A protocol observation is not proof of a Layer 4 port unless it names an

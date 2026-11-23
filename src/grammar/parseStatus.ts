@@ -118,8 +118,17 @@ function keyStartsAt(raw: string, at: number, end: number): boolean {
  * `split` is set and a key follows ("1,b=2"); a delimiter that no key follows is value data ("a,b,c").
  */
 function unquotedValueEnd(raw: string, from: number, end: number, split: boolean): number {
+  // "&" separates pairs inside one token too ("a=1&b=2", audit G-11), except after a "?" that opened a URL
+  // query, where it separates the query parameters of one value ("url=/a?x=1&y=2").
+  let query = false;
   for (let at = from; at < end; at += 1) {
-    if (!isListDelimiter(raw[at]!)) continue;
+    const ch = raw[at]!;
+    if (ch === '?') { query = true; continue; }
+    if (ch === '&') {
+      if (split && !query && at + 1 < end && matchAt(KEY_BEHIND_DELIMITER, raw, at + 1) !== null) return at;
+      continue;
+    }
+    if (!isListDelimiter(ch)) continue;
     if (at + 1 < end) {
       if (split && matchAt(KEY_BEHIND_DELIMITER, raw, at + 1) !== null) return at;
     } else if (keyStartsAt(raw, matchEnd(matchAt(GAP_RUN, raw, end)!), raw.length)) return at;
