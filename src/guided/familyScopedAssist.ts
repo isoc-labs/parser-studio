@@ -1,0 +1,174 @@
+/**
+ * ChatGPT Assisted on a draft whose event families have their own mappings (event profiles).
+ *
+ * ParserRecipe v0.2 has no family routing, and the conditional draft must not lose it. So one family is worked on
+ * at a time: projectFamilyDraft gives the ordinary single-family draft that reads that family exactly as the routed
+ * draft does (the shared mappings plus the mappings of the family), which v0.2 can express and the existing
+ * prompt, review, comparison and holdout path can check on the records of that family. mergeFamilyCandidate puts
+ * a reviewed result back into that family only: the source format, the shared mappings, the enrichment and the
+ * classification must be unchanged, no destination may be written twice in one event, and the other families keep
+ * their mappings. Records of no family (UNRECOGNIZED_EVENT_FAMILY) form their own scope; a result for them becomes
+ * a new family selected by the value of the existing discriminator.
+ */
+import type {MappingRule,ParserDraft,SuiteResult} from '../model';
+import {lookupFieldValue} from '../fieldPaths';
+import {validateEventProfiles,type EventProfile} from './multiEventRouting';
+import type {FieldGroup} from './contract';
+
+export const UNRECOGNIZED_SCOPE='unrecognized';
+export interface FamilyScope{
+  name:string;
+  /** Record indexes of the sample, in order. */
+  records:number[];
+  /** READ: every record of the family is parsed and normalized completely. */
+  state:'READ'|'PARTIAL'|'UNRECOGNIZED';
+}
+export type FamilyMergeResult={ok:true;draft:ParserDraft}|{ok:false;reason:
+  'NO_EVENT_PROFILES'|'UNKNOWN_FAMILY'|'SOURCE_FORMAT_CHANGED'|'SHARED_MAPPING_CHANGED'|'ENRICHMENT_CHANGED'|
+  'CLASSIFICATION_CHANGED'|'NO_FAMILY_MAPPING'|'DESTINATION_COLLISION'|'NO_SINGLE_DISCRIMINATOR_VALUE'|
+  'INVALID_FAMILY'|'SOURCE_NOT_IN_FAMILY'};
+
+const EXTRACTION_KEYS=['format','pattern','csvColumns','csvDelimiter','syslogBodyFormat','mixedFormats',
+  'genericStructuralProfile','genericStructuralFamilyGrammar','forwarder','omitSourceRaw'] as const;
+const FAMILY_NAME=/^[a-z][a-z0-9_-]{0,31}$/u;
+
+export function familyScopes(draft:ParserDraft,suite:SuiteResult|undefined):FamilyScope[]|null{
+  const profiles=draft.eventProfiles;
+  if(!profiles||!suite)return null;
+  const known=new Set(profiles.variants.map(variant=>variant.name));
+  const byName=new Map<string,number[]>();
+  for(const [index,event] of suite.events.entries()){
+    const name=event.eventFamily&&known.has(event.eventFamily)?event.eventFamily:UNRECOGNIZED_SCOPE;
+    byName.set(name,[...(byName.get(name)??[]),index]);
+  }
+  const scopes:FamilyScope[]=[];
+  for(const variant of profiles.variants){
+    const records=byName.get(variant.name);
+    if(!records)continue;
+    const read=records.every(index=>{
+      const event=suite.events[index]!;
+      return event.extracted&&event.normalizedOk&&(event.parseStatus??'FULL')==='FULL';
+    });
+    scopes.push({name:variant.name,records,state:read?'READ':'PARTIAL'});
+  }
+  const rest=byName.get(UNRECOGNIZED_SCOPE);
+  if(rest)scopes.push({name:UNRECOGNIZED_SCOPE,records:rest,state:'UNRECOGNIZED'});
+  return scopes;
+}
+
+/** The original lines of one scope, in their order, unchanged. */
+export function familySource(source:string,scope:FamilyScope):string{
+  const lines=source.split('\n');
+  return scope.records.map(index=>lines[index]!).join('\n');
+}
+
+/** The ordinary draft that reads one family as the routed draft does: shared plus family mappings. */
+export function projectFamilyDraft(draft:ParserDraft,name:string):ParserDraft|null{
+  const profiles=draft.eventProfiles;
+  if(!profiles)return null;
+  const variant=profiles.variants.find(item=>item.name===name);
+  if(!variant&&name!==UNRECOGNIZED_SCOPE)return null;
+  const projected:ParserDraft={...draft,mappings:[...draft.mappings,...(variant?.mappings??[])]};
+  delete projected.eventProfiles;
+  return projected;
+}
+
+const groupOf=(draft:ParserDraft,rule:MappingRule):FieldGroup=>draft.guided?.groups[rule.id]??'vendor_fields';
+const keyOf=(draft:ParserDraft,rule:MappingRule)=>JSON.stringify([rule.source,rule.target,rule.type,groupOf(draft,rule),rule.when??null]);
+const outputOf=(draft:ParserDraft,rule:MappingRule)=>(groupOf(draft,rule)==='vendor_fields'?'\u0000vendor.':'')+rule.target;
+const overlaps=(a:string,b:string)=>a===b||a.startsWith(b+'.')||b.startsWith(a+'.');
+
+export function mergeFamilyCandidate(
+  draft:ParserDraft,name:string,candidate:ParserDraft,suite:SuiteResult,
+):FamilyMergeResult{
+  const profiles=draft.eventProfiles;
+  if(!profiles)return {ok:false,reason:'NO_EVENT_PROFILES'};
+  const index=profiles.variants.findIndex(variant=>variant.name===name);
+  if(index<0&&name!==UNRECOGNIZED_SCOPE)return {ok:false,reason:'UNKNOWN_FAMILY'};
+  for(const key of EXTRACTION_KEYS)
+    if(JSON.stringify(draft[key]??null)!==JSON.stringify(candidate[key]??null))return {ok:false,reason:'SOURCE_FORMAT_CHANGED'};
+  if(JSON.stringify(draft.guided?.enrichment??[])!==JSON.stringify(candidate.guided?.enrichment??[]))
+    return {ok:false,reason:'ENRICHMENT_CHANGED'};
+  if(JSON.stringify(draft.guided?.classification??null)!==JSON.stringify(candidate.guided?.classification??null))
+    return {ok:false,reason:'CLASSIFICATION_CHANGED'};
+  const shared=new Set(draft.mappings.map(rule=>keyOf(draft,rule)));
+  const offered=new Set(candidate.mappings.map(rule=>keyOf(candidate,rule)));
+  if([...shared].some(key=>!offered.has(key)))return {ok:false,reason:'SHARED_MAPPING_CHANGED'};
+  const own=candidate.mappings.filter(rule=>!shared.has(keyOf(candidate,rule)));
+  if(!own.length)return {ok:false,reason:'NO_FAMILY_MAPPING'};
+  // Each mapping of this family reads a value that some record of this family has: a result made for another
+  // family, or a source path of another family, would otherwise map nothing here or mix families.
+  const records=(familyScopes(draft,suite)??[]).find(scope=>scope.name===name)?.records??[];
+  for(const rule of own)
+    if(!records.some(at=>{
+      const found=lookupFieldValue(suite.events[at]!.fields,rule.source);
+      return found.found&&found.value!==undefined&&found.value!==null&&typeof found.value!=='object';
+    }))return {ok:false,reason:'SOURCE_NOT_IN_FAMILY'};
+  // One destination at most once per event: the shared outputs and the outputs of this family.
+  const seen=draft.mappings.map(rule=>outputOf(draft,rule));
+  for(const rule of own){
+    const out=outputOf(candidate,rule);
+    if(seen.some(other=>overlaps(other,out)))return {ok:false,reason:'DESTINATION_COLLISION'};
+    seen.push(out);
+  }
+  const taken=new Set([...draft.mappings,...profiles.variants.flatMap(variant=>variant.mappings)].map(rule=>rule.id));
+  const groups:Record<string,FieldGroup>={...(draft.guided?.groups??{})};
+  const slot=index<0?profiles.variants.length:index;
+  const mappings=own.map((rule,n)=>{
+    let id='family-'+String(slot)+'-ai-'+String(n);
+    while(taken.has(id))id+='x';
+    taken.add(id);groups[id]=groupOf(candidate,rule);
+    return {...rule,id};
+  });
+  let variants:EventProfile[];
+  if(index>=0){
+    for(const rule of profiles.variants[index]!.mappings)delete groups[rule.id];
+    variants=profiles.variants.map((variant,i)=>i===index?{...variant,mappings}:variant);
+  }else{
+    const values=new Set(suite.events.filter(event=>!event.eventFamily||
+      !profiles.variants.some(variant=>variant.name===event.eventFamily))
+      .map(event=>lookupFieldValue(event.fields,profiles.discriminator))
+      .map(found=>found.found&&typeof found.value==='string'?found.value:''));
+    const [value]=[...values];
+    if(values.size!==1||!value||profiles.variants.some(variant=>variant.equals===value))
+      return {ok:false,reason:'NO_SINGLE_DISCRIMINATOR_VALUE'};
+    const familyName=FAMILY_NAME.test(value)?value:
+      value.toLowerCase().replace(/[^a-z0-9_-]/gu,'_').replace(/^[^a-z]+/u,'').slice(0,32);
+    if(!FAMILY_NAME.test(familyName)||profiles.variants.some(variant=>variant.name===familyName))
+      return {ok:false,reason:'INVALID_FAMILY'};
+    variants=[...profiles.variants,{name:familyName,equals:value,mappings}];
+  }
+  const eventProfiles={...profiles,variants};
+  if(validateEventProfiles(eventProfiles)!==null)return {ok:false,reason:'INVALID_FAMILY'};
+  return {ok:true,draft:{...draft,eventProfiles,guided:{...draft.guided!,groups}}};
+}
+
+const countText=(count:number)=>count+(count===1?' record':' records');
+const stateText=(state:FamilyScope['state'])=>state==='READ'?'read completely':state==='PARTIAL'?'partly read':'not recognized';
+const ruleText=(draft:ParserDraft,rule:MappingRule)=>'  - '+rule.source+' -> '+rule.target+' ('+rule.type+', '+groupOf(draft,rule)+')';
+
+/** Prompt context for ChatGPT Assisted on one family of a routed draft: the routing field, every family with its
+ * record count, state and mappings, and the families still to support. Names and counts only: the selected
+ * family's original lines are the prompt source, and other families' lines are not repeated here. */
+export function familyPromptContext(draft:ParserDraft,scopes:FamilyScope[],selected:string):string{
+  const profiles=draft.eventProfiles;
+  if(!profiles)return '';
+  const remaining=scopes.filter(scope=>scope.state!=='READ');
+  const lines=[
+    'This parser reads several event types with separate mappings (event profiles). Improve only event type '+selected+'.',
+    'The original logs in this prompt are the records of '+selected+' only. Do not change how the shared log format is read,',
+    'do not change or remove the shared mappings, and do not map a Stellar Cyber field that another mapping of this parser already fills.',
+    'Discriminator field: '+profiles.discriminator+' (records with an unknown value are rejected, never guessed).',
+    'Event types still to support: '+(remaining.length
+      ?remaining.map(scope=>scope.name+' ('+countText(scope.records.length)+')').join(', '):'none'),
+    'Shared mappings for every event type:',
+    ...(draft.mappings.length?draft.mappings.map(rule=>ruleText(draft,rule)):['  - none']),
+  ];
+  for(const scope of scopes){
+    const variant=profiles.variants.find(item=>item.name===scope.name);
+    lines.push(scope.name+': '+countText(scope.records.length)+', '+stateText(scope.state)+
+      (scope.name===selected?' (selected)':'')+(variant?'; discriminator value '+JSON.stringify(variant.equals):''));
+    if(variant)lines.push(...(variant.mappings.length?variant.mappings.map(rule=>ruleText(draft,rule)):['  - no type-specific mappings']));
+  }
+  return lines.join('\n');
+}
