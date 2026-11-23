@@ -100,7 +100,25 @@ export async function jsonataSampleHash(suite:SuiteResult){
 const display=(value:unknown)=>{const s=typeof value==='string'?value:JSON.stringify(value)??String(value);return s.length>80?s.slice(0,77)+'...':s;};
 
 /** No network, no model invocation: this returns a prompt for explicit manual copy. */
-export async function createJsonataMappingPrompt(suite:SuiteResult,draft:ParserDraft,includeValues=false){
+/** Common security destinations offered with their documented meaning, in addition to the targets in use. */
+const COMMON_TARGETS=['srcip','dstip','srcport','dstport','srcip_host','dstip_host','srcmac','dstmac','action',
+  'event_name','event_description','srcuser','dstuser','url','proto_name','appid_name','severity'] as const;
+/** The dictionary entries a mapping decision needs: name, mapping type, group and the documented meaning. */
+function relevantDictionaryEntries(targets:readonly string[]){
+  const seen=new Set<string>();
+  return targets.flatMap(name=>{
+    const entry=findStellarMetadataField(name);
+    if(seen.has(name)||!entry?.mappable||!entry.mappingType||!entry.group)return [];
+    seen.add(name);
+    return [{name,type:entry.mappingType,group:entry.group,description:(entry.descriptions[0]??'').slice(0,200)}];
+  }).slice(0,80);
+}
+export interface JsonataPromptContext{
+  /** Local parser state of a draft with event profiles (familyPromptContext). */
+  eventProfileContext?:string;
+}
+export async function createJsonataMappingPrompt(suite:SuiteResult,draft:ParserDraft,includeValues=false,
+  context:JsonataPromptContext={}){
   if(!suite?.events?.length||suite.events.length>100)throw Error('No bounded parsed events available.');
   const sha256=await jsonataSampleHash(suite);
   const fields=[...new Set(suite.events.flatMap(e=>listSafeLeafPaths(e.fields,101)))];
@@ -121,6 +139,10 @@ export async function createJsonataMappingPrompt(suite:SuiteResult,draft:ParserD
   });
   const candidates=createCanonicalMappingPlan(suite,draft).officialCandidates
     .map(c=>({source:c.source,target:c.target,confidence:c.confidence,note:c.explanation}));
+  const groups=draft.guided?.groups??{};
+  const official=draft.mappings.filter(m=>(groups[m.id]??'vendor_fields')!=='vendor_fields');
+  const dictionary=relevantDictionaryEntries([...official.map(m=>m.target),...candidates.map(c=>c.target),...COMMON_TARGETS]);
+  const unmapped=fields.filter(source=>!official.some(m=>m.source===source));
   const example={contract:JSONATA_MAPPING_CONTRACT,sample:{sha256,events:suite.events.length},
     mappings:[{expression:'syslog_sd.element_1.params.`source-address`',target:'srcip'}]};
   const prompt=[
@@ -145,6 +167,12 @@ export async function createJsonataMappingPrompt(suite:SuiteResult,draft:ParserD
       JSON.stringify({manufacturer:draft.vendor,product:draft.name,version:draft.version??'',
         sourceFormat:draft.format}),
     'Stellar 7.0 dictionary: '+STELLAR_METADATA_CATALOG_PROVENANCE.source,
+    'Relevant Stellar Cyber 7.0 dictionary entries: '+JSON.stringify(dictionary),
+    'Existing official mappings (keep them unless a value contradicts the documented meaning): '+
+      JSON.stringify(official.map(m=>({source:m.source,target:m.target,type:m.type}))),
+    'Source fields without an official Stellar Cyber mapping: '+JSON.stringify(unmapped),
+    ...(context.eventProfileContext?['Current parser event types (local Parser Studio state; propose mappings for the selected type only):\n'+
+      context.eventProfileContext.slice(0,16384)]:[]),
     'Existing locally derived hints (not independent approvals): '+JSON.stringify(candidates),
     'Available parsed source field names and sample coverage: '+JSON.stringify(evidence),
     includeValues?'User explicitly opted to include observed values.':'No raw log text or field values are included.',

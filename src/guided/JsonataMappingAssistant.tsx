@@ -1,11 +1,13 @@
 import {useEffect,useMemo,useState} from 'react';
-import type {Dispatch,SetStateAction} from 'react';
+import type {Dispatch,ReactNode,SetStateAction} from 'react';
 import {CheckCircle2,ClipboardCopy,ShieldAlert,Sparkles,X} from 'lucide-react';
 import type {ParserDraft,SuiteResult} from '../model';
 import {
   createJsonataMappingPrompt,jsonataDraftSignature,reviewJsonataMapping,
   applyReviewedJsonataMapping,type ReviewedJsonataMapping,
 } from './jsonataMappingAssist';
+import {preview} from '../parser';
+import {familyPromptContext,familyScopes,mergeFamilyCandidate,projectFamilyDraft,UNRECOGNIZED_SCOPE} from './familyScopedAssist';
 
 interface Props {
   draft:ParserDraft;
@@ -14,8 +16,10 @@ interface Props {
   pending:boolean;
 }
 interface Prepared {prompt:string;sha256:string;signature:string}
+/** One event type of a parser with event profiles, handled as an ordinary single-type draft. */
+interface FamilyScopeBinding{label:string;context:string;selector:ReactNode;onApply:(candidate:ParserDraft)=>string|null}
 
-export default function JsonataMappingAssistant({draft,setDraft,suite,pending}:Props){
+function JsonataMappingCore({draft,setDraft,suite,pending,familyScope}:Props&{familyScope?:FamilyScopeBinding}){
   const [open,setOpen]=useState(false);
   const [includeValues,setIncludeValues]=useState(false);
   const [prepared,setPrepared]=useState<Prepared|null>(null);
@@ -37,7 +41,8 @@ export default function JsonataMappingAssistant({draft,setDraft,suite,pending}:P
     setBusy(true);setError('');setNotice('');setReview(null);
     setSelected([]);setApproved(false);setApproveUncertain(false);
     try{
-      const next=await createJsonataMappingPrompt(suite,draft,includeValues);
+      const next=await createJsonataMappingPrompt(suite,draft,includeValues,
+        familyScope?{eventProfileContext:familyScope.context}:{});
       setPrepared({prompt:next.prompt,sha256:next.sha256,signature});
     }catch(err){
       setError(err instanceof Error?err.message:'Could not create a local mapping prompt.');
@@ -78,8 +83,13 @@ export default function JsonataMappingAssistant({draft,setDraft,suite,pending}:P
     }
     const result=applyReviewedJsonataMapping(draft,suite,chosen);
     if(!result.ok){setError(result.reason);return;}
-    setDraft(result.draft);
-    setNotice('Applied '+chosen.length+' reviewed native-compatible field mapping'+(chosen.length===1?'':'s')+'. Check the refreshed field preview before creating a parser.');
+    if(familyScope){
+      const refused=familyScope.onApply(result.draft);
+      if(refused){setError(refused);return;}
+    }else setDraft(result.draft);
+    setNotice('Applied '+chosen.length+' reviewed native-compatible field mapping'+(chosen.length===1?'':'s')+
+      (familyScope?' to event type '+familyScope.label+'. Other event types are unchanged':'')+
+      '. Check the refreshed field preview before creating a parser.');
     setReview(null);setSelected([]);setPrepared(null);setApproved(false);setReply('');
     setError('');
   };
@@ -99,6 +109,7 @@ export default function JsonataMappingAssistant({draft,setDraft,suite,pending}:P
       </button>
     </div>
     {!open?null:<div className="jsonata-assist-body">
+      {familyScope?.selector}
       <div className="normalization-runtime-note" role="note">
         <strong>Review-only, manual copy and paste</strong>
         <span>Nothing is sent to ChatGPT automatically. By default the prompt includes field names, types and coverage, but no raw logs or observed values. Review it before sharing.</span>
@@ -174,4 +185,48 @@ export default function JsonataMappingAssistant({draft,setDraft,suite,pending}:P
       <button className="jsonata-assist-close" type="button" onClick={()=>setOpen(false)}><X size={14}/>Close</button>
     </div>}
   </section>;
+}
+
+const MERGE_REFUSAL:Record<string,string>={
+  DESTINATION_COLLISION:'A selected mapping writes a Stellar Cyber field that this parser already fills. Nothing was changed.',
+  SOURCE_NOT_IN_FAMILY:'A selected mapping reads a field that no record of this event type contains. Nothing was changed.',
+  SHARED_MAPPING_CHANGED:'The change would alter a mapping shared by every event type. Nothing was changed.',
+  NO_SINGLE_DISCRIMINATOR_VALUE:'The records of no event type do not share one event type value. Nothing was changed.',
+};
+
+/** ChatGPT JSONata mapping for a parser with event profiles: one event type at a time. The selected type is
+ * projected to an ordinary single-type draft and checked on that type's records only; an approved result is
+ * merged into that type, so other types keep their mappings and no destination is written twice. */
+function FamilyScopedJsonata(props:Props){
+  const {draft,setDraft,suite,pending}=props;
+  const scopes=useMemo(()=>familyScopes(draft,suite)??[],[draft,suite]);
+  const [selected,setSelected]=useState('');
+  const active=scopes.find(scope=>scope.name===selected)??scopes.find(scope=>scope.state!=='READ')??scopes[0];
+  const scoped=useMemo(()=>{
+    if(!active)return null;
+    const projected=projectFamilyDraft(draft,active.name);
+    if(!projected)return null;
+    const source=active.records.map(index=>suite.events[index]!.raw).join('\n');
+    return {draft:projected,suite:preview(source,projected)};
+  },[draft,suite,active]);
+  if(!active||!scoped)return <JsonataMappingCore {...props}/>;
+  const selector=<label className="jsonata-assist-check">Event type to map
+    <select aria-label="ChatGPT mapping event type scope" value={active.name} disabled={pending}
+      onChange={event=>setSelected(event.target.value)}>
+      {scopes.map(scope=><option key={scope.name} value={scope.name}>
+        {(scope.name===UNRECOGNIZED_SCOPE?'Not recognized by any event type':scope.name)+' - '+scope.records.length+
+          (scope.records.length===1?' record':' records')}</option>)}
+    </select>
+  </label>;
+  return <JsonataMappingCore draft={scoped.draft} setDraft={()=>{}} suite={scoped.suite} pending={pending}
+    familyScope={{label:active.name,selector,context:familyPromptContext(draft,scopes,active.name),onApply:candidate=>{
+      const merged=mergeFamilyCandidate(draft,active.name,candidate,suite);
+      if(!merged.ok)return MERGE_REFUSAL[merged.reason]??'The change could not be applied to this event type ('+merged.reason+'). Nothing was changed.';
+      setDraft(merged.draft);
+      return null;
+    }}}/>;
+}
+
+export default function JsonataMappingAssistant(props:Props){
+  return props.draft.eventProfiles?<FamilyScopedJsonata {...props}/>:<JsonataMappingCore {...props}/>;
 }
