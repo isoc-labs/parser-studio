@@ -25,7 +25,7 @@ describe('the ChatGPT mapping prompt',()=>{
     const routed=buildAutomaticGenericStructuralDraft(FULL,createDraft())!.draft;
     const scope=familyScopes(routed,preview(FULL,routed))!.find(item=>item.name==='structured_family_cef')!;
     const draft=projectFamilyDraft(routed,scope.name)!;
-    const source=familySource(FULL,scope);
+    const source=familySource(preview(FULL,routed),scope);
     const {prompt}=await createJsonataMappingPrompt(preview(source,draft),draft,true);
     const entries=section(prompt,'Relevant Stellar Cyber 7.0 dictionary entries: ') as
       {name:string;type:string;group:string;description:string}[];
@@ -46,10 +46,12 @@ describe('the ChatGPT mapping prompt',()=>{
     const suite=preview(FULL,routed);
     const scopes=familyScopes(routed,suite)!;
     const draft=projectFamilyDraft(routed,'structured_family_cef')!;
-    const source=familySource(FULL,scopes.find(item=>item.name==='structured_family_cef')!);
+    const source=familySource(suite,scopes.find(item=>item.name==='structured_family_cef')!);
     const context=familyPromptContext(routed,scopes,'structured_family_cef');
     const {prompt}=await createJsonataMappingPrompt(preview(source,draft),draft,false,{eventProfileContext:context});
     expect(prompt).toContain('Improve only event type structured_family_cef');
     expect(prompt).not.toContain('10.10.20.15');
+    // Without the values option the prompt names the only values it carries: the discriminator values (audit F5).
+    expect(prompt).toContain('except the event type discriminator values listed above');
   });
 });

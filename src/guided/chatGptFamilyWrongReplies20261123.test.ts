@@ -33,7 +33,7 @@ beforeAll(async()=>{
   routed=buildAutomaticGenericStructuralDraft(FULL,createDraft())!.draft;
   fullSuite=preview(FULL,routed);
   const scope=familyScopes(routed,fullSuite)!.find(item=>item.name===FAMILY)!;
-  scopedSource=familySource(FULL,scope);
+  scopedSource=familySource(fullSuite,scope);
   scoped=projectFamilyDraft(routed,FAMILY)!;
   scopedSuite=preview(scopedSource,scoped);
   const reviewed=await buildReviewableRecipe(scopedSource,scoped,scopedSuite);

@@ -34,8 +34,8 @@ describe('the event families of a routed draft are offered as separate scopes',(
     const scopes=familyScopes(draft,preview(source,draft))!;
     expect(scopes.map(scope=>[scope.name,scope.records,scope.state])).toEqual([
       ['panos_traffic_csv',[0,3],'READ'],['structured_family_cef',[1],'READ'],['unrecognized',[2],'UNRECOGNIZED']]);
-    expect(familySource(source,scopes[2]!)).toBe(OTHER);
-    expect(familySource(source,scopes[0]!)).toBe([PAN,PAN2].join('\n'));
+    expect(familySource(preview(source,draft),scopes[2]!)).toBe(OTHER);
+    expect(familySource(preview(source,draft),scopes[0]!)).toBe([PAN,PAN2].join('\n'));
   });
   it('a draft without event profiles has no family scopes',()=>{
     const draft=buildAutomaticGenericStructuralDraft([PAN,PAN2].join('\n'),createDraft())!.draft;
@@ -95,7 +95,7 @@ describe('a reviewed family result is merged into that family only',()=>{
     const source=[PAN,CEF,OTHER,PAN2].join('\n');
     const suite=preview(source,draft);
     const base=projectFamilyDraft(draft,'unrecognized')!;
-    const lines=familySource(source,familyScopes(draft,suite)!.find(scope=>scope.name==='unrecognized')!);
+    const lines=familySource(suite,familyScopes(draft,suite)!.find(scope=>scope.name==='unrecognized')!);
     const fields=preview(lines,base).events[0]!.fields;
     const ip=Object.keys(fields.body as object).includes('srcip')?'body.srcip':'srcip';
     const candidate=addMapping(base,{id:'ai-3',authoring:{version:1,origin:'REVIEW_REQUIRED'},
@@ -147,5 +147,32 @@ describe('a reviewed result is applied only to the event type it was made for',(
       guided:{...cef.guided!,groups:{...cef.guided!.groups,'ai-x':'top_fields'}}};
     expect(mergeFamilyCandidate(draft,'structured_family_cef',candidate,preview(source,draft)))
       .toEqual({ok:false,reason:'SOURCE_NOT_IN_FAMILY'});
+  });
+});
+
+describe('audit F1 and F3: family records and shared mappings',()=>{
+  it('takes the records of a family from the preview even when the sample has blank lines',()=>{
+    const draft=routed();
+    const source=[PAN,'',CEF,PAN2,'',CEF2].join('\n');
+    const suite=preview(source,draft);
+    const scopes=familyScopes(draft,suite)!;
+    expect(familySource(suite,scopes.find(scope=>scope.name==='structured_family_cef')!)).toBe([CEF,CEF2].join('\n'));
+    expect(familySource(suite,scopes.find(scope=>scope.name==='panos_traffic_csv')!)).toBe([PAN,PAN2].join('\n'));
+  });
+  it('refuses a result that removes a mapping shared by every family',()=>{
+    const base=routed();
+    const draft:ParserDraft={...base,mappings:[{id:'shared-1',source:'generic.mode',target:'parser_mode',type:'string'}],
+      guided:{...base.guided!,groups:{...base.guided!.groups,'shared-1':'vendor_fields'}}};
+    const cef=projectFamilyDraft(draft,'structured_family_cef')!;
+    expect(cef.mappings.some(rule=>rule.id==='shared-1')).toBe(true);
+    const removed={...cef,mappings:cef.mappings.filter(rule=>rule.id!=='shared-1')};
+    expect(mergeFamilyCandidate(draft,'structured_family_cef',removed,preview(SAMPLE,draft)))
+      .toEqual({ok:false,reason:'SHARED_MAPPING_CHANGED'});
+  });
+  it('reports an unchanged result instead of applying it (audit F4)',()=>{
+    const draft=routed();
+    const cef=projectFamilyDraft(draft,'structured_family_cef')!;
+    expect(mergeFamilyCandidate(draft,'structured_family_cef',cef,preview(SAMPLE,draft)))
+      .toEqual({ok:false,reason:'NO_FAMILY_CHANGE'});
   });
 });

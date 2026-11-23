@@ -26,7 +26,7 @@ export interface FamilyScope{
 export type FamilyMergeResult={ok:true;draft:ParserDraft}|{ok:false;reason:
   'NO_EVENT_PROFILES'|'UNKNOWN_FAMILY'|'SOURCE_FORMAT_CHANGED'|'SHARED_MAPPING_CHANGED'|'ENRICHMENT_CHANGED'|
   'CLASSIFICATION_CHANGED'|'NO_FAMILY_MAPPING'|'DESTINATION_COLLISION'|'NO_SINGLE_DISCRIMINATOR_VALUE'|
-  'INVALID_FAMILY'|'SOURCE_NOT_IN_FAMILY'};
+  'INVALID_FAMILY'|'SOURCE_NOT_IN_FAMILY'|'NO_FAMILY_CHANGE'};
 
 const EXTRACTION_KEYS=['format','pattern','csvColumns','csvDelimiter','syslogBodyFormat','mixedFormats',
   'genericStructuralProfile','genericStructuralFamilyGrammar','forwarder','omitSourceRaw'] as const;
@@ -57,9 +57,10 @@ export function familyScopes(draft:ParserDraft,suite:SuiteResult|undefined):Fami
 }
 
 /** The original lines of one scope, in their order, unchanged. */
-export function familySource(source:string,scope:FamilyScope):string{
-  const lines=source.split('\n');
-  return scope.records.map(index=>lines[index]!).join('\n');
+/** The original records of a family, in order, exactly as the preview read them. Record indexes are preview
+ * events, not physical lines: blank lines and multi-line records make the two differ (audit F1). */
+export function familySource(suite:SuiteResult,scope:FamilyScope):string{
+  return scope.records.map(index=>suite.events[index]!.raw).join('\n');
 }
 
 /** The ordinary draft that reads one family as the routed draft does: shared plus family mappings. */
@@ -104,6 +105,12 @@ export function mergeFamilyCandidate(
       const found=lookupFieldValue(suite.events[at]!.fields,rule.source);
       return found.found&&found.value!==undefined&&found.value!==null&&typeof found.value!=='object';
     }))return {ok:false,reason:'SOURCE_NOT_IN_FAMILY'};
+  // A result that leaves the family as it is is reported, not applied as a change (audit F4).
+  if(index>=0){
+    const before=profiles.variants[index]!.mappings.map(rule=>keyOf(draft,rule)).sort();
+    const after=own.map(rule=>keyOf(candidate,rule)).sort();
+    if(JSON.stringify(before)===JSON.stringify(after))return {ok:false,reason:'NO_FAMILY_CHANGE'};
+  }
   // One destination at most once per event: the shared outputs and the outputs of this family.
   const seen=draft.mappings.map(rule=>outputOf(draft,rule));
   for(const rule of own){

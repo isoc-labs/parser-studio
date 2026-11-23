@@ -24,6 +24,15 @@ class PanosNamedRecordsTest(unittest.TestCase):
         self.assertEqual(self.syntax([THREAT.replace(',informational,', ',loud,')]),
                          ['SECURITY_SYSLOG_ENVELOPE+GENERIC_POSITIONAL_CSV'])
 
+    def test_non_ascii_digits_are_not_ports(self):
+        # Audit F2: str.isdigit() accepts superscript and Arabic-Indic digits; the browser and Ruby grammars
+        # accept [0-9] only. Such a port must neither crash the preview nor name the record.
+        for digit in ('\u00b2', '\u0665\u0661'):
+            line = THREAT.replace(',51520,80,', ',' + digit + ',80,')
+            self.assertEqual(self.syntax([line]), ['SECURITY_SYSLOG_ENVELOPE+GENERIC_POSITIONAL_CSV'])
+            traffic = TRAFFIC.replace(',51514,443,', ',' + digit + ',443,')
+            self.assertNotEqual(self.syntax([traffic]), ['SECURITY_SYSLOG_ENVELOPE+PANOS_TRAFFIC_CSV'])
+
 
 if __name__ == '__main__':
     unittest.main()

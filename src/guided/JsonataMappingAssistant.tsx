@@ -190,6 +190,7 @@ function JsonataMappingCore({draft,setDraft,suite,pending,familyScope}:Props&{fa
 const MERGE_REFUSAL:Record<string,string>={
   DESTINATION_COLLISION:'A selected mapping writes a Stellar Cyber field that this parser already fills. Nothing was changed.',
   SOURCE_NOT_IN_FAMILY:'A selected mapping reads a field that no record of this event type contains. Nothing was changed.',
+  NO_FAMILY_CHANGE:'The selected mappings leave this event type unchanged. Nothing was changed.',
   SHARED_MAPPING_CHANGED:'The change would alter a mapping shared by every event type. Nothing was changed.',
   NO_SINGLE_DISCRIMINATOR_VALUE:'The records of no event type do not share one event type value. Nothing was changed.',
 };

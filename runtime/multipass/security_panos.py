@@ -20,8 +20,10 @@ PANOS_TRAFFIC_53=(
     'vsys_name','device_name','action_source',
 )
 PANOS_TRAFFIC_54=PANOS_TRAFFIC_53[:38]+('padding',)+PANOS_TRAFFIC_53[38:]
-DATE_TIME=re.compile(r'^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}$')
-IPV4=re.compile(r'^(?:\d{1,3}\.){3}\d{1,3}$')
+DATE_TIME=re.compile(r'^[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$')
+# ASCII digits only, as in the browser and Ruby grammars ([0-9]); str.isdigit() also accepts other scripts (audit F2).
+ASCII_DIGITS=re.compile(r'[0-9]+')
+IPV4=re.compile(r'^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$')
 SAFE_PROTOCOL=re.compile(r'^[A-Za-z0-9_.-]{1,24}$')
 SAFE_ACTION=re.compile(r'^[A-Za-z0-9_. -]{1,64}$')
 
@@ -48,7 +50,7 @@ def promote_panos_traffic_csv(event:SourceEvent)->SourceEvent|None:
         return None
     for i in (24,25,26,27):
         value=ordered[i]
-        if not value.isdigit() or not 0<=int(value)<=65535:
+        if not ASCII_DIGITS.fullmatch(value) or not 0<=int(value)<=65535:
             return None
     if not SAFE_PROTOCOL.fullmatch(ordered[29]) or not SAFE_ACTION.fullmatch(ordered[30]):
         return None
@@ -96,7 +98,7 @@ DIRECTION=re.compile(r'^(?:client-to-server|server-to-client|0|1)$')
 
 
 def _port(value:str)->bool:
-    return value.isdigit() and len(value)<=5 and int(value)<=65535
+    return bool(ASCII_DIGITS.fullmatch(value)) and len(value)<=5 and int(value)<=65535
 
 
 def _threat_names(ordered:list[str])->tuple[str,...]|None:

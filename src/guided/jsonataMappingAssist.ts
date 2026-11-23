@@ -175,7 +175,9 @@ export async function createJsonataMappingPrompt(suite:SuiteResult,draft:ParserD
       context.eventProfileContext.slice(0,16384)]:[]),
     'Existing locally derived hints (not independent approvals): '+JSON.stringify(candidates),
     'Available parsed source field names and sample coverage: '+JSON.stringify(evidence),
-    includeValues?'User explicitly opted to include observed values.':'No raw log text or field values are included.',
+    includeValues?'User explicitly opted to include observed values.':
+      context.eventProfileContext?'No raw log text or field values are included, except the event type discriminator values listed above.':
+        'No raw log text or field values are included.',
   ].join('\n\n');
   return {prompt,sha256,events:suite.events.length};
 }
