@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>English</strong> · <a href="https://github.com/xdr-labs/parser-studio-docs">User Guide</a> · <a href="https://github.com/xdr-labs/parser-studio-docs/blob/main/scenarios/index.mdx">Scenario Playbooks</a>
+  <strong>English</strong> · <a href="https://github.com/isoc-labs/parser-studio-docs">User Guide</a> · <a href="https://github.com/isoc-labs/parser-studio-docs/blob/main/scenarios/index.mdx">Scenario Playbooks</a>
 </p>
 
 <p align="center">
@@ -56,7 +56,7 @@ Advanced diagnostics support these methods; they are not a separate creation wor
 5. Open **Create Parser** and select **Create Parser Files** when the sample passes the required checks.
 6. Download the verified parser logic and companion configuration files.
 
-To practice without customer data, follow the [first-parser walkthrough](https://github.com/xdr-labs/parser-studio-docs/blob/main/quickstart.mdx).
+To practice without customer data, follow the [first-parser walkthrough](https://github.com/isoc-labs/parser-studio-docs/blob/main/quickstart.mdx).
 
 ## Supported source review
 
@@ -96,7 +96,7 @@ Returned artifacts undergo SHA-256 integrity checks. Keep the two files from the
 For contributors with access to the repository, start the local Web UI with Node.js and npm:
 
 ```bash
-git clone https://github.com/xdr-labs/parser-studio.git
+git clone https://github.com/isoc-labs/parser-studio.git
 cd parser-studio
 npm ci
 npm run dev
@@ -114,21 +114,21 @@ npm run test:browser
 
 ## Documentation
 
-The maintained user manual is in **[Parser Studio Docs](https://github.com/xdr-labs/parser-studio-docs)**. Start with:
+The maintained user manual is in **[Parser Studio Docs](https://github.com/isoc-labs/parser-studio-docs)**. Start with:
 
-- [Create your first parser](https://github.com/xdr-labs/parser-studio-docs/blob/main/quickstart.mdx)
-- [Choose a workflow](https://github.com/xdr-labs/parser-studio-docs/blob/main/choose-workflow.mdx)
-- [Auto Parser guide](https://github.com/xdr-labs/parser-studio-docs/blob/main/workflows/auto-parser.mdx)
-- [ChatGPT Assisted Parser guide](https://github.com/xdr-labs/parser-studio-docs/blob/main/workflows/chatgpt-assisted.mdx)
-- [Scenario playbooks](https://github.com/xdr-labs/parser-studio-docs/blob/main/scenarios/index.mdx)
-- [Troubleshooting](https://github.com/xdr-labs/parser-studio-docs/blob/main/reference/troubleshooting.mdx)
+- [Create your first parser](https://github.com/isoc-labs/parser-studio-docs/blob/main/quickstart.mdx)
+- [Choose a workflow](https://github.com/isoc-labs/parser-studio-docs/blob/main/choose-workflow.mdx)
+- [Auto Parser guide](https://github.com/isoc-labs/parser-studio-docs/blob/main/workflows/auto-parser.mdx)
+- [ChatGPT Assisted Parser guide](https://github.com/isoc-labs/parser-studio-docs/blob/main/workflows/chatgpt-assisted.mdx)
+- [Scenario playbooks](https://github.com/isoc-labs/parser-studio-docs/blob/main/scenarios/index.mdx)
+- [Troubleshooting](https://github.com/isoc-labs/parser-studio-docs/blob/main/reference/troubleshooting.mdx)
 
 Technical design and ongoing engineering decisions are maintained separately in this product repository.
 
 ## Related projects
 
-- [Parser Studio Docs](https://github.com/xdr-labs/parser-studio-docs) — user manual and scenario playbooks
-- [XDR Labs Portal](https://xdr.ooo/) — XDR Labs project portal
+- [Parser Studio Docs](https://github.com/isoc-labs/parser-studio-docs) — user manual and scenario playbooks
+- [XDR Labs Portal](https://isoc.ooo/) — XDR Labs project portal
 
 ---
 
