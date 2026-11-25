@@ -101,12 +101,28 @@ site, and what was done:
 | The receipt did not say that ChatGPT replies were written by the tests | documentation | It says so |
 | As default server of its listener, the site served Parser Studio under names no site claims | pre-existing | The site answers 421 under every name but its own |
 
-The new test then failed on the CI runner (first on `main`, then in seven of nine runs), and never on `dev-atlas`. The failures were made to
+The new test then failed on the CI runner (first on `main`, then in five of seven runs of the branch that was to
+find the cause), and never on `dev-atlas`. The failures were made to
 say what they compared: the start of a unit against the release stamp, with the stamp 0.13 to 0.79 s in the future
 although it is written before the restart. Cause: the tool took microseconds with `date +%s%6N`, a GNU extension;
 the `date` of the Ubuntu 26.04 runner image prints the fraction without its leading zeros. The release host has GNU
 coreutils and was not affected, but the tool no longer depends on it: times are read with python. A failed
 start-time check now names the difference and the stamp or file it compared with.
+
+The auditor then checked the corrected state (`6b2e308`) and confirmed repository, deployment, processes, the
+rollback chain, the retired host and the receipt. Remaining points, all minor, and what was done:
+
+- A backend tree renamed into place behind the tool, with a process still running the previous one, was accepted:
+  the files keep their change times and the backend has no comparison by behaviour. The folder change times now count
+  for the backend, which refuses that case. Only the engine is compared by behaviour.
+- Five protections could be removed without a test failing. Tests were added for the start-time check, an unreadable
+  start time, the order of rollbacks, and the verification of the restored backend and engine files. `verify` (browser
+  journeys, Ruby 2.4.9, receipt) is not run by a test; it runs in every release.
+- The verification of restored engine files compared them with the copies they came from. It now uses a hash list
+  taken from the installed files before they were replaced.
+- A rollback that was interrupted (the automatic one after a failed apply) could not be finished by the operator.
+  It can now, as long as nothing was applied afterwards.
+- The runbook says to use the tool of the current `main` for every rollback.
 
 Not changed, reported to the owner: the repository is still a GitHub fork without branch protection; training pages
 in the web root (outside this repository) still link to the retired host; the engine preview reads a text prefix

@@ -7,7 +7,7 @@
 #   release.sh <full-40-char-sha> build      preflight, candidate from the exact commit, comparison (nothing live changes)
 #   release.sh <full-40-char-sha> apply      install web, backend and Multi-Pass, restart what changed, check the
 #                                            running processes; any failed check restores the previous release
-#   release.sh <full-40-char-sha> verify     browser journey on the public site, optional Ruby 2.4.9 run, receipt
+#   release.sh <full-40-char-sha> verify     browser journey on the public site, Ruby 2.4.9 run, receipt
 #   release.sh <full-40-char-sha> rollback   restore the release that `apply` replaced
 #   release.sh <full-40-char-sha> status     the process, file and engine checks only; changes nothing
 set -uo pipefail
@@ -123,19 +123,27 @@ require_managed_processes() {
 }
 
 installed_at() {
-  # When the files of a part last changed: "<microseconds> <what>", the later of the stamp `apply` writes and the
-  # newest change time of a file. A copy made behind the tool's back can keep a modification time, not the change time.
-  python3 - "$1" <<'CHANGED'
+  # When a part last changed: "<microseconds> <what>", the later of the stamp `apply` writes and the newest change
+  # time of a file. A copy made behind the tool's back can keep a modification time, not the change time. With
+  # "directories" the folders count as well: a prepared tree renamed into place keeps the times of its files, but the
+  # renamed folder gets a new change time. (Not for the engine: python adds its byte-code folder after the start.)
+  python3 - "$1" "${2:-files}" <<'CHANGED'
 import os, sys
-root = sys.argv[1]
+root, mode = sys.argv[1:3]
 latest = (0, '')
+if mode == 'directories':
+    latest = (os.lstat(root).st_ctime_ns // 1000, '.')
 stamp = os.path.join(root, '.parser-studio-release')
 if os.path.isfile(stamp):
     fields = open(stamp).read().split()
-    if len(fields) > 1 and fields[1].isdigit():
+    if len(fields) > 1 and fields[1].isdigit() and int(fields[1]) > latest[0]:
         latest = (int(fields[1]), 'release-stamp')
 for folder, folders, files in os.walk(root):
     folders[:] = [name for name in folders if name != '__pycache__']
+    for name in (folders if mode == 'directories' else []):
+        changed = os.lstat(os.path.join(folder, name)).st_ctime_ns // 1000
+        if changed > latest[0]:
+            latest = (changed, os.path.relpath(os.path.join(folder, name), root) + '/')
     for name in files:
         path = os.path.join(folder, name)
         if name == '.parser-studio-release' or os.path.islink(path):
@@ -149,10 +157,10 @@ CHANGED
 
 require_process_newer_than_files() {
   # A process that started before its files were installed still runs the code it loaded then.
-  local ok=0 unit dir pid started last changed
-  for pair in "$MULTIPASS_UNIT|$MULTIPASS" "$AUTHORING_UNIT|$BACKEND/dist"; do
-    unit=${pair%%|*}; dir=${pair#*|}; pid=$(main_pid "$unit")
-    started=$(started_at "$unit" 2>/dev/null); last=$(installed_at "$dir"); changed=${last%% *}
+  local ok=0 unit dir mode pid started last changed
+  for pair in "$MULTIPASS_UNIT|$MULTIPASS|files" "$AUTHORING_UNIT|$BACKEND/dist|directories"; do
+    IFS='|' read -r unit dir mode <<< "$pair"; pid=$(main_pid "$unit")
+    started=$(started_at "$unit" 2>/dev/null); last=$(installed_at "$dir" "$mode"); changed=${last%% *}
     if ! [[ "$started" =~ ^[0-9]+$ && "$changed" =~ ^[0-9]+$ ]]; then
       log "CHECK_FAIL the start of $unit or the last change of $dir cannot be read"; ok=1
     elif [ "$started" -lt "$changed" ]; then
@@ -244,12 +252,13 @@ rollback() {
   local rc=0 f
   cp -p "$REL/rollback/index.html" "$WEB/.idx.rb" && chown "$RUN_USER:$RUN_USER" "$WEB/.idx.rb" && mv -f "$WEB/.idx.rb" "$WEB/index.html" && log "web index restored" || rc=1
   if [ -s "$REL/rollback/backend.changed" ]; then
+    # The kept backend is moved back. If an earlier, interrupted rollback already did that, the list below decides.
     if [ -d "$BACKEND/.dist_rollback_$S" ]; then
       local name; name=$(stamp_name "$BACKEND/.dist_rollback_$S")
       mv "$BACKEND/dist" "$BACKEND/.dist_failed_${S}_$(date -u +%Y%m%dT%H%M%SZ)" && mv "$BACKEND/.dist_rollback_$S" "$BACKEND/dist" && stamp "$BACKEND/dist" "$name" \
         && restart_and_confirm "$AUTHORING_UNIT" "$AUTHORING_PORT" && log "backend restored" || rc=1
-      ( cd "$BACKEND/dist" && sha256sum -c --quiet "$REL/rollback/backend-dist.sha256" > /dev/null 2>&1 ) || { log "CHECK_FAIL the restored backend is not the one that was replaced"; rc=1; }
-    else log "CHECK_FAIL the backend of the previous release ($BACKEND/.dist_rollback_$S) is missing"; rc=1; fi
+    fi
+    ( cd "$BACKEND/dist" && sha256sum -c --quiet "$REL/rollback/backend-dist.sha256" > /dev/null 2>&1 ) || { log "CHECK_FAIL the backend is not the one this release replaced"; rc=1; }
   fi
   if [ -s "$REL/rollback/multipass.changed" ] || [ -s "$REL/rollback/multipass.new" ] || [ -s "$REL/rollback/multipass.removed" ]; then
     for f in $(cat "$REL/rollback/multipass.new"); do rm -f "$MULTIPASS/$f"; done
@@ -257,9 +266,9 @@ rollback() {
       cp -p "$REL/rollback/multipass/$f" "$MULTIPASS/.rb.$f" && chown "$RUN_USER:$RUN_USER" "$MULTIPASS/.rb.$f" && mv -f "$MULTIPASS/.rb.$f" "$MULTIPASS/$f" || rc=1
     done
     stamp "$MULTIPASS" "$(cat "$REL/rollback/multipass.stamp-name")" && restart_and_confirm "$MULTIPASS_UNIT" "$MULTIPASS_PORT" && log "Multi-Pass restored" || rc=1
-    for f in $(cat "$REL/rollback/multipass.changed" "$REL/rollback/multipass.removed"); do
-      cmp -s "$REL/rollback/multipass/$f" "$MULTIPASS/$f" || { log "CHECK_FAIL the restored engine file $f is not the one that was replaced"; rc=1; }
-    done
+    # multipass.sha256 was taken from the installed files before they were replaced
+    [ -f "$REL/rollback/multipass.sha256" ] && ( cd "$MULTIPASS" && sha256sum -c --quiet "$REL/rollback/multipass.sha256" > /dev/null 2>&1 ) \
+      || { log "CHECK_FAIL the engine files are not the ones this release replaced"; rc=1; }
   fi
   # The previous release is what runs again: its page is public, the two units run the restored files.
   require_managed_processes && require_process_newer_than_files && require_services_answer || rc=1
@@ -273,9 +282,12 @@ rollback() {
 }
 
 rollback_command() {
-  # Asked for by an operator: only the installed release can be rolled back, so that releases go back in order.
-  local current; current=$(cat "$CURRENT" 2>/dev/null)
-  [ "$current" = "$(basename "$REL")" ] || { log "ROLLBACK_REFUSED the installed release is ${current:-not recorded}, not $(basename "$REL"): roll back the installed one first"; return 2; }
+  # Asked for by an operator: releases go back in order. This one can be rolled back when it is the installed
+  # release, or when its apply did not finish and nothing was applied since (the installed release is still the one
+  # it was replacing).
+  local current previous; current=$(cat "$CURRENT" 2>/dev/null); previous=$(cat "$REL/rollback/previous-release" 2>/dev/null)
+  [ "$current" = "$(basename "$REL")" ] || [ "$current" = "$previous" ] \
+    || { log "ROLLBACK_REFUSED the installed release is ${current:-not recorded}; $(basename "$REL") replaced ${previous:-an unrecorded release}: roll back the installed one first"; return 2; }
   rollback
 }
 
@@ -339,6 +351,10 @@ apply() {
     for f in $(cat "$todo/changed" "$todo/removed"); do
       cp -p "$MULTIPASS/$f" "$REL/rollback.new/multipass/$f" || { log "CHECK_FAIL the engine file $f cannot be backed up"; return 1; }
     done
+    : > "$REL/rollback.new/multipass.sha256"
+    if [ -s "$todo/changed" ] || [ -s "$todo/removed" ]; then
+      ( cd "$MULTIPASS" && sha256sum $(cat "$todo/changed" "$todo/removed") ) > "$REL/rollback.new/multipass.sha256" || return 1
+    fi
     cp "$todo/new" "$REL/rollback.new/multipass.new" && cp "$todo/changed" "$REL/rollback.new/multipass.changed" \
       && cp "$todo/removed" "$REL/rollback.new/multipass.removed" && cp "$todo/backend" "$REL/rollback.new/backend.changed" \
       && stamp_name "$MULTIPASS" > "$REL/rollback.new/multipass.stamp-name" || { log "CHECK_FAIL the rollback lists cannot be written"; return 1; }
