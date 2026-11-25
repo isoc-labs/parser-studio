@@ -101,6 +101,13 @@ site, and what was done:
 | The receipt did not say that ChatGPT replies were written by the tests | documentation | It says so |
 | As default server of its listener, the site served Parser Studio under names no site claims | pre-existing | The site answers 421 under every name but its own |
 
+The new test then failed on `main` in about one run of three, and never on `dev-atlas`. The failures were made to
+say what they compared: the start of a unit against the release stamp, with the stamp 0.13 to 0.79 s in the future
+although it is written before the restart. Cause: the tool took microseconds with `date +%s%6N`, a GNU extension;
+the `date` of the Ubuntu 26.04 runner image prints the fraction without its leading zeros. The release host has GNU
+coreutils and was not affected, but the tool no longer depends on it: times are read with python. A failed
+start-time check now names the difference and the stamp or file it compared with.
+
 Not changed, reported to the owner: the repository is still a GitHub fork without branch protection; training pages
 in the web root (outside this repository) still link to the retired host; the engine preview reads a text prefix
 followed by key=value pairs behind a Syslog header as partial while the browser grammar reads it (unchanged
