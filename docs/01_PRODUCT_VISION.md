@@ -30,11 +30,13 @@ Stellar Cyber Parser Studio does not provide an effective field-engineer workflo
 
 ## 4. End-to-end user journey
 
-**New parser:** New project → paste/upload logs → group by event family → choose/confirm format → select fields on raw log → create parse rules → map to Interflow → run full sample suite → inspect errors/diffs → save version → export a supported target bundle.
-
-**Fix existing parser:** Import original file(s) → round-trip inspection and explicit unsupported elements → load baseline test suite → edit minimal stage → compare previous/current sample output → record regression report → export without overwriting the original.
-
-**Review:** Open saved version → see exactly which sample datasets were tested, results and runtime profile → examine failures and semantic mapping → approve internal ready-for-export state. This does not grant production release authority.
+Use the current two creation methods, Auto Parser and ChatGPT Assisted Parser,
+with browser-local working versions and in-flow mapping review. The authoritative
+public navigation and exact stage order are in [02 — Current Web UI / UX
+Specification](02_WEB_UI_SPEC.md); the current scope and excluded capabilities
+are in [14 — Current product scope](14_TWO_PATH_PRODUCT_V2.md). Historical
+import/workbench/review journeys are not current acceptance criteria; see
+[immutable Git history](https://github.com/isoc-labs/parser-studio/blob/14dcacddff48365001bfca2653c4466037d023b0/docs/01_PRODUCT_VISION.md).
 
 ## 5. In scope
 
