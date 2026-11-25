@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "documents": {
+    "docs/02_WEB_UI_SPEC.md": {
+      "status": "active",
+      "sha256": "12ef3c238fa8ff75fe3ad768b066cb9b1db735f8811170e3946eb5957d890ed5"
+    },
+    "docs/14_TWO_PATH_PRODUCT_V2.md": {
+      "status": "active",
+      "sha256": "9d2d41d651717ea02eb1c168204e2d338dc85cd826452a3763894ea21ca880b5"
+    }
+  },
+  "requirements": [
+    {
+      "id": "PS-001",
+      "state": "implemented",
+      "source": {
+        "path": "docs/02_WEB_UI_SPEC.md",
+        "contains": "The only creation methods are Auto Parser and ChatGPT Assisted Parser."
+      },
+      "implementation": [
+        {
+          "path": "src/App.tsx",
+          "contains": "type Workspace='auto'|'chatgpt';"
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_specification_navigation_20261126.py",
+          "contains": "def test_two_creation_modes(self):"
+        }
+      ]
+    },
+    {
+      "id": "PS-002",
+      "state": "implemented",
+      "source": {
+        "path": "docs/02_WEB_UI_SPEC.md",
+        "contains": "Auto Parser follows Add Logs → Review Fields → Map Fields → Create Parser."
+      },
+      "implementation": [
+        {
+          "path": "src/guided/AutoParser.tsx",
+          "contains": "const STEPS=['Add Logs','Review Fields','Map Fields','Create Parser'] as const;"
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_specification_navigation_20261126.py",
+          "contains": "def test_four_ordered_stages(self):"
+        },
+        {
+          "path": "tests/evidence-recovery.spec.ts",
+          "contains": "getByLabel('Review Fields stage')"
+        },
+        {
+          "path": "tests/integrated-backend.spec.ts",
+          "contains": "getByLabel('Create Parser stage')"
+        }
+      ]
+    },
+    {
+      "id": "PS-003",
+      "state": "implemented",
+      "source": {
+        "path": "docs/14_TWO_PATH_PRODUCT_V2.md",
+        "contains": "The current product excludes server-operated Test Lab recovery/evidence, DP parser upload/apply, sensor replay/sending and Interflow lookup/verification."
+      },
+      "implementation": [
+        {
+          "path": "src/App.tsx",
+          "contains": "advanced={false}"
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_specification_navigation_20261126.py",
+          "contains": "def test_target_actions_excluded(self):"
+        },
+        {
+          "path": "tests/evidence-recovery.spec.ts",
+          "contains": "ordinary Auto Parser review never exposes Test Lab, Interflow or sensor commands"
+        }
+      ]
+    },
+    {
+      "id": "PS-004",
+      "state": "implemented",
+      "source": {
+        "path": "docs/14_TWO_PATH_PRODUCT_V2.md",
+        "contains": "Typing and browser previews stay in the browser; explicit Analyze Logs sends the original sample to the same Parser Studio server for Multi-Pass analysis. No automatic source transfer to ChatGPT."
+      },
+      "implementation": [
+        {
+          "path": "src/App.tsx",
+          "contains": "Clicking Analyze Logs sends the original sample to this Parser Studio server"
+        },
+        {
+          "path": "src/guided/multipassPreviewClient.ts",
+          "contains": "body:JSON.stringify({raw})"
+        },
+        {
+          "path": "src/guided/ChatGPTAssist.tsx",
+          "contains": "MANUAL COPY & PASTE"
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_specification_navigation_20261126.py",
+          "contains": "def test_explicit_first_party_transfer_not_automatic_llm(self):"
+        }
+      ]
+    }
+  ]
+}
