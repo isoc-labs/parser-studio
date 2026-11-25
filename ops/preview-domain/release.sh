@@ -34,7 +34,8 @@ REL=$(ls -d "$ST"/release-"$S"-* 2>/dev/null | head -1)
 SRC=$REL/src
 ORIGIN=https://$SITE
 
-as_user() { runuser -u "$RUN_USER" -- env HOME=/home/"$RUN_USER" NO_COLOR=1 "$@"; }
+# Commands of the run user: its home, and its own tools (gh is installed in ~/.local/bin, which root's PATH lacks).
+as_user() { runuser -u "$RUN_USER" -- env HOME=/home/"$RUN_USER" PATH="/home/$RUN_USER/.local/bin:$PATH" NO_COLOR=1 "$@"; }
 log() { echo "$(date -u +%FT%TZ) $*" | tee -a "$REL/release.log"; }
 sha() { sha256sum "$1" | cut -c1-64; }
 public_sha() { curl -fsS -m 15 -H 'Cache-Control: no-cache' "$ORIGIN/$1" | sha256sum | cut -c1-64; }
@@ -305,6 +306,7 @@ apply() {
   { echo "utc $(date -u +%FT%TZ)"; echo "commit $SHA"
     for u in "$AUTHORING_UNIT" "$MULTIPASS_UNIT"; do echo "$u active=$(systemctl is-active "$u") pid=$(main_pid "$u") since=$(systemctl show "$u" -p ActiveEnterTimestamp --value)"; done
     echo "public index: $(public_sha '')"
+    echo "last installed from: backend=$(cut -c1-40 "$BACKEND/dist/.parser-studio-release" 2>/dev/null || echo unrecorded) multipass=$(cut -c1-40 "$MULTIPASS/.parser-studio-release" 2>/dev/null || echo unrecorded)"
   } > "$REL/post-install.txt"
   log "APPLY_OK $SHA is installed and is what runs on $ORIGIN"
 }

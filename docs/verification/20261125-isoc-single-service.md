@@ -62,6 +62,25 @@ Tests added:
 - `tests/deployed-preview-journey.deployed.ts` with `ops/preview-domain/playwright.deployed.config.ts`: the journeys
   `release.sh verify` runs against the deployed site.
 
+## Found while exercising the contract
+
+The tool was run before it was trusted: against the live host while the second engine still existed, in a sandbox
+service set (own directories, throw-away units, other ports), and then for the first release.
+
+- Against the live host with two engines, `status` failed on the second process, as intended. It also reported the
+  first engine as older than its files. That was wrong: `ps` derives start times from the boot time and was 0.7 s
+  off after 63 days of uptime. Start times now come from systemd, in microseconds.
+- In the sandbox, a process that held the previous engine in memory while the files on disk were the release
+  answered its health check, passed the file comparison and the start-time comparison, and was refused by the engine
+  comparison on exactly the four audit lines of AUD-01. A second process over the same files, started from another
+  directory with a relative path, was refused. A shell that only named the engine file on its command line was first
+  counted as a process of the service; processes are now found by what an interpreter was started with.
+- For the first release, root's `PATH` did not contain the run user's `gh`, so the check runs could not be read and
+  the release stopped. The tool now adds the run user's own tool directory itself.
+- The first release was done from the state of the release before `eb26205`, so that every part differed: backend
+  swap and restart, engine files and restart, web, all checks; then `rollback` (the previous release ran again, with
+  new processes), `apply` again and `verify`.
+
 ## What did not change
 
 No parsing, mapping, grammar or Ruby template code. The merge of `xdr-labs/parser-studio` main (`eb26205`, PR #316)
