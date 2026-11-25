@@ -66,7 +66,7 @@ for(const entry of scenarios){
   page.on('pageerror',e=>errors.push(e.message));
   const failedResponses:Array<{url:string,status:number}>=[];
   page.on('response',r=>{
-   if(r.url().startsWith('https://app.parser.xdr.ooo/api/')&&r.status()>=500)
+   if(r.url().startsWith('https://app.parser.isoc.ooo/api/')&&r.status()>=500)
     failedResponses.push({url:r.url(),status:r.status()});
   });
   await page.goto('/');

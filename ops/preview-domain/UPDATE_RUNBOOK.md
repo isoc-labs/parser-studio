@@ -1,14 +1,19 @@
 # Development Preview update runbook (deploy, verify, roll back)
 
-Scope: routine updates of the public **Development Preview** at https://app.parser.xdr.ooo/ on `dev-atlas`.
-This is not a Stellar Cyber DP, a customer environment or a production release. A production or tenant
-release needs its own owner approval and is out of scope here.
+Scope: updates of the public **Development Preview** at https://app.parser.isoc.ooo/ on `dev-atlas`, from the
+repository `isoc-labs/parser-studio`. This is not a Stellar Cyber DP, a customer environment or a production
+release. A production or tenant release needs its own owner approval and is out of scope here.
+
+There is one service set, one deploy contract and one rollback contract: `ops/preview-domain/release.sh`.
+Every update goes through it. Do not install files, restart a unit or roll back by hand, and do not write a
+second script for a "small" update: a path that manages only part of the service set is how one process kept
+running old code behind a healthy answer (section 7).
 
 The first installation (Nginx site, systemd units, TLS) is described in `README.md` and is done once by the
-owner. This runbook only covers replacing the application files afterwards. Do not edit the Nginx site,
-the systemd units, TLS certificates, `training/`, the favicons or any file outside the paths below.
+owner. This runbook covers replacing the application files afterwards. Do not edit the Nginx site, the systemd
+units, TLS certificates, `training/`, the favicons or any file outside the paths below as part of an update.
 
-## 1. Targets
+## 1. The service set
 
 | Part | Location | How it is served | Changes when |
 | --- | --- | --- | --- |
@@ -16,243 +21,157 @@ the systemd units, TLS certificates, `training/`, the favicons or any file outsi
 | Authoring backend | `/opt/parser-studio-preview/backend/dist` | `parser-studio-preview-authoring.service`, `127.0.0.1:4305` | anything under `backend/` |
 | Multi-Pass engine | `/opt/parser-studio-preview/multipass` | `parser-studio-preview-multipass.service`, `127.0.0.1:4304` | anything under `runtime/multipass/` |
 
+This table and the block at the top of `release.sh` are the same list. Nothing else serves Parser Studio:
+no second host name, no second engine process, no second unit. If a part is ever added, add it to that block,
+to this table and to `tests/test_preview_single_service_contract_20261125.py` in the same change.
+
 Facts that shape the procedure:
 
 - Both services run as the Unix user `aella` with `Restart=on-failure`. Files in the paths above are owned by `aella`.
+- A process keeps the code it loaded when it started. Replacing files changes nothing until the process is
+  restarted, and its health endpoint answers 200 either way.
+- The engine trusts exactly one browser origin (`PARSER_STUDIO_TRUSTED_ORIGIN` in its unit). One public host,
+  one engine process.
 - Nginx sends `Cache-Control: private, no-store`, so no cache purge is needed.
-- `assets/` keeps older hashed bundles on purpose. New bundles are added next to them, so rolling back
-  `index.html` alone restores the previous web version. Do not delete old assets as part of an update.
-- There is no CI deploy job. `.github/workflows/quality.yml` only tests. Deployment is manual.
-- Old scripts in `/home/aella/.local/state/parserstudio-public-rollouts/` are pinned to one Git HEAD and
-  specific file hashes. They are history and templates, not tools: never run them against a new version.
+- `assets/` keeps older hashed bundles on purpose. New bundles are added next to them, so restoring
+  `index.html` restores the previous web version. Do not delete old assets as part of an update.
+- There is no CI deploy job. `.github/workflows/quality.yml` only tests. Deployment is this runbook.
+- Release directories of earlier updates under `/home/aella/.local/state/parserstudio-public-rollouts/` are
+  history and rollback material. Scripts inside them are pinned to one commit: never run them for a new version.
 
 ## 2. Preconditions
 
 1. Read `AGENTS.md` and `.engineering/project.yaml`. Confirm that the owner approved updating the
    Development Preview for this change.
-2. The change is merged into `main` and you know the exact commit: `HEAD=<40-hex sha>`.
-3. Local checks on that commit pass: `npx tsc --noEmit -p .` and `npx vitest run`.
-   The `quality` workflow does not run on `main` after a merge, so run these yourself.
-4. Record the current state before touching anything (section 3).
+2. The change is merged into `main` of `isoc-labs/parser-studio` and you know the exact commit (40 hex digits).
+3. Every required check of that commit passed on GitHub. `release.sh` reads the check runs itself and refuses a
+   commit that is not `main`, has a check that is unfinished or failed, or lacks `web-quality` or `release-eligibility`.
+4. The generated Ruby of that commit is the owner-approved one. `release.sh` runs the two approval tests of the
+   checkout (`template-set-approval`, `poc-template-approval`). A changed template without an owner approval stops
+   the release; the approval constants are never edited to make it pass.
 
-Run commands from `dev-atlas`. File work happens as `aella`. Only `systemctl restart` needs root.
-If you inspect an `aella`-owned checkout as root, wrap git in `runuser -u aella -- git ...`
-(otherwise git stops with "dubious ownership").
+Run as root on `dev-atlas` (the script does file work as `aella` and needs root only for `systemctl`). Through the
+DR Link shell, start a step in the background (`nohup setsid ... &`) and read `$REL/release.log`: a step can take
+longer than the 30 s command limit.
 
-## 3. Record the baseline
-
-```bash
-STATE=/home/aella/.local/state/parserstudio-public-rollouts
-REL=$STATE/release-<short-sha>-$(date -u +%Y%m%d)
-install -d -o aella -g aella -m 700 $REL
-
-{ echo "utc $(date -u +%FT%TZ)"
-  echo "live index: $(sha256sum /var/www/parser-studio-app/index.html | cut -c1-64)"
-  echo "public index: $(curl -fsS -H 'Cache-Control: no-cache' https://app.parser.xdr.ooo/ | sha256sum | cut -c1-64)"
-  for s in authoring multipass; do u=parser-studio-preview-$s.service
-    echo "$u active=$(systemctl is-active $u) pid=$(systemctl show $u -p MainPID --value) restart=$(systemctl show $u -p Restart --value)"; done
-  echo "4305: $(curl -fsS -m 5 http://127.0.0.1:4305/health)"
-  echo "4304: $(curl -fsS -m 5 http://127.0.0.1:4304/health)"
-  (cd /var/www/parser-studio-app && find . -type f -not -path './training/*' | sort | xargs sha256sum)
-} > $REL/baseline-before.txt
-```
-
-Stop if the live index hash and the public index hash differ, if a service is not `active`, or if a
-health endpoint does not answer `{"status":"ok",...}`. Find out why before deploying. Also find out which
-commit is live: the newest `static-deployment-receipt.json` / `deployment-receipt.json` under
-`/home/aella/.local/state/` names it. If you cannot name the live commit, say so in the receipt.
-
-## 4. Build the candidate from the exact commit
-
-Build in a clean checkout, never from a working tree with local edits:
+## 3. Deploy
 
 ```bash
-cd /home/aella/.dev/parserstudio-core        # shared clone; any clean clone works
-runuser -u aella -- git fetch origin main
-runuser -u aella -- git worktree add --detach $REL/src <HEAD>
-runuser -u aella -- git -C $REL/src rev-parse HEAD HEAD^{tree}     # record both
+SHA=<full 40-char sha of main>
+R=/home/aella/.dev/parserstudio-core/ops/preview-domain/release.sh      # any checkout that has this file at $SHA
+export PS_RUBY249_RUNNER=/home/aella/.local/state/parserstudio-public-rollouts/tools/ruby249-run.py
+export PLAYWRIGHT_BROWSERS_PATH=/home/aella/.cache/ms-playwright-parserstudio
 
-# as aella, in the background if it may exceed the 30 s command limit of the DR Link shell
-cd $REL/src && npm ci --no-audit --no-fund && npm run build                 # Web: dist/
-cd $REL/src/backend && npm ci --no-audit --no-fund && npm run build        # Backend: backend/dist/
+$R $SHA build      # changes nothing live
+$R $SHA apply      # installs and restarts; rolls itself back on any failed check
+$R $SHA verify     # browser journey on the public site, Ruby 2.4.9, receipt
 ```
 
-`npm ci` prints "install-scripts ... esbuild" warnings. They are harmless: the build still succeeds.
-Multi-Pass has no build step; it ships its `runtime/multipass/*.py` files **and** the co-located `runtime/multipass/semantic-policy.v1.json`. Verify the versioned policy checksum before restarting the deployed Python service.
+The release directory is `REL=/home/aella/.local/state/parserstudio-public-rollouts/release-<short-sha>-<date>`.
 
-## 5. Decide what changed (deploy only that)
+### build
 
-Compare the candidate with what is installed, by content hash:
+1. Checks that the commit is `main` of the repository and that its check runs passed (`ci.txt`).
+2. Records the baseline (`baseline-before.txt`): hashes of the live web files, unit state and process ids, health,
+   the release each part was last installed from. Stops if the public `index.html` is not the installed one, or if a
+   process other than the two units runs the installed code.
+3. Creates a detached worktree of the exact commit in `$REL/src`, runs `npm ci`, `tsc`, Vitest and both builds.
+4. Runs the template approval tests in that checkout, and checks that the run-time packages the backend of this
+   commit needs are the ones installed next to the backend (a release replaces `dist`, not `node_modules`; a commit
+   that changes them stops here and needs the first-installation step of `README.md`).
+5. Writes `compare.txt`: what an apply would change in the web root, the backend and the engine. Read it. Anything
+   you did not expect from the change is a reason to stop and look, not to push on.
+
+### apply
+
+1. Repeats the commit and check-run checks, and refuses if the live `index.html` changed since the build.
+2. Backs up what will be replaced into `$REL/rollback/` (and the previous backend as `.dist_rollback_<short-sha>`).
+3. Backend, if it differs: swaps the whole `dist` by rename and restarts the unit.
+4. Engine, if it differs: installs the changed files atomically and restarts the unit.
+5. Web: adds new hashed assets, switches `index.html` last. An existing asset is never overwritten with other content.
+6. Checks that the release is what runs (section 4). On any failure it restores the previous release and says so.
+
+A unit is restarted only if its own files changed, and then it must come back with a new process id.
+
+### verify
+
+1. Chromium opens the public site and goes through the journeys of `playwright.deployed.config.ts`: the first-user
+   journey (default port 6801 and a typed port, downloads equal to the generated files, no page error, requests to
+   the site's own origin only), CEF with and without a space after `CEF:`, a bare PRI before CEF, messages that only
+   claim CEF, comma and semicolon key=value, nested JSON, JSON member names such as `__proto__`, a text prefix
+   before key=value, mixed readable and unreadable events, the ChatGPT Assisted Parser routes, automatic,
+   ChatGPT-assisted and manual mapping per event type. Replies "from ChatGPT" are written by the tests: they
+   exercise the paste-and-apply route and prove nothing about a real reply.
+2. Every downloaded parser is run on Ruby 2.4.9 by `PS_RUBY249_RUNNER` over its sample lines and over lines it has
+   not seen. The records must contain the values listed in `runtime.expect` (fields that were not in the sample,
+   the whole text of a line that cannot be read). Without a runner the step is recorded as NOT RUN, never as passed.
+3. Repeats the checks of section 4.
+4. Writes `$REL/deployment-receipt.json`.
+
+Use only sample logs without customer data. Do not call a deploy done before `VERIFY_OK`.
+
+## 4. What "deployed" means
+
+A health endpoint that answers 200 says that a process listens. It does not say which code that process runs.
+`apply`, `verify` and `status` therefore check all of the following, and each line is in `release.log`:
+
+| Check | What it proves |
+| --- | --- |
+| installed files equal the candidate | web, backend and engine files on disk are the built commit |
+| only the two units run the installed code | no second process (another unit, a leftover, a manual start) serves the same files |
+| both processes started after their files were installed | no process still runs code it loaded before the install |
+| the engine answers byte for byte as the candidate code | `live_engine_check.py` computes the answers of the checkout's engine for a fixed set of lines and compares them with the answers of the running process, on its own port and through the public host |
+| public `index.html` and assets equal the built files | the public host serves this build, unmodified |
+| health, and a large request body answers 422 | both services answer; Nginx passes bodies above its memory buffer to the backend |
+
+`release.sh <sha> status` runs these checks at any time and changes nothing. Use it when in doubt about what runs.
+
+If the large-body check answers 500 and `/var/log/nginx/error.log` shows `open() "/var/lib/nginx/body/..." failed
+(13: Permission denied)`, the temporary directories of Nginx no longer belong to its worker user. Repair:
+`chown www-data /var/lib/nginx/{body,proxy,fastcgi,scgi,uwsgi}` (the user of `user` in `/etc/nginx/nginx.conf`).
+This happened on 2026-11-14 after the Python suite was run as root.
+
+## 5. Roll back
 
 ```bash
-cd $REL/src && python3 - <<'EOF'
-import hashlib,os
-def inv(root):
-    d={}
-    for dp,_,fs in os.walk(root):
-        for f in fs:
-            p=os.path.join(dp,f); r=os.path.relpath(p,root)
-            if r.startswith('training/') or '/node_modules/' in '/'+r: continue
-            d[r]=hashlib.sha256(open(p,'rb').read()).hexdigest()
-    return d
-live,new=inv('/var/www/parser-studio-app'),inv('dist')
-print('WEB new files   ',sorted(set(new)-set(live)))
-print('WEB changed     ',sorted(k for k in new if k in live and new[k]!=live[k]))
-bl,bn=inv('/opt/parser-studio-preview/backend/dist'),inv('backend/dist')
-print('BACK new files  ',sorted(set(bn)-set(bl)))
-print('BACK only live  ',sorted(set(bl)-set(bn)))
-print('BACK changed    ',sorted(k for k in bn if k in bl and bn[k]!=bl[k]))
-EOF
-diff -rq -x __pycache__ $REL/src/runtime/multipass /opt/parser-studio-preview/multipass
+$R $SHA rollback
 ```
 
-Expected for a web-only change: a new `assets/index-<hash>.js` plus a changed `index.html`; nothing in the
-backend and Multi-Pass comparisons. Anything unexpected (a changed CSS, a missing live file, a backend
-file other than the ones the change touched) is a reason to stop and look, not to push on.
-Files under `backend/dist/test/` are compiled tests that never run in the service; differences there
-(for example `test/mixed-csv.test.js`) are known and not a runtime change.
+Restores, from `$REL/rollback/`, the previous `index.html`, the previous backend `dist` and the previous engine
+files, restarts the units whose files were restored and repeats the process checks. `apply` does the same by itself
+when one of its checks fails. Roll back when a check of `apply` or `verify` fails and cannot be explained, or when
+the owner asks.
 
-Restart a service only if its own files changed. Web-only updates must not restart either service.
+After a rollback the public `index.html` hash must equal the one in `baseline-before.txt`. The failed candidate
+stays in place as `.dist_failed_<short-sha>` for diagnosis. Keep the release directory: it is the evidence, and the
+rollback material of the release that is live now.
 
-## 6. Back up, then install
+## 6. The receipt
 
-Install in this order. Each step is reversible with section 8.
+`deployment-receipt.json` names the repository, the target, the deployed commit and tree, the time of the apply, the
+baseline, what changed, the check runs, the template approval status, the unit state after the install, the checks
+of section 4, the engine comparison, the browser journey and Ruby 2.4.9 results, the rollback command, and what is
+NOT VERIFIED by a deploy (Stellar Cyber installation and reception, the native Fluentd runtime of a sensor, device
+logs). It holds no secrets and no customer logs.
 
-1. **Back up** the live files you will replace:
-   ```bash
-   mkdir -m 700 $REL/rollback && chown aella:aella $REL/rollback
-   cp -p /var/www/parser-studio-app/index.html $REL/rollback/index.html
-   cp -a /opt/parser-studio-preview/backend/dist $REL/rollback/backend-dist       # if the backend changes
-   ( cd $REL/rollback/backend-dist && find . -type f | sort | xargs sha256sum ) > $REL/rollback/backend-dist.sha256
-   # if Multi-Pass changes: cp -p each changed .py into $REL/rollback/multipass/
-   ```
-2. **Backend** (only if it changed). Swap the whole `dist` directory by rename, so there is never a half-written tree:
-   ```bash
-   B=/opt/parser-studio-preview/backend
-   cp -a $REL/src/backend/dist $B/.dist_candidate_<short-sha>
-   mv $B/dist $B/.dist_rollback_<short-sha>
-   mv $B/.dist_candidate_<short-sha> $B/dist
-   systemctl restart parser-studio-preview-authoring.service        # root
-   for i in $(seq 1 40); do [ "$(curl -s -o /dev/null -w '%{http_code}' -m 3 http://127.0.0.1:4305/health)" = 200 ] && break; sleep 0.8; done
-   ```
-   If health never returns 200, go straight to section 8.
-3. **Multi-Pass** (only if it changed). Install the changed `.py` files atomically (copy to a temporary name in the
-   same directory, then `mv -f`), then `systemctl restart parser-studio-preview-multipass.service` and wait for
-   `http://127.0.0.1:4304/health` to return 200.
-4. **Web**. Add the new bundle first, switch `index.html` last. Both with a temporary name and `mv -f`, so the switch is atomic:
-   ```bash
-   W=/var/www/parser-studio-app
-   install -o aella -g aella -m 644 $REL/src/dist/assets/index-<hash>.js $W/assets/.new.js && mv -f $W/assets/.new.js $W/assets/index-<hash>.js
-   install -o aella -g aella -m 644 $REL/src/dist/index.html $W/.new.idx && mv -f $W/.new.idx $W/index.html
-   ```
-   If other new files appear in step 5 (for example a changed CSS or worker), add them before `index.html` the same way.
-   Never overwrite an existing hashed asset with different content.
+## 7. Why there is one contract
 
-A tested example of these steps as one fail-closed script that rolls itself back is kept next to the
-receipt of the 2026-10-30 update: `$STATE/release-35dc3eb-20261030/deploy.sh` (pinned to that commit; copy
-the structure, not the hashes).
+Until 2026-11-25 Parser Studio was served under two host names, each with its own engine process over the same
+files, and the release script restarted only one of them. After an update the other process answered its health
+check with 200 and kept reading logs with the code of the previous release: four of twelve audit lines were read
+differently on the two hosts. The host name `app.parser.xdr.ooo` was retired on 2026-11-25 and its engine unit was
+removed; Parser Studio is no longer served there. What prevents a repeat is not a longer restart list: there is one
+host, one engine process and one unit list, and a release is accepted only when the running processes are shown to
+run the released code (section 4).
 
-## 7. Verify
-
-Immediately after install:
-
-```bash
-curl -fsS -H 'Cache-Control: no-cache' https://app.parser.xdr.ooo/ | sha256sum          # must equal sha256 of $REL/src/dist/index.html
-curl -fsS https://app.parser.xdr.ooo/assets/index-<hash>.js | sha256sum                  # must equal the built file
-curl -s -o /dev/null -w '%{http_code}\n' https://app.parser.xdr.ooo/assets/index-B1nKBdrH.css   # 200 (use the current css name)
-systemctl is-active parser-studio-preview-authoring.service parser-studio-preview-multipass.service
-systemctl show parser-studio-preview-multipass.service -p MainPID --value     # unchanged unless Multi-Pass was deployed
-curl -fsS http://127.0.0.1:4305/health; curl -fsS http://127.0.0.1:4304/health
-# a request body above nginx's memory buffer (16 KB) must reach the backend: 422 from the backend, not 500 from nginx
-python3 -c "import urllib.request as u,json;r=u.Request('https://app.parser.xdr.ooo/api/v1/parser-pairs/package',data=json.dumps({'x':'a'*60000}).encode(),headers={'Content-Type':'application/json','Origin':'https://app.parser.xdr.ooo'});
-try: print(u.urlopen(r,timeout=10).status)
-except u.HTTPError as e: print(e.code)"
-```
-
-If that request answers 500 and `/var/log/nginx/error.log` shows `open() "/var/lib/nginx/body/..." failed (13: Permission denied)`,
-the temporary directories of nginx no longer belong to its worker user. This happened on 2026-11-14: the Python suite
-(`tests/test_preview_nginx_routing_20261019.py` starts its own nginx) was run as root, and that nginx handed the
-compiled-in directories to its default user `nobody`. Every download of a parser package and every recipe check then
-failed for all users until 2026-11-16. Repair: `chown www-data /var/lib/nginx/{body,proxy,fastcgi,scgi,uwsgi}` (the
-user of `user` in `/etc/nginx/nginx.conf`). The fixture keeps its directories to itself since then.
-
-Then run a real-browser check on the public URL (Playwright CLI), as a beginner would use it:
-
-1. Auto Parser: paste a small sample, fill manufacturer/product/version/port, Analyze Logs, Review Fields, Map Fields,
-   Create Parser. The result must be reachable and the `.conf` must show the chosen port.
-2. ChatGPT Assisted Parser: Prepare ChatGPT Prompt, check a stored ChatGPT answer, Test Proposed Fix, Apply.
-   This exercises `/api/v1/parser-pairs/*` on the backend.
-3. Check the change itself on screen (the text or behavior the update is about).
-4. No page errors, and only requests to `app.parser.xdr.ooo`.
-
-Do not call a deploy done on hash checks alone: the browser pass is what proves a beginner can use it.
-Use only sample logs without customer data.
-
-## 8. Roll back
-
-Roll back on any failed check in sections 6 or 7, or when the owner asks.
-
-```bash
-REL=<the release directory used for the update>
-W=/var/www/parser-studio-app; B=/opt/parser-studio-preview/backend
-
-# 1. Web: restore the previous index.html (old assets are still in assets/)
-cp -p $REL/rollback/index.html $W/.idx.rb && chown aella:aella $W/.idx.rb && mv -f $W/.idx.rb $W/index.html
-
-# 2. Backend (only if it was changed): swap back and restart
-mv $B/dist $B/.dist_failed_<short-sha>
-mv $B/.dist_rollback_<short-sha> $B/dist          # or: cp -a $REL/rollback/backend-dist $B/dist
-systemctl restart parser-studio-preview-authoring.service
-# wait for http://127.0.0.1:4305/health = 200
-
-# 3. Multi-Pass (only if it was changed): restore the .py files from $REL/rollback/multipass/, restart its service, wait for 4304 health
-```
-
-After a rollback, repeat the checks of section 7 against the previous release: the public `index.html`
-hash must equal `baseline-before.txt`, `diff -r` of the backend against `$REL/rollback/backend-dist` must be
-empty, and both health endpoints must answer. Leave the failed candidate in place under its `.dist_failed_*`
-name for diagnosis. Keep the rollback directory; it is the evidence.
-
-## 9. Record the receipt
-
-Write `deployment-receipt.json` into `$REL` with at least: UTC time, repository, deployed commit and tree,
-previous commit (if known), which of web / backend / Multi-Pass changed, old and new `index.html` SHA-256, new
-bundle name and SHA-256, service PIDs before and after (the Multi-Pass PID must be unchanged for a web-only
-update), rollback paths, local test counts, and the paths of the browser evidence. Do not store secrets or
-customer logs in it.
-
-## 10. Do not
+## 8. Do not
 
 - Do not change the Nginx site, systemd units, TLS certificates or security headers as part of an update.
+- Do not add a second public host name, a second engine process or a second release script.
 - Do not delete `training/`, favicons, older hashed assets, older `.dist_rollback_*` directories or earlier receipts.
   Pruning old rollback material is a separate decision for the owner.
-- Do not restart a service that did not change, and do not deploy untested or unmerged code.
-- Do not run an old pinned rollout script against a new version.
-- Do not run the repository's test suites as root on `dev-atlas` (use `runuser -u aella -- ...`): a test that starts a
-  system binary acts on the host with root's rights.
+- Do not deploy untested or unmerged code, and do not skip `verify`.
+- Do not run the repository's test suites as root on `dev-atlas` (use `runuser -u aella -- ...`): a test that starts
+  a system binary acts on the host with root's rights.
 - Do not describe the Development Preview as production, and do not claim Stellar Cyber or native Fluentd
   compatibility from a deploy check: those remain NOT VERIFIED.
-
-## 11. Helper for a web-only update
-
-`release_web.sh` and `deploy_web.sh.tpl` in this directory wrap sections 3 to 8 for the common case where only the web
-bundle changed (the backend and Multi-Pass comparisons of section 5 are empty). Run as root on `dev-atlas`:
-
-```
-ops/preview-domain/release_web.sh <full-40-char-sha> build   # detached worktree, npm ci, npm run build, generates $REL/deploy_web.sh
-ops/preview-domain/release_web.sh <full-40-char-sha> apply   # installs new hashed assets, then index.html last; checks public hashes and PIDs
-$REL/deploy_web.sh rollback                                   # restores the previous index.html (under one second)
-```
-
-`build` records the live `index.html` SHA-256 as the expected previous release, and `apply` refuses to run when the live
-file no longer matches it, when a service is inactive, or when an existing asset of the same name differs. `apply` rolls
-itself back on any failed check. Neither mode restarts a service. For a backend change use the full procedure above.
-`release_web.sh` was run for `d3556c0` (PR #193) and `2f4b1df` (PR #194) on 2026-10-30.
-
-## Appendix: reference run
-
-2026-10-30, Development Preview, web + backend update from `f960030` (PR #168) to `35dc3eb` (PRs #169 to #182).
-Changed: `assets/index-Dlm8aAWh.js` (new) and `index.html` in the web root; `templates/ruby-fragment.rb.tpl` in the backend `dist` (plus compiled test files).
-Multi-Pass unchanged (PID stayed the same). Backend PID changed once, on purpose. Public check: HTML and JS hashes equal the built files, CSS and favicon answered 200, both health endpoints 200, browser pass without page errors.
-
-2026-10-30 (later), web-only update to `2f86e6e` (PR #184). Changed: `assets/index-CdF6lDMm.js` (new) and `index.html`; the backend and Multi-Pass comparisons were empty and no service was restarted. The same update served as a **rollback drill** of section 8 on the live preview: roll back (under one second, public `index.html` equal to the previous hash, old behavior visible again in the browser), then apply again and verify. The drill covered the web part only; swapping the backend `dist` back has not been exercised on the live service. The script pair used (`build.sh`, `deploy_web.sh apply|rollback`) is kept in `$STATE/release-2f86e6e-20261030/`; it is the shortest example for a web-only update.

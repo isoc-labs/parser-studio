@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 
-const origin='https://app.parser.xdr.ooo';
+const origin='https://app.parser.isoc.ooo';
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
 type RuleCase={
  id:string; vendor:string; product:string; raw:string; hold:[string,string];

@@ -12,7 +12,7 @@ import re
 import subprocess
 from urllib.parse import quote
 
-REPO = "xdr-labs/parser-studio"
+REPO = "isoc-labs/parser-studio"
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 REQUIRED_JOBS = frozenset(
     ["native-isolated-synthetic", "web-quality", "release-eligibility"] +

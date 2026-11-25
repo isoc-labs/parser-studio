@@ -24,7 +24,7 @@ class NginxReloadReadiness(unittest.TestCase):
             counter = Path(temp) / 'count'
             counter.write_text('0')
             script = readiness_function() + r'''
-SITE=app.parser.xdr.ooo
+SITE=app.parser.isoc.ooo
 curl() {
   [[ "$*" == *"--noproxy *"* && "$*" == *"--resolve "* ]] || return 92
   [[ "$*" != *" -k"* && "$*" != *"--insecure"* ]] || return 93

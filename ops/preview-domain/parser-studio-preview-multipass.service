@@ -8,7 +8,7 @@ Type=simple
 User=aella
 Group=aella
 WorkingDirectory=/opt/parser-studio-preview/multipass
-Environment=PARSER_STUDIO_TRUSTED_ORIGIN=https://app.parser.xdr.ooo
+Environment=PARSER_STUDIO_TRUSTED_ORIGIN=https://app.parser.isoc.ooo
 ExecStart=/usr/bin/python3 /opt/parser-studio-preview/multipass/multipass_preview_api.py --port 4304
 Restart=on-failure
 RestartSec=3
