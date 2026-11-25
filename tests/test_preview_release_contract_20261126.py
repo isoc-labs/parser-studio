@@ -203,6 +203,13 @@ class Sandbox:
                               capture_output=True, text=True, timeout=180)
         return done.returncode, done.stdout + done.stderr
 
+    def must(self, step):
+        """Run a step that has to succeed; a failure shows everything the tool said."""
+        code, out = self.run(step)
+        if code != 0:
+            raise AssertionError('%s failed with %d:\n%s' % (step, code, out))
+        return out
+
     def pid(self, unit):
         return json.loads((self.stub / (unit + '.json')).read_text())['pid']
 
@@ -298,7 +305,7 @@ class ReleaseContract(unittest.TestCase):
 
     def test_rollback_makes_the_previous_release_run_again(self):
         box = self.box
-        self.assertEqual(box.run('apply')[0], 0)
+        box.must('apply')
         applied = box.pid(AUTHORING_UNIT), box.pid(MULTIPASS_UNIT)
         code, out = box.run('rollback')
         self.assertEqual(code, 0, out)
@@ -315,7 +322,7 @@ class ReleaseContract(unittest.TestCase):
     def test_a_second_apply_does_not_replace_the_rollback_material(self):
         # Audit F-01: apply, apply again, rollback left web and engine at the new release and the backend at the old one.
         box = self.box
-        self.assertEqual(box.run('apply')[0], 0)
+        box.must('apply')
         code, out = box.run('apply')
         self.assertEqual(code, 0, out)
         self.assertEqual(box.installed(), ('B', 'B', 'B'))
@@ -330,8 +337,8 @@ class ReleaseContract(unittest.TestCase):
         self.assertNotIn('ROLLBACK_OK', out)
         self.assertEqual(box.installed(), ('A', 'A', 'A'))
         # also after it was applied and rolled back once: the material is used up
-        self.assertEqual(box.run('apply')[0], 0)
-        self.assertEqual(box.run('rollback')[0], 0)
+        box.must('apply')
+        box.must('rollback')
         pids = box.pid(AUTHORING_UNIT), box.pid(MULTIPASS_UNIT)
         code, out = box.run('rollback')
         self.assertNotEqual(code, 0, out)
@@ -340,9 +347,9 @@ class ReleaseContract(unittest.TestCase):
     def test_the_stamp_names_what_is_installed_after_a_rollback(self):
         # Audit F-04: after a rollback the files of the previous release carried the name of the release rolled back.
         box = self.box
-        self.assertEqual(box.run('apply')[0], 0)
+        box.must('apply')
         self.assertIn(box.commit, (box.backend / 'dist/.parser-studio-release').read_text())
-        self.assertEqual(box.run('rollback')[0], 0)
+        box.must('rollback')
         for part in (box.backend / 'dist', box.multipass):
             self.assertNotIn(box.commit, (part / '.parser-studio-release').read_text())
 
@@ -372,7 +379,7 @@ class ReleaseContract(unittest.TestCase):
     def test_status_refuses_a_process_that_still_holds_the_previous_engine(self):
         # Audit AUD-01: files on disk are the release, the process answers its health check, and runs older code.
         box = self.box
-        self.assertEqual(box.run('apply')[0], 0)
+        box.must('apply')
         api = box.multipass / 'multipass_preview_api.py'
         released = api.read_bytes(); times = api.stat()
         api.write_bytes(box.old_engine)
@@ -389,7 +396,7 @@ class ReleaseContract(unittest.TestCase):
     def test_status_refuses_a_second_process_over_the_same_files(self):
         # Audit AUD-02: a process outside the managed units keeps whatever code it loaded.
         box = self.box
-        self.assertEqual(box.run('apply')[0], 0)
+        box.must('apply')
         extra = subprocess.Popen([sys.executable, 'multipass_preview_api.py', '--port', str(free_port())], cwd=str(box.multipass),
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(lambda: (extra.kill(), extra.wait()))
