@@ -57,7 +57,13 @@ Retain optional browser-local versions and offline Python test sender as specifi
 below. Removed prototypes are historical, not public features to restore.
 Test Lab/Interflow/sensor endpoints must not create user-visible or unauthorized
 target actions. The separate generated Python sender is run manually by the user.
-Real target compatibility must never be inferred from local preview or synthetic tests.
+The optional browser-only synthetic replay preview never sends logs to a sensor or starts a server session.
+Expose it after a generated DRAFT pair; validate the complete reviewed single-line
+sample before generating synthetic events. Mixed or multiline recipes disable
+preview. Stop on explicit Stop, source/draft edit or navigation/unmount; never
+upload, store or transmit synthetic events. Unsupported preview does not invalidate
+the generated files. Real target compatibility must never be inferred from local
+preview or synthetic tests.
 
 For an eligible reviewed source, provide the individual Ruby and CONF files and
 supported deterministic ZIP. Validate matching hashes and source/CONF port consistency.
