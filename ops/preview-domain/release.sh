@@ -189,8 +189,14 @@ rollback() {
     done
     stamp "$MULTIPASS" && restart_and_confirm "$MULTIPASS_UNIT" "$MULTIPASS_PORT" && log "Multi-Pass restored"
   fi
-  require_managed_processes; require_process_newer_than_files
-  log "ROLLBACK end"
+  # The previous release is what runs again: its page is public, the two units run the restored files.
+  local rc=0
+  require_managed_processes && require_process_newer_than_files && require_services_answer || rc=1
+  if [ -f "$REL/rollback/index.html" ] && [ "$(public_sha '')" != "$(sha "$REL/rollback/index.html")" ]; then
+    log "CHECK_FAIL the public index.html is not the one of the previous release"; rc=1
+  fi
+  [ "$rc" = 0 ] && log "ROLLBACK_OK the previous release is installed and is what runs on $ORIGIN" || log "ROLLBACK_INCOMPLETE read the lines above"
+  return $rc
 }
 
 build() {
@@ -297,7 +303,7 @@ status() {
 }
 
 verify() {
-  grep -q APPLY_OK "$REL/release.log" 2>/dev/null || { echo "apply $SHA first"; return 2; }
+  grep -E ' (APPLY_OK|ROLLBACK start)' "$REL/release.log" 2>/dev/null | tail -1 | grep -q APPLY_OK || { echo "apply $SHA first"; return 2; }
   local ev="$REL/browser-evidence" dir c
   rm -rf "$ev"; install -d -o "$RUN_USER" -g "$RUN_USER" "$ev"
   log "VERIFY browser journey on $ORIGIN"
