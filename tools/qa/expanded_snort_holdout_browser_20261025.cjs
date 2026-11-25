@@ -26,11 +26,11 @@ const stats={contract:'parserstudio.snort-source-disjoint-ui-block.v1',case:'cis
  publicBrowser:true,thirdPartyCalls:[],browserErrors:[]};
 page.on('pageerror',e=>stats.browserErrors.push(e.message));
 page.on('request',r=>{try{
- if(/^https?:/.test(r.url())&&new URL(r.url()).origin!=='https://app.parser.xdr.ooo')
+ if(/^https?:/.test(r.url())&&new URL(r.url()).origin!=='https://app.parser.isoc.ooo')
   stats.thirdPartyCalls.push(r.url());
 }catch{}});
 try{
- await page.goto('https://app.parser.xdr.ooo/?workspace=chatgpt',{waitUntil:'domcontentloaded',timeout:22000});
+ await page.goto('https://app.parser.isoc.ooo/?workspace=chatgpt',{waitUntil:'domcontentloaded',timeout:22000});
  await page.getByLabel('ChatGPT local sample logs').fill(c.rawSample);
  await page.getByLabel('Parser manufacturer').fill(c.vendor);
  await page.getByLabel('Parser product',{exact:true}).fill(c.product);

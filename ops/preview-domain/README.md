@@ -18,7 +18,8 @@ Until 2026-11-25 the same files were also served as `app.parser.xdr.ooo`, with a
 | Offline authoring API | `127.0.0.1:4305` | `parser-studio-preview-authoring.service`, only the offline parser-pairs API |
 | Multi-Pass source engine | `127.0.0.1:4304` | `parser-studio-preview-multipass.service`, source analysis, no native DP/sensor access |
 
-Both services bind to loopback; Nginx allows only `/api/v1/parser-pairs/` plus the two bounded
+Under any other host name the site answers 421, also when it is the default server of its listener. Both services
+bind to loopback; Nginx allows only `/api/v1/parser-pairs/` plus the two bounded
 `/api/v1/multipass/preview*` routes. Unmatched `/api/` paths return 404. Nginx rejects unwanted POST `Origin`
 values, and the engine itself trusts exactly one origin (`PARSER_STUDIO_TRUSTED_ORIGIN` in its unit); neither
 introduces any user authentication. HTTPS, payload limits and service isolation remain enabled.
@@ -53,6 +54,7 @@ python3 tests/test_preview_staging_20261019.py -v
 python3 tests/test_preview_startup_wait_20261019.py -v
 python3 tests/test_preview_single_service_contract_20261125.py -v
 python3 tests/test_live_engine_check_20261125.py -v
+python3 tests/test_preview_release_contract_20261126.py -v
 ```
 
 The Nginx test creates an isolated unprivileged HTTPS server with a **temporary test-only certificate**. It checks

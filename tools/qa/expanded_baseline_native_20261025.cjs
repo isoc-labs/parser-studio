@@ -9,7 +9,7 @@ const src='/home/aella/.local/state/parserstudio-expanded-security-20261025';
 const raw=JSON.parse(fs.readFileSync(path.join(src,'additional-source-manifest.json')));
 const scan=JSON.parse(fs.readFileSync(path.join(src,'browser-78-real-public.json')));
 const map=new Map(scan.cases.map(c=>[c.id,c]));
-const origin='https://app.parser.xdr.ooo';
+const origin='https://app.parser.isoc.ooo';
 const out=path.join(src,'baseline-reuse-e2e');
 fs.mkdirSync(out,{recursive:true,mode:0o700});
 const cases=raw.cases.filter(c=>map.get(c.id)?.promptMode==='BASELINE_EMBEDDED')

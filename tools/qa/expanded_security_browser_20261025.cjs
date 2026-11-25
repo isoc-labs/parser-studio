@@ -9,7 +9,7 @@ const input=process.env.PARSER_STUDIO_EXPANDED_MANIFEST||
 const output=process.env.PARSER_STUDIO_EXPANDED_RESULTS||
  '/home/aella/.local/state/parserstudio-expanded-security-20261025/browser-78-real-public.json';
 const set=JSON.parse(fs.readFileSync(input,'utf8'));
-const origin='https://app.parser.xdr.ooo';
+const origin='https://app.parser.isoc.ooo';
 const max=Number(process.env.EXPANDED_MAX||set.cases.length);
 const cases=set.cases.slice(0,max);
 const begin=Date.now(),results=new Array(cases.length);

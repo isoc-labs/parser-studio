@@ -8,7 +8,7 @@ const source=JSON.parse(fs.readFileSync(path.join(root,'additional-source-manife
 const audit=JSON.parse(fs.readFileSync(path.join(root,'browser-78-real-public.json')));
 const modes=new Map(audit.cases.map(x=>[x.id,x]));
 const cases=source.cases.filter(c=>modes.get(c.id).promptMode==='FULL_RECOVERY');
-const results=new Array(cases.length),origin='https://app.parser.xdr.ooo';
+const results=new Array(cases.length),origin='https://app.parser.isoc.ooo';
 const sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 const assert=(c,r)=>{if(!c)throw Error(r)};
 const read=p=>fs.readFileSync(p,'utf8');

@@ -58,7 +58,13 @@ longer than the 30 s command limit.
 
 ```bash
 SHA=<full 40-char sha of main>
-R=/home/aella/.dev/parserstudio-core/ops/preview-domain/release.sh      # any checkout that has this file at $SHA
+# The tool of the commit being released, taken from Git. The shared clone is used for its object store only: which
+# branch it has checked out, and where its `origin` points, do not matter.
+CORE=/home/aella/.dev/parserstudio-core
+runuser -u aella -- git -C $CORE fetch -q https://github.com/isoc-labs/parser-studio.git main
+R=/root/parser-studio-release-${SHA:0:7}.sh
+runuser -u aella -- git -C $CORE show $SHA:ops/preview-domain/release.sh > $R && chmod 700 $R
+
 export PS_RUBY249_RUNNER=/home/aella/.local/state/parserstudio-public-rollouts/tools/ruby249-run.py
 export PLAYWRIGHT_BROWSERS_PATH=/home/aella/.cache/ms-playwright-parserstudio
 
@@ -66,6 +72,10 @@ $R $SHA build      # changes nothing live
 $R $SHA apply      # installs and restarts; rolls itself back on any failed check
 $R $SHA verify     # browser journey on the public site, Ruby 2.4.9, receipt
 ```
+
+`PS_RUBY249_RUNNER` is a host tool, not part of the repository: a command `<runner> <parser file> <file of lines>`
+that prints `ruby <version>` and one record per line. On `dev-atlas` it wraps the Ruby 2.4.9 container of the audit
+tools.
 
 The release directory is `REL=/home/aella/.local/state/parserstudio-public-rollouts/release-<short-sha>-<date>`.
 
@@ -86,6 +96,8 @@ The release directory is `REL=/home/aella/.local/state/parserstudio-public-rollo
 
 1. Repeats the commit and check-run checks, and refuses if the live `index.html` changed since the build.
 2. Backs up what will be replaced into `$REL/rollback/` (and the previous backend as `.dist_rollback_<short-sha>`).
+   This material is written once, by the first apply of a release, and names the state before that release. Applying
+   the same release again keeps it: a second apply never turns the release itself into its own rollback target.
 3. Backend, if it differs: swaps the whole `dist` by rename and restarts the unit.
 4. Engine, if it differs: installs the changed files atomically and restarts the unit.
 5. Web: adds new hashed assets, switches `index.html` last. An existing asset is never overwritten with other content.
@@ -103,8 +115,9 @@ A unit is restarted only if its own files changed, and then it must come back wi
    ChatGPT-assisted and manual mapping per event type. Replies "from ChatGPT" are written by the tests: they
    exercise the paste-and-apply route and prove nothing about a real reply.
 2. Every downloaded parser is run on Ruby 2.4.9 by `PS_RUBY249_RUNNER` over its sample lines and over lines it has
-   not seen. The records must contain the values listed in `runtime.expect` (fields that were not in the sample,
-   the whole text of a line that cannot be read). Without a runner the step is recorded as NOT RUN, never as passed.
+   not seen. Each line must give a record, and the records must contain the values listed in `runtime.expect` where
+   a journey wrote one (fields that were not in the sample, the whole text of a line that cannot be read). Without a
+   runner `verify` fails: a release is not verified until its parsers ran on Ruby 2.4.9.
 3. Repeats the checks of section 4.
 4. Writes `$REL/deployment-receipt.json`.
 
@@ -124,10 +137,18 @@ A health endpoint that answers 200 says that a process listens. It does not say 
 | public `index.html` and assets equal the built files | the public host serves this build, unmodified |
 | health, and a large request body answers 422 | both services answer; Nginx passes bodies above its memory buffer to the backend |
 
-`release.sh <sha> status` runs these checks at any time and changes nothing. Use it when in doubt about what runs.
-The file `.parser-studio-release` in the backend and engine directories names the commit a part was last installed
-from; a release that does not change a part leaves its stamp alone, so the stamp can name an earlier commit while
-the files still equal the current one.
+`release.sh <sha> status` runs these checks at any time and changes nothing on the service. It needs the built
+checkout of that commit (`$REL/src`, left by `build`): without it nothing can be compared and the answer is
+`STATUS_INCOMPLETE`, not OK. Use it when in doubt about what runs.
+
+The start-time check compares the start of each process, as systemd recorded it, with the last change of any of its
+files (change time, which a copy cannot preserve) and with the release stamp. The file `.parser-studio-release` in
+the backend and engine directories names the commit a part was last installed from, or the name it had before when
+a rollback put it back; a release that does not change a part leaves its stamp alone, so the stamp can name an
+earlier commit while the files still equal the current one.
+
+The engine is compared by behaviour. The authoring backend is not: for it the proof is file equality, one managed
+process, and a start after the last change of its files.
 
 If the large-body check answers 500 and `/var/log/nginx/error.log` shows `open() "/var/lib/nginx/body/..." failed
 (13: Permission denied)`, the temporary directories of Nginx no longer belong to its worker user. Repair:
@@ -141,13 +162,16 @@ $R $SHA rollback
 ```
 
 Restores, from `$REL/rollback/`, the previous `index.html`, the previous backend `dist` and the previous engine
-files, restarts the units whose files were restored and repeats the process checks. `apply` does the same by itself
-when one of its checks fails. Roll back when a check of `apply` or `verify` fails and cannot be explained, or when
-the owner asks.
+files, restarts the units whose files were restored, and checks that the restored backend and engine files are the
+ones that were replaced, that only the two units run them, and that the previous page is public. `apply` does the
+same by itself when one of its checks fails. Roll back when a check of `apply` or `verify` fails and cannot be
+explained, or when the owner asks.
 
-A rollback restores the state before that release. To go back further, roll back the release directories one after
-the other, newest first: each holds the material of the release it replaced. A release that changed only the web
-page restores only the page; the release before it restores backend and engine.
+A rollback restores the state before that release, once: afterwards the material is marked used, and a second
+rollback of the same release is refused. Only the installed release can be rolled back
+(`parserstudio-public-rollouts/current-release` names it). To go back further, roll back the release directories one
+after the other, newest first: each holds the material of the release it replaced. A release that changed no
+installed file restores nothing; the release before it restores what it had replaced.
 
 After a rollback the public `index.html` hash must equal the one in `baseline-before.txt`. The failed candidate
 stays in place as `.dist_failed_<short-sha>_<time>` for diagnosis. Keep the release directory: it is the evidence, and the
@@ -174,7 +198,8 @@ run the released code (section 4).
 ## 8. Do not
 
 - Do not change the Nginx site, systemd units, TLS certificates or security headers as part of an update.
-- Do not add a second public host name, a second engine process or a second release script.
+- Do not add a second public host name, a second engine process or a second release script. The site answers 421
+  under every name but its own, also when it is the default server of the listener.
 - Do not delete `training/`, favicons, older hashed assets, older `.dist_rollback_*` directories or earlier receipts.
   Pruning old rollback material is a separate decision for the owner.
 - Do not deploy untested or unmerged code, and do not skip `verify`.

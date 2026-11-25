@@ -114,9 +114,12 @@ require_managed_processes() {
 }
 
 installed_at() {
-  # When the files of a part were last installed, in microseconds: the stamp `apply` writes, else the newest file.
-  if [ -f "$1/.parser-studio-release" ]; then awk '{print $2}' "$1/.parser-studio-release"
-  else find "$1" -type f -not -path '*/__pycache__/*' -printf '%T@\n' | sort -n | tail -1 | awk -F. '{print $1 substr($2 "000000", 1, 6)}'; fi
+  # When the files of a part last changed, in microseconds: the later of the stamp `apply` writes and the newest
+  # change time of a file. A copy made behind the tool's back can keep a modification time, not the change time.
+  { [ -f "$1/.parser-studio-release" ] && awk '{print $2}' "$1/.parser-studio-release"
+    find "$1" -type f -not -path '*/__pycache__/*' -not -name .parser-studio-release -printf '%C@\n' \
+      | awk -F. '{print $1 substr($2 "000000", 1, 6)}'
+  } | sort -n | tail -1
 }
 
 require_process_newer_than_files() {
@@ -124,11 +127,14 @@ require_process_newer_than_files() {
   local ok=0 unit dir pid
   for pair in "$MULTIPASS_UNIT|$MULTIPASS" "$AUTHORING_UNIT|$BACKEND/dist"; do
     unit=${pair%%|*}; dir=${pair#*|}; pid=$(main_pid "$unit")
-    if [ "$(started_at "$unit")" -lt "$(installed_at "$dir")" ]; then
-      log "CHECK_FAIL $unit (pid $pid) started before the files in $dir were installed"; ok=1
+    local started changed; started=$(started_at "$unit" 2>/dev/null); changed=$(installed_at "$dir")
+    if ! [[ "$started" =~ ^[0-9]+$ && "$changed" =~ ^[0-9]+$ ]]; then
+      log "CHECK_FAIL the start of $unit or the last change of $dir cannot be read"; ok=1
+    elif [ "$started" -lt "$changed" ]; then
+      log "CHECK_FAIL $unit (pid $pid) started before the files in $dir last changed"; ok=1
     fi
   done
-  [ "$ok" = 0 ] && log "check: both processes started after their files were installed"
+  [ "$ok" = 0 ] && log "check: both processes started after their files last changed"
   return $ok
 }
 
@@ -150,12 +156,15 @@ require_public_equals_candidate() {
 
 require_engine_is_candidate() {
   # The running engine answers exactly as the engine code of the candidate does: on its own port and through the public host.
-  local url
+  local url run; run=$(mktemp) || return 1
   for url in "http://127.0.0.1:$MULTIPASS_PORT" "$ORIGIN"; do
-    as_user python3 "$SRC/ops/preview-domain/live_engine_check.py" --source "$SRC" --url "$url" --origin "$ORIGIN" \
-      >> "$REL/engine-check.log" 2>&1 || { log "CHECK_FAIL the engine behind $url does not answer as the candidate code does (engine-check.log)"; return 1; }
+    echo "--- $(date -u +%FT%TZ) $url" >> "$run"
+    as_user python3 "$SRC/ops/preview-domain/live_engine_check.py" --source "$SRC" --url "$url" --origin "$ORIGIN" >> "$run" 2>&1 \
+      || { cat "$run" >> "$REL/engine-check.log"; rm -f "$run"; log "CHECK_FAIL the engine behind $url does not answer as the candidate code does (engine-check.log)"; return 1; }
   done
-  log "check: the running engine answers byte for byte as the candidate code ($(grep -c '^same' "$REL/engine-check.log") answers)"
+  cat "$run" >> "$REL/engine-check.log"
+  log "check: the running engine answers byte for byte as the candidate code ($(grep -c '^same' "$run") answers)"
+  rm -f "$run"
 }
 
 require_services_answer() {
@@ -181,7 +190,11 @@ DEPS
   log "check: the run-time packages of the backend are the installed ones"
 }
 
-stamp() { echo "$SHA $(date +%s%6N)" > "$1/.parser-studio-release"; chown "$RUN_USER:$RUN_USER" "$1/.parser-studio-release"; }
+# The stamp of a part: the commit its files were installed from (or what a rollback put back) and when.
+stamp() { echo "${2:-$SHA} $(date +%s%6N)" > "$1/.parser-studio-release"; chown "$RUN_USER:$RUN_USER" "$1/.parser-studio-release"; }
+stamp_name() { [ -f "$1/.parser-studio-release" ] && awk '{print $1}' "$1/.parser-studio-release" || echo unrecorded; }
+# Which release directory is the installed one. Rollbacks go in the reverse order of the applies.
+CURRENT=$ST/current-release
 
 restart_and_confirm() {
   # $1 unit, $2 port: the unit has a new main process after the restart and answers.
@@ -194,31 +207,51 @@ restart_and_confirm() {
 
 # --- steps ------------------------------------------------------------------------------------------------------
 
+# The rollback material of a release is written once, by the first apply, and names the state BEFORE this release:
+#   rollback/complete            the material is whole and has not been used
+#   rollback/index.html          the page
+#   rollback/multipass*          changed and removed engine files, the lists, the stamp name
+#   $BACKEND/.dist_rollback_<s>  the whole backend (rollback/backend.changed says whether it was replaced)
+#   rollback/previous-release    which release directory was the installed one
 rollback() {
+  [ -e "$REL/rollback/complete" ] || { log "ROLLBACK_REFUSED $SHA has no unused rollback material: it is not applied, or was rolled back already"; return 2; }
   log "ROLLBACK start"
-  if [ -f "$REL/rollback/index.html" ]; then
-    cp -p "$REL/rollback/index.html" "$WEB/.idx.rb" && chown "$RUN_USER:$RUN_USER" "$WEB/.idx.rb" && mv -f "$WEB/.idx.rb" "$WEB/index.html" && log "web index restored"
-  fi
-  if [ -d "$BACKEND/.dist_rollback_$S" ]; then
-    mv "$BACKEND/dist" "$BACKEND/.dist_failed_${S}_$(date -u +%Y%m%dT%H%M%SZ)" && mv "$BACKEND/.dist_rollback_$S" "$BACKEND/dist" && stamp "$BACKEND/dist" \
-      && restart_and_confirm "$AUTHORING_UNIT" "$AUTHORING_PORT" && log "backend restored"
+  local rc=0 f
+  cp -p "$REL/rollback/index.html" "$WEB/.idx.rb" && chown "$RUN_USER:$RUN_USER" "$WEB/.idx.rb" && mv -f "$WEB/.idx.rb" "$WEB/index.html" && log "web index restored" || rc=1
+  if [ -s "$REL/rollback/backend.changed" ]; then
+    if [ -d "$BACKEND/.dist_rollback_$S" ]; then
+      local name; name=$(stamp_name "$BACKEND/.dist_rollback_$S")
+      mv "$BACKEND/dist" "$BACKEND/.dist_failed_${S}_$(date -u +%Y%m%dT%H%M%SZ)" && mv "$BACKEND/.dist_rollback_$S" "$BACKEND/dist" && stamp "$BACKEND/dist" "$name" \
+        && restart_and_confirm "$AUTHORING_UNIT" "$AUTHORING_PORT" && log "backend restored" || rc=1
+      ( cd "$BACKEND/dist" && sha256sum -c --quiet "$REL/rollback/backend-dist.sha256" > /dev/null 2>&1 ) || { log "CHECK_FAIL the restored backend is not the one that was replaced"; rc=1; }
+    else log "CHECK_FAIL the backend of the previous release ($BACKEND/.dist_rollback_$S) is missing"; rc=1; fi
   fi
   if [ -s "$REL/rollback/multipass.changed" ] || [ -s "$REL/rollback/multipass.new" ] || [ -s "$REL/rollback/multipass.removed" ]; then
-    local f
     for f in $(cat "$REL/rollback/multipass.new"); do rm -f "$MULTIPASS/$f"; done
-    for f in $(cat "$REL/rollback/multipass.changed" "$REL/rollback/multipass.removed" 2>/dev/null); do
-      cp -p "$REL/rollback/multipass/$f" "$MULTIPASS/.rb.$f" && chown "$RUN_USER:$RUN_USER" "$MULTIPASS/.rb.$f" && mv -f "$MULTIPASS/.rb.$f" "$MULTIPASS/$f"
+    for f in $(cat "$REL/rollback/multipass.changed" "$REL/rollback/multipass.removed"); do
+      cp -p "$REL/rollback/multipass/$f" "$MULTIPASS/.rb.$f" && chown "$RUN_USER:$RUN_USER" "$MULTIPASS/.rb.$f" && mv -f "$MULTIPASS/.rb.$f" "$MULTIPASS/$f" || rc=1
     done
-    stamp "$MULTIPASS" && restart_and_confirm "$MULTIPASS_UNIT" "$MULTIPASS_PORT" && log "Multi-Pass restored"
+    stamp "$MULTIPASS" "$(cat "$REL/rollback/multipass.stamp-name")" && restart_and_confirm "$MULTIPASS_UNIT" "$MULTIPASS_PORT" && log "Multi-Pass restored" || rc=1
+    for f in $(cat "$REL/rollback/multipass.changed" "$REL/rollback/multipass.removed"); do
+      cmp -s "$REL/rollback/multipass/$f" "$MULTIPASS/$f" || { log "CHECK_FAIL the restored engine file $f is not the one that was replaced"; rc=1; }
+    done
   fi
   # The previous release is what runs again: its page is public, the two units run the restored files.
-  local rc=0
   require_managed_processes && require_process_newer_than_files && require_services_answer || rc=1
-  if [ -f "$REL/rollback/index.html" ] && [ "$(public_sha '')" != "$(sha "$REL/rollback/index.html")" ]; then
-    log "CHECK_FAIL the public index.html is not the one of the previous release"; rc=1
-  fi
-  [ "$rc" = 0 ] && log "ROLLBACK_OK the previous release is installed and is what runs on $ORIGIN" || log "ROLLBACK_INCOMPLETE read the lines above"
+  [ "$(public_sha '')" = "$(sha "$REL/rollback/index.html")" ] || { log "CHECK_FAIL the public index.html is not the one of the previous release"; rc=1; }
+  if [ "$rc" = 0 ]; then
+    mv "$REL/rollback/complete" "$REL/rollback/used-$(date -u +%Y%m%dT%H%M%SZ)"
+    if [ -s "$REL/rollback/previous-release" ]; then cp "$REL/rollback/previous-release" "$CURRENT"; else rm -f "$CURRENT"; fi
+    log "ROLLBACK_OK the previous release is installed and is what runs on $ORIGIN"
+  else log "ROLLBACK_INCOMPLETE read the lines above; the material stays in $REL/rollback"; fi
   return $rc
+}
+
+rollback_command() {
+  # Asked for by an operator: only the installed release can be rolled back, so that releases go back in order.
+  local current; current=$(cat "$CURRENT" 2>/dev/null)
+  [ "$current" = "$(basename "$REL")" ] || { log "ROLLBACK_REFUSED the installed release is ${current:-not recorded}, not $(basename "$REL"): roll back the installed one first"; return 2; }
+  rollback
 }
 
 build() {
@@ -261,38 +294,52 @@ apply() {
   log "APPLY $SHA"
   require_canonical_head && require_ci_success || return 1
   [ "$(as_user git -C "$SRC" rev-parse HEAD)" = "$SHA" ] && [ -z "$(as_user git -C "$SRC" status --porcelain)" ] || { log "CHECK_FAIL the candidate checkout changed"; return 1; }
-  [ "$(sha "$WEB/index.html")" = "$(grep '^live index:' "$REL/baseline-before.txt" | awk '{print $3}')" ] || { log "CHECK_FAIL the live index.html changed since the build: build again"; return 1; }
+  # The page is still the one the build saw, or already the one of this release (applied before): nobody else changed it.
+  [ "$(sha "$WEB/index.html")" = "$(grep '^live index:' "$REL/baseline-before.txt" | awk '{print $3}')" ] || [ "$(sha "$WEB/index.html")" = "$(sha "$SRC/dist/index.html")" ] \
+    || { log "CHECK_FAIL the live index.html changed since the build: build again"; return 1; }
   require_managed_processes && require_backend_dependencies || return 1
-  # 1. back up what will be replaced
-  mkdir -p -m 700 "$REL/rollback/multipass" && chown -R "$RUN_USER:$RUN_USER" "$REL/rollback"
-  cp -p "$WEB/index.html" "$REL/rollback/index.html"
-  : > "$REL/rollback/multipass.new"; : > "$REL/rollback/multipass.changed"; : > "$REL/rollback/multipass.removed"
-  local f backend_changed=0 multipass_changed=0
+  # 1. what differs now (decides what is installed), and the rollback material (written by the first apply only)
+  local f todo; todo=$(mktemp -d) || return 1
+  : > "$todo/new"; : > "$todo/changed"; : > "$todo/removed"; : > "$todo/backend"
   for f in $(cd "$SRC/runtime/multipass" && ls *.py *.json); do
-    if [ -f "$MULTIPASS/$f" ]; then cmp -s "$SRC/runtime/multipass/$f" "$MULTIPASS/$f" || { cp -p "$MULTIPASS/$f" "$REL/rollback/multipass/$f"; echo "$f" >> "$REL/rollback/multipass.changed"; }
-    else echo "$f" >> "$REL/rollback/multipass.new"; fi
+    if [ -f "$MULTIPASS/$f" ]; then cmp -s "$SRC/runtime/multipass/$f" "$MULTIPASS/$f" || echo "$f" >> "$todo/changed"; else echo "$f" >> "$todo/new"; fi
   done
-  for f in $(cd "$MULTIPASS" && ls *.py *.json); do
-    [ -f "$SRC/runtime/multipass/$f" ] || { cp -p "$MULTIPASS/$f" "$REL/rollback/multipass/$f"; echo "$f" >> "$REL/rollback/multipass.removed"; }
-  done
-  [ -s "$REL/rollback/multipass.new" ] || [ -s "$REL/rollback/multipass.changed" ] || [ -s "$REL/rollback/multipass.removed" ] && multipass_changed=1
-  tree_diff "$SRC/backend/dist" "$BACKEND/dist" > /dev/null || backend_changed=1
-  log "backup done: backend changed=$backend_changed, Multi-Pass files changed=$(wc -l < "$REL/rollback/multipass.changed") new=$(wc -l < "$REL/rollback/multipass.new") removed=$(wc -l < "$REL/rollback/multipass.removed")"
+  for f in $(cd "$MULTIPASS" && ls *.py *.json); do [ -f "$SRC/runtime/multipass/$f" ] || echo "$f" >> "$todo/removed"; done
+  tree_diff "$SRC/backend/dist" "$BACKEND/dist" > /dev/null || echo changed > "$todo/backend"
+  if [ -e "$REL/rollback/complete" ]; then
+    log "this release was applied before and not rolled back: its rollback material (the release it replaced) is kept"
+  else
+    rm -rf "$REL/rollback.new" && mkdir -p -m 700 "$REL/rollback.new/multipass" || return 1
+    cp -p "$WEB/index.html" "$REL/rollback.new/index.html" || { log "CHECK_FAIL the page cannot be backed up"; return 1; }
+    for f in $(cat "$todo/changed" "$todo/removed"); do
+      cp -p "$MULTIPASS/$f" "$REL/rollback.new/multipass/$f" || { log "CHECK_FAIL the engine file $f cannot be backed up"; return 1; }
+    done
+    cp "$todo/new" "$REL/rollback.new/multipass.new" && cp "$todo/changed" "$REL/rollback.new/multipass.changed" \
+      && cp "$todo/removed" "$REL/rollback.new/multipass.removed" && cp "$todo/backend" "$REL/rollback.new/backend.changed" \
+      && stamp_name "$MULTIPASS" > "$REL/rollback.new/multipass.stamp-name" || { log "CHECK_FAIL the rollback lists cannot be written"; return 1; }
+    ( cd "$BACKEND/dist" && find . -type f -not -name .parser-studio-release | sort | xargs sha256sum ) > "$REL/rollback.new/backend-dist.sha256" || return 1
+    cat "$CURRENT" > "$REL/rollback.new/previous-release" 2>/dev/null
+    [ ! -e "$BACKEND/.dist_rollback_$S" ] || { log "CHECK_FAIL $BACKEND/.dist_rollback_$S exists without rollback material: look at it first"; return 1; }
+    if [ -e "$REL/rollback" ]; then mv "$REL/rollback" "$REL/rollback.before-$(date -u +%Y%m%dT%H%M%SZ)" || return 1; fi
+    mv "$REL/rollback.new" "$REL/rollback" && chown -R "$RUN_USER:$RUN_USER" "$REL/rollback" && touch "$REL/rollback/complete" || return 1
+  fi
+  log "to install: backend=$([ -s "$todo/backend" ] && echo changed || echo same), Multi-Pass files changed=$(wc -l < "$todo/changed") new=$(wc -l < "$todo/new") removed=$(wc -l < "$todo/removed")"
   # 2. backend: the whole dist is swapped by rename, then the service is restarted
-  if [ "$backend_changed" = 1 ]; then
-    rm -rf "$BACKEND/.dist_candidate_$S"; cp -a "$SRC/backend/dist" "$BACKEND/.dist_candidate_$S" && chown -R "$RUN_USER:$RUN_USER" "$BACKEND/.dist_candidate_$S"
-    ( cd "$BACKEND/dist" && find . -type f | sort | xargs sha256sum ) > "$REL/rollback/backend-dist.sha256"
-    mv "$BACKEND/dist" "$BACKEND/.dist_rollback_$S" && mv "$BACKEND/.dist_candidate_$S" "$BACKEND/dist" && stamp "$BACKEND/dist" \
+  if [ -s "$todo/backend" ]; then
+    rm -rf "$BACKEND/.dist_candidate_$S"; cp -a "$SRC/backend/dist" "$BACKEND/.dist_candidate_$S" && chown -R "$RUN_USER:$RUN_USER" "$BACKEND/.dist_candidate_$S" || { rollback; return 1; }
+    if [ -e "$BACKEND/.dist_rollback_$S" ]; then mv "$BACKEND/dist" "$BACKEND/.dist_replaced_${S}_$(date -u +%Y%m%dT%H%M%SZ)"; else mv "$BACKEND/dist" "$BACKEND/.dist_rollback_$S"; fi \
+      && mv "$BACKEND/.dist_candidate_$S" "$BACKEND/dist" && stamp "$BACKEND/dist" \
       && restart_and_confirm "$AUTHORING_UNIT" "$AUTHORING_PORT" || { rollback; return 1; }
   fi
   # 3. Multi-Pass: changed and new files atomically, then the service is restarted
-  if [ "$multipass_changed" = 1 ]; then
-    for f in $(cat "$REL/rollback/multipass.changed" "$REL/rollback/multipass.new"); do
-      install -o "$RUN_USER" -g "$RUN_USER" -m 644 "$SRC/runtime/multipass/$f" "$MULTIPASS/.new.$f" && mv -f "$MULTIPASS/.new.$f" "$MULTIPASS/$f"
+  if [ -s "$todo/changed" ] || [ -s "$todo/new" ] || [ -s "$todo/removed" ]; then
+    for f in $(cat "$todo/changed" "$todo/new"); do
+      install -o "$RUN_USER" -g "$RUN_USER" -m 644 "$SRC/runtime/multipass/$f" "$MULTIPASS/.new.$f" && mv -f "$MULTIPASS/.new.$f" "$MULTIPASS/$f" || { rollback; return 1; }
     done
-    for f in $(cat "$REL/rollback/multipass.removed"); do rm -f "$MULTIPASS/$f"; done
+    for f in $(cat "$todo/removed"); do rm -f "$MULTIPASS/$f"; done
     stamp "$MULTIPASS" && restart_and_confirm "$MULTIPASS_UNIT" "$MULTIPASS_PORT" || { rollback; return 1; }
   fi
+  rm -rf "$todo"
   # 4. web: new assets first, index.html last; an existing asset is never overwritten with other content
   for f in $(cd "$SRC/dist" && find . -type f -not -name index.html | sed 's#^\./##' | sort); do
     if [ -f "$WEB/$f" ]; then cmp -s "$SRC/dist/$f" "$WEB/$f" || { log "CHECK_FAIL $f exists with other content"; rollback; return 1; }
@@ -308,21 +355,20 @@ apply() {
     echo "public index: $(public_sha '')"
     echo "last installed from: backend=$(cut -c1-40 "$BACKEND/dist/.parser-studio-release" 2>/dev/null || echo unrecorded) multipass=$(cut -c1-40 "$MULTIPASS/.parser-studio-release" 2>/dev/null || echo unrecorded)"
   } > "$REL/post-install.txt"
+  basename "$REL" > "$CURRENT"
   log "APPLY_OK $SHA is installed and is what runs on $ORIGIN"
 }
 
 status() {
-  mkdir -p "$REL"; : > "$REL/engine-check.log"
-  require_managed_processes; local a=$?
-  require_process_newer_than_files; local b=$?
-  local c=0 d=0 e=0
-  if [ -d "$SRC" ]; then
-    require_installed_equals_candidate; c=$?
-    require_engine_is_candidate; d=$?
-    require_public_equals_candidate; e=$?
-  else log "status: no candidate checkout of $SHA; file and engine comparisons skipped"; fi
-  require_services_answer; local g=$?
-  [ $((a+b+c+d+e+g)) = 0 ] && log "STATUS_OK" || { log "STATUS_FAIL"; return 1; }
+  [ -d "$SRC" ] || { echo "STATUS_INCOMPLETE there is no built checkout of $SHA ($SRC): nothing can be compared with it"; return 2; }
+  local failed=0
+  require_managed_processes || failed=1
+  require_process_newer_than_files || failed=1
+  require_installed_equals_candidate || failed=1
+  require_engine_is_candidate || failed=1
+  require_public_equals_candidate || failed=1
+  require_services_answer || failed=1
+  [ "$failed" = 0 ] && log "STATUS_OK $SHA is installed and is what runs on $ORIGIN" || { log "STATUS_FAIL"; return 1; }
 }
 
 verify() {
@@ -339,7 +385,7 @@ verify() {
   # Ruby 2.4.9: PS_RUBY249_RUNNER is a command `<runner> <parser file> <file of input lines>` that prints one record per line.
   for dir in "$ev"/*/; do
     c=$(basename "$dir"); [ -f "$dir/parser.rb" ] || continue
-    if [ -z "${PS_RUBY249_RUNNER:-}" ]; then log "ruby 2.4.9 $c: NOT RUN (PS_RUBY249_RUNNER is not set)"; continue; fi
+    [ -n "${PS_RUBY249_RUNNER:-}" ] || { log "VERIFY_FAIL the downloaded parsers were not run on Ruby 2.4.9: PS_RUBY249_RUNNER is not set"; return 1; }
     $PS_RUBY249_RUNNER "$dir/parser.rb" "$dir/runtime.lines" > "$dir/ruby249.txt" 2>&1 && head -1 "$dir/ruby249.txt" | grep -q '^ruby 2\.4\.9' \
       || { log "VERIFY_FAIL the parser of $c does not run on Ruby 2.4.9 ($dir/ruby249.txt)"; return 1; }
     # runtime.expect: texts the records must contain (values of fields the sample did not have, text of unread lines).
@@ -369,7 +415,9 @@ receipt = {
   'engine_check': [line for line in read('engine-check.log').splitlines() if line.startswith('ENGINE_CHECK')],
   'browser_journey': [line.split(' ', 1)[1] for line in log.splitlines() if 'browser journey:' in line or 'ruby 2.4.9' in line],
   'rollback': {'command': 'ops/preview-domain/release.sh ' + commit + ' rollback', 'material': os.path.join(rel, 'rollback')},
-  'not_verified': ['Stellar Cyber installation, reception and indexing', 'native Fluentd runtime on a sensor', 'device logs'],
+  'mock': 'Replies "from ChatGPT" in the browser journeys are written by the tests; no ChatGPT session was used.',
+  'not_verified': ['Stellar Cyber installation, reception and indexing', 'native Fluentd runtime on a sensor', 'device logs',
+                   'replies of a real ChatGPT session'],
 }
 json.dump(receipt, open(os.path.join(rel, 'deployment-receipt.json'), 'w'), indent=1)
 RECEIPT
@@ -382,6 +430,6 @@ case "$STEP" in
   apply) apply ;;
   verify) verify ;;
   status) status ;;
-  rollback) [ -d "$REL/rollback" ] || { echo "no rollback material for $SHA"; exit 2; }; rollback ;;
+  rollback) [ -d "$REL/rollback" ] || { echo "no rollback material for $SHA"; exit 2; }; rollback_command ;;
   *) echo "usage: $0 <full-40-char-sha> build|apply|verify|rollback|status"; exit 2 ;;
 esac

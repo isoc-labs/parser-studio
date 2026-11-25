@@ -17,7 +17,7 @@ for(const item of missed){
  const row={id:c.id,missedPaths:item.native.missingPaths,
   missingMapped:[],missingUnmapped:[],missingTimestampTyped:[]};
  try{
- await page.goto('https://app.parser.xdr.ooo/?workspace=chatgpt',{waitUntil:'domcontentloaded'});
+ await page.goto('https://app.parser.isoc.ooo/?workspace=chatgpt',{waitUntil:'domcontentloaded'});
  await page.getByLabel('ChatGPT local sample logs').fill(c.rawSample);
  await page.getByLabel('Parser manufacturer').fill(c.vendor);
  await page.getByLabel('Parser product',{exact:true}).fill(c.product);

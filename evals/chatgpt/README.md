@@ -14,7 +14,7 @@ From the isolated QA worktree on dev-atlas:
 
 1. Run: node --test tools/qa/chatgpt_independent_benchmark.test.cjs
 2. Run: node tools/qa/chatgpt_independent_benchmark.cjs prepare
-3. The prepare command launches actual Chromium against https://app.parser.xdr.ooo/, enters each source log, and captures its exact first prompt as prompt-1.txt with a SHA-256. It performs zero external model calls.
+3. The prepare command launches actual Chromium against https://app.parser.isoc.ooo/, enters each source log, and captures its exact first prompt as prompt-1.txt with a SHA-256. It performs zero external model calls.
 4. In a **separately signed-in ChatGPT session**, submit each exact prompt-1.txt manually and save the unmodified result as response-1.txt in the matching private case folder. Supply receipt-1.json with origin CHATGPT_WEB_SIGNED_IN, model, recordedAt, operatorAttestation, a real conversationUrl beginning https://chatgpt.com/c/ (or /share/), plus responseSha256 and promptSha256. For an authorized OpenAI API completion, use origin OPENAI_API and its real completionId. Receipt metadata is operator-attested, not a cryptographic proof of provider identity.
 5. Run: node tools/qa/chatgpt_independent_benchmark.cjs replay
 6. The replay command recreates the source and original prompt in real Chromium, pastes the external reply, runs Check ChatGPT Result, Test Original Sample Only, explicit approval, genuine DRAFT Ruby/CONF generation, and native Ruby callback/value checks. On a failed attempt it saves the actual UI-generated improved prompt as prompt-2.txt / prompt-3.txt. Obtain a new independent model response, its receipt and repeat the replay. No fourth attempt.

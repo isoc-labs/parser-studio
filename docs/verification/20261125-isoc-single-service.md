@@ -81,6 +81,31 @@ service set (own directories, throw-away units, other ports), and then for the f
   swap and restart, engine files and restart, web, all checks; then `rollback` (the previous release ran again, with
   new processes), `apply` again and `verify`.
 
+## Second independent audit of the result (2026-11-25) and what followed
+
+A separate auditor checked the released state read-only: repository against installed files, running processes
+against the released code (with lines of their own, and against the previous engine rebuilt from the rollback
+material), duplicate services, the retired host, the release tool, the answers of the deployed engine, the Ruby
+2.4.9 records. Repository, deployment, processes, parsing and data preservation held. Findings on the tool and the
+site, and what was done:
+
+| Finding | Kind | Change |
+| --- | --- | --- |
+| A second apply of the same release overwrote its rollback material; a rollback then restored only the backend and reported success | defect | The material is written once and marked; a rollback uses it once, checks what it restored, and only the installed release can be rolled back |
+| No test ran the tool; its contract test only looked for names in the file | test gap | `tests/test_preview_release_contract_20261126.py` runs the committed script against a sandbox service set: apply, rollback, second apply, a failed check, unfinished checks, a stale process, a second process |
+| The start-time check passed when a value could not be read, and trusted the stamp over the files | defect | It fails closed, and compares with the change time of the files as well |
+| After a rollback the stamp named the release that had been rolled back | defect | The stamp gets the name the part had before |
+| `status` without a built checkout compared nothing and answered OK | defect | It answers `STATUS_INCOMPLETE` |
+| `verify` ended OK when no Ruby 2.4.9 runner was set | defect | It fails |
+| The runbook named a tool path that does not exist on the host | documentation | The runbook takes the tool of the commit from Git |
+| The receipt did not say that ChatGPT replies were written by the tests | documentation | It says so |
+| As default server of its listener, the site served Parser Studio under names no site claims | pre-existing | The site answers 421 under every name but its own |
+
+Not changed, reported to the owner: the repository is still a GitHub fork without branch protection; training pages
+in the web root (outside this repository) still link to the retired host; the engine preview reads a text prefix
+followed by key=value pairs behind a Syslog header as partial while the browser grammar reads it (unchanged
+behaviour of `eb26205`).
+
 ## What did not change
 
 No parsing, mapping, grammar or Ruby template code. The merge of `xdr-labs/parser-studio` main (`eb26205`, PR #316)

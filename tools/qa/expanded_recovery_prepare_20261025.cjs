@@ -9,7 +9,7 @@ const browserAudit=JSON.parse(fs.readFileSync(path.join(root,'browser-78-real-pu
 const outcomeMap=new Map(browserAudit.cases.map(x=>[x.id,x]));
 const recovery=input.cases.filter(c=>outcomeMap.get(c.id)?.promptMode==='FULL_RECOVERY');
 const out=path.join(root,'new-grammar-recovery');
-const origin='https://app.parser.xdr.ooo';
+const origin='https://app.parser.isoc.ooo';
 function file(p,v){fs.mkdirSync(path.dirname(p),{recursive:true,mode:0o700});fs.writeFileSync(p,v,{mode:0o600})}
 const assert=(ok,s)=>{if(!ok)throw Error(s)};
 (async()=>{

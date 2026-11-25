@@ -30,7 +30,7 @@ const args=Object.fromEntries(process.argv.slice(3).flatMap(x=>
 function prepared(all,out){
  const audit=readJson(path.join(out,'prepare-audit.json'));
  assert(audit.pass===10&&audit.fail===0&&audit.modelInvocations===0,'PREPARE_NOT_FULLY_PASSED');
- assert(audit.origin==='https://app.parser.xdr.ooo'&&audit.pinnedBundle===pinnedBundle,
+ assert(audit.origin==='https://app.parser.isoc.ooo'&&audit.pinnedBundle===pinnedBundle,
   'DEVELOPMENT_BUNDLE_CHANGED_REVALIDATE');
  assert(audit.cases.length===all.length,'PREPARE_CASE_COUNT_MISMATCH');
  const matrix=Object.fromEntries(audit.cases.map(x=>[x.id,x]));
@@ -54,7 +54,7 @@ function prepared(all,out){
  return {cases:all.length,modelCallsPerformed:0,totalPromptBytes};
 }
 async function verifyLiveBundle(networkFetch=fetch){
- const response=await networkFetch('https://app.parser.xdr.ooo/',{
+ const response=await networkFetch('https://app.parser.isoc.ooo/',{
   method:'GET',signal:AbortSignal.timeout(15000)
  });
  assert(response.ok,'DEVELOPMENT_SITE_UNREACHABLE');

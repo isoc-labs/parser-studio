@@ -8,7 +8,7 @@ module.exports=defineConfig({
  reporter:'list',
  outputDir:process.env.PARSER_STUDIO_PUBLIC_QA_OUTPUT_DIR||
   '../../test-results/remaining-security-public',
- use:{baseURL:'https://app.parser.xdr.ooo',viewport:{width:1440,height:900},
+ use:{baseURL:'https://app.parser.isoc.ooo',viewport:{width:1440,height:900},
   trace:'retain-on-failure',screenshot:'only-on-failure',acceptDownloads:true},
  projects:[{name:'chromium',use:{...devices['Desktop Chrome'],viewport:{width:1440,height:900}}}]
 });
