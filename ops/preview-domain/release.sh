@@ -41,9 +41,18 @@ sha() { sha256sum "$1" | cut -c1-64; }
 public_sha() { curl -fsS -m 15 -H 'Cache-Control: no-cache' "$ORIGIN/$1" | sha256sum | cut -c1-64; }
 health() { for _ in $(seq 1 40); do [ "$(curl -s -o /dev/null -w '%{http_code}' -m 3 "http://127.0.0.1:$1/health")" = 200 ] && return 0; sleep 0.8; done; return 1; }
 main_pid() { systemctl show "$1" -p MainPID --value; }
-# Start of the main process of a unit, in microseconds, as systemd recorded it. (`ps` derives start times from the
-# boot time and is off by up to a second after weeks of uptime.)
-started_at() { date -d "$(systemctl show "$1" -p ExecMainStartTimestamp --timestamp=us+utc --value)" +%s%6N; }
+# Times are microseconds since the epoch and are read with python, not with `date`: `date +%s%6N` is a GNU extension
+# and another implementation printed the fraction without its leading zeros, which put a stamp up to 0.9 s late.
+now_us() { python3 -c 'import time; print(time.time_ns() // 1000)'; }
+# Start of the main process of a unit as systemd recorded it. (`ps` derives start times from the boot time and is
+# off by up to a second after weeks of uptime.) The weekday name is skipped: it follows the locale.
+started_at() {
+  systemctl show "$1" -p ExecMainStartTimestamp --timestamp=us+utc --value | python3 -c '
+import datetime, sys
+day, clock = sys.stdin.read().split()[1:3]
+moment = datetime.datetime.strptime(day + " " + clock, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)
+print(int(moment.timestamp()) * 1000000 + moment.microsecond)'
+}
 # Differences between a built tree and an installed one, ignoring what the host adds (byte code, the release stamp).
 tree_diff() { diff -rq -x __pycache__ -x .parser-studio-release "$1" "$2"; }
 
@@ -116,10 +125,26 @@ require_managed_processes() {
 installed_at() {
   # When the files of a part last changed: "<microseconds> <what>", the later of the stamp `apply` writes and the
   # newest change time of a file. A copy made behind the tool's back can keep a modification time, not the change time.
-  { [ -f "$1/.parser-studio-release" ] && awk '{print $2 " release-stamp"}' "$1/.parser-studio-release"
-    find "$1" -type f -not -path '*/__pycache__/*' -not -name .parser-studio-release -printf '%C@ %P\n' \
-      | awk '{split($1, t, "."); $1 = t[1] substr(t[2] "000000", 1, 6); print}'
-  } | sort -n | tail -1
+  python3 - "$1" <<'CHANGED'
+import os, sys
+root = sys.argv[1]
+latest = (0, '')
+stamp = os.path.join(root, '.parser-studio-release')
+if os.path.isfile(stamp):
+    fields = open(stamp).read().split()
+    if len(fields) > 1 and fields[1].isdigit():
+        latest = (int(fields[1]), 'release-stamp')
+for folder, folders, files in os.walk(root):
+    folders[:] = [name for name in folders if name != '__pycache__']
+    for name in files:
+        path = os.path.join(folder, name)
+        if name == '.parser-studio-release' or os.path.islink(path):
+            continue
+        changed = os.lstat(path).st_ctime_ns // 1000
+        if changed > latest[0]:
+            latest = (changed, os.path.relpath(path, root))
+print(latest[0], latest[1])
+CHANGED
 }
 
 require_process_newer_than_files() {
@@ -191,7 +216,7 @@ DEPS
 }
 
 # The stamp of a part: the commit its files were installed from (or what a rollback put back) and when.
-stamp() { echo "${2:-$SHA} $(date +%s%6N)" > "$1/.parser-studio-release"; chown "$RUN_USER:$RUN_USER" "$1/.parser-studio-release"; }
+stamp() { echo "${2:-$SHA} $(now_us)" > "$1/.parser-studio-release"; chown "$RUN_USER:$RUN_USER" "$1/.parser-studio-release"; }
 stamp_name() { [ -f "$1/.parser-studio-release" ] && awk '{print $1}' "$1/.parser-studio-release" || echo unrecorded; }
 # Which release directory is the installed one. Rollbacks go in the reverse order of the applies.
 CURRENT=$ST/current-release
