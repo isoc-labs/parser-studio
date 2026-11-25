@@ -3,6 +3,7 @@ import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import test from 'node:test';
+import {diagnosticsOf} from './failure-record.js';
 import {sampleProject} from './fixture.js';
 import {compilePair} from '../src/compiler.js';
 import {validateProject} from '../src/validate.js';
@@ -82,6 +83,7 @@ test('native Regex refuses impossible day/month/clock despite a matching named r
   const got=native(raw);
   assert.equal(got.parser_err_stage,'extraction');
   assert.equal(got.parser_err_msg,'ArgumentError');
-  assert.equal(JSON.stringify(got).includes(raw),false);
+  assert.equal(got.parser_raw_msg,raw);
+  assert.equal(JSON.stringify(diagnosticsOf(got)).includes(raw),false);
  }
 });

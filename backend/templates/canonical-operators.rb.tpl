@@ -26,6 +26,13 @@ def parserstudio_wire_record(record, strict = true)
   output
 end
 
+# The original event as text for a record: UTF-8, and a byte sequence that is not valid
+# UTF-8 replaced by U+FFFD so that the record can always be serialized.
+def parserstudio_raw_text(text)
+  raw = text.to_s.dup.force_encoding('UTF-8')
+  raw.valid_encoding? ? raw : raw.scrub
+end
+
 class ParserstudioFieldError < StandardError
   attr_reader :field
   def initialize(field)
@@ -71,12 +78,16 @@ def parse(text)
   rescue StandardError => e
     # Diagnostics are static codes and schema-controlled field paths. Fields that
     # were already mapped and validated before the failure stay next to them; the
-    # field that failed, unmapped source data, raw log text and exception messages
-    # are never copied.
+    # field that failed and exception messages are not copied.
+    # An event that could not be parsed is never lost (owner decision 2026-11-22): the
+    # record carries the original text in parser_raw_msg, the field of the Stellar Cyber
+    # dictionary for the raw message of a parsing error, as the installed reference
+    # parsers write it.
     diagnostic = {
       'stellar_log_index' => 'syslog',
       'parser_err_msg' => e.is_a?(ParserstudioFieldError) ? 'MappedFieldError' : e.class.name,
-      'parser_err_stage' => current_stage
+      'parser_err_stage' => current_stage,
+      'parser_raw_msg' => parserstudio_raw_text(text)
     }
     diagnostic['parser_err_field'] = e.field if e.is_a?(ParserstudioFieldError)
     kept = @parserstudio_partial.is_a?(Hash) ? @parserstudio_partial : {}
@@ -374,13 +385,105 @@ def parserstudio_event_profile(original)
   config = @parser_rule_set['normalization']['eventProfiles']
   return nil if config.nil?
   key = config['discriminator']
-  value = parserstudio_lookup(original, key)
+  # @reading_family routes a mixed parser by the family its router read the event with (a tag of the
+  # extraction), never by a field of the event.
+  value = key == '@reading_family' ? psg_get_tag(original, 'readingFamily') : parserstudio_lookup(original, key)
   raise ParserstudioFieldError.new(key) unless value.is_a?(String)
   profiles = config['variants'].select { |profile| profile['equals'] == value }
   raise ParserstudioFieldError.new(key) unless profiles.length == 1
   profiles.first
 rescue ArgumentError
   raise ParserstudioFieldError.new(key)
+end
+
+PARSERSTUDIO_UNMAPPED_COLLISION_ROOT = 'parserstudio_unmapped'
+
+# Owner decision Q3-1 (browser: src/unmappedFields.ts). A field no applied mapping reads - also one the sample
+# never showed - is kept in the vendor namespace at its original path, or under parserstudio_unmapped where that
+# path is a mapped vendor field or a key holds a dot. Strings are kept unchanged; other values as the canonical
+# string mapping renders them. Missing values (nil, ignored, blank) are not written, as for mapped fields.
+def parserstudio_unmapped_walk(value, path, covered, names, leaves)
+  # A nested source path also reads a literal key spelled the same ("policy.id").
+  return if !path.empty? && (names.include?(path.join('.')) ||
+    covered.any? { |prefix| prefix.length <= path.length && path[0, prefix.length] == prefix })
+  if value.is_a?(Hash) && !value.empty?
+    value.each { |key, child| parserstudio_unmapped_walk(child, path + [key.to_s], covered, names, leaves) }
+  elsif !path.empty?
+    leaves << [path, value]
+  end
+end
+
+def parserstudio_assign_segments(container, path, value)
+  path[0..-2].each do |segment|
+    container[segment] = {} unless container.key?(segment)
+    container = container[segment]
+    return false unless container.is_a?(Hash)
+  end
+  return false if container.key?(path.last)
+  container[path.last] = value
+  true
+end
+
+def parserstudio_preserve_unmapped(original, normalized, profile, ignored)
+  return nil unless @parser_rule_set['normalization']['preserveUnmapped'] == true
+  return nil if @parser_rule_set['extraction']['format'] == 'generic_structural'
+  maps = [@parser_rule_set['normalization']]
+  maps << profile if profile
+  covered = []
+  names = []
+  maps.each do |map|
+    ['topFields', 'nsFields', 'vendorFields'].each do |section|
+      map[section].each do |source, rule|
+        applies = begin
+          parserstudio_when_applies?(original, rule)
+        rescue StandardError
+          true
+        end
+        next unless applies
+        literal = rule['source_path_kind'] == 'literal_root'
+        covered << (literal ? [source] : source.split('.', -1))
+        # Only the default path kind also reads a literal key of the same spelling.
+        names << source if rule['source_path_kind'].nil?
+      end
+    end
+  end
+  namespace = @parser_rule_set['vendor']
+  # Reserved names: the vendor fields of every family (one source keeps one name in every event) and the
+  # enrichment targets inside the vendor namespace.
+  profiles = (@parser_rule_set['normalization']['eventProfiles'] || {})['variants'] || []
+  # A name another family's mapping writes from the same source is that source's name, not a clash.
+  occupied = ([@parser_rule_set['normalization']] + profiles).flat_map do |map|
+    (map['vendorFields'] || {}).map do |source, rule|
+      [rule['normalized_name'], rule['source_path_kind'] == 'literal_root' ? nil : source]
+    end
+  end
+  (@parser_rule_set['enrichment'] || []).each do |rule|
+    ([rule['target']] + (rule['targets'].is_a?(Array) ? rule['targets'] : [])).each do |target|
+      occupied << [target[(namespace.length + 1)..-1], nil] if target.is_a?(String) && target.start_with?(namespace + '.')
+    end
+  end
+  leaves = []
+  parserstudio_unmapped_walk(original, [], covered, names, leaves)
+  first_failed = nil
+  leaves.each do |path, value|
+    next if value.nil? || (value.is_a?(String) && (ignored.include?(value) || parserstudio_trim_ascii(value).empty?))
+    begin
+      text = value.is_a?(String) ? value : parserstudio_coerce(value, {'data_type' => 'string'})
+      normalized[namespace] = {} unless normalized.key?(namespace)
+      raise ArgumentError, 'Vendor namespace collision' unless normalized[namespace].is_a?(Hash)
+      name = path.join('.')
+      clash = path.any? { |segment| segment.include?('.') } || path.first == PARSERSTUDIO_UNMAPPED_COLLISION_ROOT ||
+        occupied.any? do |taken, source|
+          !(taken == name && source == name) &&
+            (taken == name || taken.start_with?(name + '.') || name.start_with?(taken + '.'))
+        end
+      target = clash ? [PARSERSTUDIO_UNMAPPED_COLLISION_ROOT] + path : path
+      raise ArgumentError, 'Unmapped output collision' unless parserstudio_assign_segments(normalized[namespace], target, text)
+    rescue StandardError
+      first_failed ||= path.join('.')
+    end
+  end
+  first_failed
 end
 
 # Lookup, conversion and assignment share one field-scoped failure boundary.
@@ -433,7 +536,9 @@ def parserstudio_normalize(original)
     first_failed ||= failure
     normalized['parserstudio_event_family'] = profile['name']
   end
-  hops = original['__parserstudio_forwarder_hops']
+  failure = parserstudio_preserve_unmapped(original, normalized, profile, ignored)
+  first_failed ||= failure
+  hops = psg_get_tag(original, 'forwarderHops')
   normalized['parserstudio_transport'] = {'forwarder_hops'=>hops} if hops && !hops.empty?
   raise ParserstudioFieldError.new(first_failed) if first_failed
   parserstudio_verify_proto_pair!(normalized)

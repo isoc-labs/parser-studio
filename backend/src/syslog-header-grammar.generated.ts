@@ -1,17 +1,19 @@
 // GENERATED FILE - DO NOT EDIT.
-// Source: contracts/syslog-header-grammar.v1.json (revision 7); regenerate with
+// Source: contracts/syslog-header-grammar.v1.json (revision 9); regenerate with
 //   node scripts/grammar/generate-grammar.mjs --write
 // CI runs the generator with --verify, so a hand edit of this file fails the gate.
-export const GRAMMAR_CONTRACT_SHA256 = "b2516fb96d8c605faae09db9cbafeb96fb21a63ac8f821b3479349bf0a99f4d8";
+export const GRAMMAR_CONTRACT_SHA256 = "98f8143baac18f5855ad5993834f3b6afebd3ee0d51a99ebc841b92916d4292e";
 /** Template placeholder -> Ruby source text (Ruby 2.4 compatible). */
 export const RUBY_GRAMMAR_PLACEHOLDERS: Readonly<Record<string, string>> = {
-  "__PS_GRAMMAR_RX_RFC3164_TAGGED__": "\\A<(?<pri>[0-9]{1,3})>(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)\\z",
+  "__PS_GRAMMAR_RX_RFC3164_TAGGED__": "\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?!(?:(?:CEF|LEEF))(?:(?:[ \\t]))*:(?:(?:[ \\t]))*(?:[0-9]))(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)\\z",
   "__PS_GRAMMAR_RX_RFC3164_TAGLESS__": "\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)\\z",
   "__PS_GRAMMAR_RX_RFC3164_HOSTLESS__": "\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)\\z",
   "__PS_GRAMMAR_RX_RFC5424__": "\\A<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\\r\\n]+)\\z",
   "__PS_GRAMMAR_FRAGMENT_KV_PAIR__": "\\G(?:[ \\t]*)(?<key>[A-Za-z_][A-Za-z0-9_.-]{0,95})=(?:\"(?<dq>(?:\\\\[^\\r\\n]|[^\"\\\\])*)\"|'(?<sq>(?:\\\\[^\\r\\n]|[^'\\\\])*)'|(?<bare>(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+))",
+  "__PS_GRAMMAR_FRAGMENT_KV_LIST_PAIR__": "\\G(?:[ \\t]*)(?<key>[A-Za-z_][A-Za-z0-9_.-]{0,95})=(?:\"(?<dq>[^\"]*)\"|'(?<sq>[^']*)'|(?<bare>[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"',;|=]+))",
+  "__PS_GRAMMAR_FRAGMENT_KV_LIST_SEPARATOR__": "\\G(?<delimiter>[,;|])",
   "__PS_GRAMMAR_FRAGMENT_RFC5424_VERSION_HEAD__": "\\G<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?:-[ ]|(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T))",
-  "__PS_GRAMMAR_FRAGMENT_STRUCTURED_FAMILY_CLAIM__": "\\G(?<family>(?:CEF|LEEF)):(?:[0-9])",
+  "__PS_GRAMMAR_FRAGMENT_STRUCTURED_FAMILY_CLAIM__": "\\G(?<family>(?:CEF|LEEF))(?:(?:[ \\t]))*:(?:(?:[ \\t]))*(?:[0-9])",
   "__PS_GRAMMAR_FRAGMENT_CEF_PAIR__": "\\G(?:(?:[ \\t]))*(?<key>[A-Za-z_][A-Za-z0-9_.-]{0,127})=(?<value>(?:(?:(?:\\\\[^ \\t])|(?:[^\\\\ \\t])|(?:[ \\t]+)(?=(?:[^ \\t]))(?!(?:[A-Za-z_][A-Za-z0-9_.-]{0,127})=)|(?:[ \\t]+)(?=(?:[ \\t])(?:[A-Za-z_][A-Za-z0-9_.-]{0,127})=)|(?:\\\\)(?=(?:[ \\t]))))*)(?:(?:(?:[ \\t]))*\\z|(?:[ \\t])(?=(?:[A-Za-z_][A-Za-z0-9_.-]{0,127})=))",
   "__PS_GRAMMAR_FRAGMENT_LEEF_DELIMITER__": "\\G(?:(?<literal>[\\t!-<>-\\[\\]-~])|(?:0x|x)(?<hex>[0-9A-Fa-f]{1,4}))\\z",
   "__PS_GRAMMAR_FRAGMENT_LEEF_ATTRIBUTE__": "\\G(?<key>[A-Za-z_][A-Za-z0-9_.-]*)=",
@@ -37,6 +39,10 @@ export const RUBY_GRAMMAR_PLACEHOLDERS: Readonly<Record<string, string>> = {
   "__PS_GRAMMAR_TOKEN_KV_DQ__": "(?:\\\\[^\\r\\n]|[^\"\\\\])*",
   "__PS_GRAMMAR_TOKEN_KV_SQ__": "(?:\\\\[^\\r\\n]|[^'\\\\])*",
   "__PS_GRAMMAR_TOKEN_KV_BARE__": "(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+",
+  "__PS_GRAMMAR_TOKEN_KV_LIST_BARE__": "[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"',;|=]+",
+  "__PS_GRAMMAR_TOKEN_KV_LIST_DQ__": "[^\"]*",
+  "__PS_GRAMMAR_TOKEN_KV_LIST_SQ__": "[^']*",
+  "__PS_GRAMMAR_TOKEN_KV_LIST_DELIMITER__": "[,;|]",
   "__PS_GRAMMAR_TOKEN_KV_TRAILING__": "[ \\t\\n\\r\\f\\v]*",
   "__PS_GRAMMAR_TOKEN_RFC3339_DATE_PREFIX__": "[0-9]{4}-[0-9]{2}-[0-9]{2}T",
   "__PS_GRAMMAR_TOKEN_FAMILY_NAME__": "(?:CEF|LEEF)",
@@ -51,7 +57,7 @@ export const RUBY_GRAMMAR_PLACEHOLDERS: Readonly<Record<string, string>> = {
   "__PS_GRAMMAR_TOKEN_CEF_BACKSLASH__": "\\\\",
   "__PS_GRAMMAR_TOKEN_LEEF_DELIMITER_LITERAL__": "[\\t!-<>-\\[\\]-~]",
   "__PS_GRAMMAR_TOKEN_LEEF_HEX_DIGITS__": "[0-9A-Fa-f]{1,4}",
-  "__PS_GRAMMAR_RFC3164_ALTERNATIVES__": "[['rfc3164_tagged', /\\A<(?<pri>[0-9]{1,3})>(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)\\z/], ['rfc3164_tagless', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)\\z/], ['rfc3164_hostless', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)\\z/]]",
+  "__PS_GRAMMAR_RFC3164_ALTERNATIVES__": "[['rfc3164_tagged', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?!(?:(?:CEF|LEEF))(?:(?:[ \\t]))*:(?:(?:[ \\t]))*(?:[0-9]))(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)\\z/], ['rfc3164_tagless', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)\\z/], ['rfc3164_hostless', /\\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)\\z/]]",
   "__PS_GRAMMAR_LEEF_DELIMITER_VERSIONS__": "['2.0']",
   "__PS_GRAMMAR_LEEF_HEADER_FIELDS__": "4",
   "__PS_GRAMMAR_LEEF_EXTRA_DELIMITERS__": "[166]",

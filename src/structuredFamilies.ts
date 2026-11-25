@@ -8,6 +8,7 @@ import { parseStrictKeyValues } from './grammar/kvBody';
 import { getTag, matchAt, matchEnd, setTag } from './grammar/primitives';
 import { GRAMMAR_FRAGMENTS, SYSLOG_HEADER_SEMANTICS, SYSLOG_HEADER_TOKENS } from './grammar/syslogHeaderGrammar.generated';
 import {extractPortableRegexFields} from './portableRegexExtraction';
+import { sourceFieldName, withSourceFieldNames } from './grammar/sourceFieldNames';
 /* Browser-only structural subset of RFC5424, CEF and LEEF.
    Does not execute Ruby or imply native Fluentd target compatibility. */
 export type StructuredFamily = 'syslog_rfc3164' | 'syslog_rfc5424' | 'cef' | 'leef';
@@ -33,7 +34,8 @@ const withBodyKind = <T extends StructuredExtraction>(extraction: T, kind: strin
 export const bodyKindOf = (extraction: StructuredExtraction): string | undefined => getTag(extraction, 'bodyKind') as string | undefined;
 
 export function detectStructuredFamily(input: string): StructuredFamily | null {
-  if (/^CEF:\d+\|/u.test(input)) return 'cef';
+  // One space after the colon is the form Fortinet documents for FortiGate ("CEF: 0|"); nothing else is CEF.
+  if (/^CEF: ?\d+\|/u.test(input)) return 'cef';
   if (/^LEEF:(?:1\.0|2\.0)\|/u.test(input)) return 'leef';
   // An RFC 5424 shaped header is labelled RFC 5424 only for a VERSION the contract supports.
   const ietf = /^<\d{1,3}>([1-9]\d?) [^ \t\n\r\f\v]+ [^ \t\n\r\f\v]+ [^ \t\n\r\f\v]+ /u.exec(input);
@@ -45,7 +47,11 @@ export function detectStructuredFamily(input: string): StructuredFamily | null {
   // Detection is syntax only on the first line, like the PRI check above;
   // calendar and PRI range errors are reported by extraction.
   const first = input.split(/\r?\n/u, 1)[0] ?? '';
-  const bsd = matchHeaderRule('rfc3164_tagged', first) ? null
+  const tagged = matchHeaderRule('rfc3164_tagged', first);
+  // The tagged form without a PRI, like the forms without a TAG below, only before a structured body.
+  if (tagged && tagged.pri === undefined && matchesHeaderToken('STRUCTURED_BODY', tagged.message ?? ''))
+    return 'syslog_rfc3164';
+  const bsd = tagged && tagged.pri !== undefined ? null
     : matchHeaderRule('rfc3164_tagless', first) ?? matchHeaderRule('rfc3164_hostless', first);
   if (bsd && matchesHeaderToken('STRUCTURED_BODY', bsd.message ?? ''))
     return 'syslog_rfc3164';
@@ -110,7 +116,6 @@ const LEEF_DELIMITER_VERSIONS:readonly string[]=SYSLOG_HEADER_SEMANTICS.leefDeli
 const LEEF_DELIMITER=new RegExp(GRAMMAR_FRAGMENTS.leef_delimiter.source,'yu');
 const LEEF_EXTRA_DELIMITERS:readonly number[]=SYSLOG_HEADER_SEMANTICS.leefDelimiterExtraCodePoints;
 const LEEF_ATTRIBUTE=new RegExp(GRAMMAR_FRAGMENTS.leef_attribute.source,'yu');
-const FORBIDDEN_KEYS:readonly string[]=SYSLOG_HEADER_SEMANTICS.kvForbiddenKeys;
 /** A backslash pair listed in the contract is decoded; any other pair is kept as written. */
 const decodeCefValue=(raw:string):string=>raw.replace(CEF_ESCAPE,pair=>
   Object.prototype.hasOwnProperty.call(CEF_ESCAPES,pair[1]!)?CEF_ESCAPES[pair[1]!]!:pair);
@@ -121,8 +126,8 @@ function cefExtensionValues(input:string):StructuredExtraction{
     const match=matchAt(CEF_PAIR,input,cursor);
     if(!match)break;
     if(count++>=SYSLOG_HEADER_SEMANTICS.cefMaxExtensionFields)return failure('CEF extension field limit exceeded');
-    const key=match.groups!.key!;
-    if(FORBIDDEN_KEYS.includes(key))return failure('Unsupported CEF extension field');
+    // A name the JavaScript object model reserves is kept under its reversible field name (G-5).
+    const key=sourceFieldName(match.groups!.key!);
     if(Object.prototype.hasOwnProperty.call(values,key))return failure(duplicateFieldMessage(key));
     values[key]=decodeCefValue(match.groups!.value!);
     cursor=matchEnd(match);
@@ -165,7 +170,7 @@ function boundedJsonObject(text: string): StructuredExtraction {
       return failure('Unsafe JSON numeric precision: quote large identifiers as strings');
     if (!jsonSourceValueValid(parsed))
       return failure('RFC5424 JSON body exceeds native nesting depth or contains invalid Unicode');
-    return { fields: parsed as Record<string, unknown>, errors: [] };
+    return { fields: withSourceFieldNames(parsed) as Record<string, unknown>, errors: [] };
   } catch {
     return failure('RFC5424 JSON body is not valid JSON');
   }
@@ -220,6 +225,42 @@ function parseRfc3164Strict(input:string,choice:'raw'|'json'|'kv'|'cef'|'leef'|'
  return result;
 }
 
+// A bare <PRI> before a standalone CEF or LEEF event (`<189>CEF:0|...`, FortiGate `<189>CEF: 0|...`). It is not an
+// RFC 3164 record (no TIMESTAMP, no HOSTNAME), so the RFC 3164 reader does not take it. The prefix qualifies only
+// when it is a PRI of the shared contract (token PRI, value at most priMax), blanks may follow (as in the Python
+// security envelope, PRI_HEADER), and the rest begins with the CEF or LEEF signature; the rest must then be an event
+// the CEF or LEEF grammar reads (extractStandaloneFamily).
+const PRI_ONLY_PREFIX = new RegExp('^<(' + SYSLOG_HEADER_TOKENS.PRI + ')>[ \\t]*', 'u');
+export function priOnlyPrefix(input: string): { pri: number; end: number; family: 'cef' | 'leef' } | null {
+  const match = PRI_ONLY_PREFIX.exec(input);
+  if (match === null) return null;
+  const pri = Number(match[1]);
+  if (pri > SYSLOG_HEADER_SEMANTICS.priMax) return null;
+  const end = match[0].length;
+  const rest = input.slice(end);
+  if (rest.startsWith('CEF:')) return { pri, end, family: 'cef' };
+  if (rest.startsWith('LEEF:')) return { pri, end, family: 'leef' };
+  return null;
+}
+
+/**
+ * A standalone CEF or LEEF event, optionally after a bare PRI (priOnlyPrefix). With a PRI the event is read like a
+ * Syslog envelope with a CEF/LEEF body: the PRI is the field syslog_pri and the CEF/LEEF fields are under `body`, so
+ * no extension key can collide with the PRI and the CEF/LEEF loss guard reads the body text. Bodies inside an
+ * RFC 3164 or RFC 5424 message never take this path.
+ */
+export function extractStandaloneFamily(input: string, format: 'cef' | 'leef'): StructuredExtraction {
+  const prefix = priOnlyPrefix(input);
+  if (prefix === null) return extractStructuredFamily(input, format);
+  if (prefix.family !== format) return failure(format === 'cef' ? 'A LEEF event is not a CEF event' : 'A CEF event is not a LEEF event');
+  const text = input.slice(prefix.end);
+  const nested = extractStructuredFamily(text, format);
+  if (nested.errors.length > 0) return nested;
+  const result = withBodyKind({ fields: { syslog_pri: prefix.pri, body: nested.fields }, errors: [] }, format);
+  setTag(result, 'bodyText', text);
+  return result;
+}
+
 export function extractStructuredFamily(input: string, format: StructuredFamily, bodyFormat: 'raw' | 'json' | 'kv' | 'cef' | 'leef' | 'regex' | 'auto' = 'raw', regexPattern?:string): StructuredExtraction {
   if (input.includes('\n') || input.includes('\r')) return failure('Only one logical record per physical line is supported for pairing.');
   if (format === 'syslog_rfc3164')return parseRfc3164Strict(input,bodyFormat,regexPattern);
@@ -250,7 +291,9 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
   }
   if (format === 'cef') {
     // dotAll: a value may hold U+2028/U+2029, which '.' alone excludes in ECMAScript but not in Ruby or Python.
-    const match = /^CEF:(\d+)\|(.*)$/su.exec(input);
+    // "CEF: 0|" (one space after the colon) is the FortiGate form (Fortinet Log Message Reference); the version
+    // itself has no space.
+    const match = /^CEF: ?(\d+)\|(.*)$/su.exec(input);
     if (!match || !CEF_VERSIONS.includes(match[1]!)) return failure('Only standalone CEF version zero events are supported');
     const parts = splitEscaped(match[2], '|', 6);
     if (!parts) return failure('CEF requires six header fields and an extension slot');
@@ -286,8 +329,10 @@ export function extractStructuredFamily(input: string, format: StructuredFamily,
   if (parts[parts.length - 1]) {
     for (const part of parts[parts.length - 1].split(delimiter)) {
       const attribute = matchAt(LEEF_ATTRIBUTE, part, 0);
-      const key = attribute?.groups!.key;
-      if (!attribute || key === undefined || FORBIDDEN_KEYS.includes(key)) return failure('Unsupported LEEF extension token');
+      const name = attribute?.groups!.key;
+      if (!attribute || name === undefined) return failure('Unsupported LEEF extension token');
+      // A name the JavaScript object model reserves is kept under its reversible field name (G-5).
+      const key = sourceFieldName(name);
       if (Object.prototype.hasOwnProperty.call(record, key)) return failure(duplicateFieldMessage(key));
       record[key] = part.slice(matchEnd(attribute));
     }

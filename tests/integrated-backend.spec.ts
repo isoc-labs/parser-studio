@@ -59,6 +59,24 @@ async function verifyGeneratedDraftPair(
   return pair;
 }
 
+// The Auto Parser routes a mixed sample by reading family (@reading_family): every family gets its official fields.
+// Recipe v0.2 cannot represent per-event routing, so no staged recipe is reviewed for such a draft; the routed
+// project itself is what the backend validates and compiles (CI 45170112223, local Chromium run f23).
+type RoutedBody={recipe?:unknown;normalization?:{eventProfiles?:{discriminator?:string;variants?:Array<{equals:string}>}};
+  project?:{normalization?:{eventProfiles?:{discriminator?:string;variants?:Array<{equals:string}>}}}};
+function expectRoutedMixedProject(bodies:readonly string[],families:readonly string[]){
+  const parsed=bodies.map(body=>JSON.parse(body) as RoutedBody);
+  const routed=parsed.map(body=>body.project??body).filter(body=>body.normalization?.eventProfiles);
+  expect(routed.length).toBeGreaterThanOrEqual(2);
+  for(const project of routed){
+    expect(project.normalization?.eventProfiles?.discriminator).toBe('@reading_family');
+    expect(project.normalization?.eventProfiles?.variants?.map(variant=>variant.equals).sort()).toEqual([...families].sort());
+  }
+  expect(parsed.filter(body=>body.recipe).length).toBe(0);
+  // The validate and generate requests carry the routed project; nothing else is posted to the pair API.
+  expect(routed.length).toBe(bodies.length);
+}
+
 test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target APIs isolated',()=>{
   test.skip(process.env.PARSER_STUDIO_LIVE_BACKEND!=='1',
     'Real integration requires an exact backend HEAD checkout and localhost isolation.');
@@ -369,7 +387,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     expect(rubyCheck?.content).toContain('STELLAR_PARSE_BEGIN');
     expect(rubyCheck?.content).toContain('STELLAR_PARSE_END');
     await expect(page.getByRole('button',{name:'Review Staged Recipe'})).toHaveCount(0);
-    expect(actualBodies.length).toBeGreaterThanOrEqual(4);
+    expectRoutedMixedProject(actualBodies,['json','rfc5424_cef','rfc5424_leef']);
   });
 
   test('P0 strict mixed RFC3164 TAG KV plus standalone JSON/KV compiles exact pinned backend without timestamp guessing',async({page})=>{
@@ -408,13 +426,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     expect(rubyCheck?.content).toContain('STELLAR_PARSE_BEGIN');
     expect(rubyCheck?.content).toContain('STELLAR_PARSE_END');
     await expect(page.getByRole('button',{name:'Review Staged Recipe'})).toHaveCount(0);
-    const reviewedRequests=payloads
-      .map(body=>JSON.parse(body) as {recipe?:{stages?:Array<{op:string;families?:string[]}>}})
-      .filter(body=>body.recipe?.stages?.length);
-    expect(reviewedRequests.length).toBeGreaterThanOrEqual(2);
-    expect(reviewedRequests[0]?.recipe?.stages?.find(stage=>
-      stage.op==='dispatch_family')?.families).toEqual(['json','kv','rfc3164_kv']);
-    expect(payloads.length).toBeGreaterThanOrEqual(4);
+    expectRoutedMixedProject(payloads,['json','kv','rfc3164_kv']);
   });
 
   test('P0 strict RFC5424 JSON/KV wrapped + standalone JSON/KV mixed compiles exact Native-qualified backend',async({page})=>{
@@ -453,12 +465,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     expect(rubyCheck?.content).toContain('STELLAR_PARSE_BEGIN');
     expect(rubyCheck?.content).toContain('STELLAR_PARSE_END');
     await expect(page.getByRole('button',{name:'Review Staged Recipe'})).toHaveCount(0);
-    const actual=payloads.map(body=>JSON.parse(body) as {
-      recipe?:{stages?:Array<{op:string;families?:string[]}>}}).filter(x=>x.recipe?.stages?.length);
-    expect(actual.length).toBeGreaterThanOrEqual(2);
-    expect(actual[0]?.recipe?.stages?.find(x=>x.op==='dispatch_family')?.families)
-      .toEqual(['json','kv','rfc5424_json','rfc5424_kv']);
-    expect(payloads.length).toBeGreaterThanOrEqual(4);
+    expectRoutedMixedProject(payloads,['json','kv','rfc5424_json','rfc5424_kv']);
   });
 
   test('P0 strict RFC3164 wrapped CEF/LEEF + standalone JSON/KV compiles actual Native-qualified backend with yearless policy',async({page})=>{
@@ -499,12 +506,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     expect(rubyCheck?.content).toContain('STELLAR_PARSE_BEGIN');
     expect(rubyCheck?.content).toContain('STELLAR_PARSE_END');
     await expect(page.getByRole('button',{name:'Review Staged Recipe'})).toHaveCount(0);
-    const requests=bodies.map(body=>JSON.parse(body) as {
-      recipe?:{stages?:Array<{op:string;families?:string[]}>}}).filter(x=>x.recipe?.stages?.length);
-    expect(requests.length).toBeGreaterThanOrEqual(2);
-    expect(requests[0]?.recipe?.stages?.find(x=>x.op==='dispatch_family')?.families)
-      .toEqual(['json','kv','rfc3164_cef','rfc3164_leef']);
-    expect(bodies.length).toBeGreaterThanOrEqual(4);
+    expectRoutedMixedProject(bodies,['json','kv','rfc3164_cef','rfc3164_leef']);
   });
 
   test('P0 novice confirms strict LF LF framed TCP Java exceptions and generates exact backend DRAFT files',async({page,request})=>{
@@ -833,6 +835,33 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     ]);
     await expect(page.getByRole('complementary',{name:'Parser Studio navigation'})
       .locator('button.rail-link')).toHaveCount(2);
+  });
+
+  test('Map Fields source tree supports an explicit Stellar selection and a same-head Ruby/CONF DRAFT',async({page})=>{
+    const source='{"src_ip":"192.0.2.10","dst_ip":"198.51.100.20","action":"deny"}';
+    await page.goto('/');
+    await page.getByLabel('Auto Parser raw logs').fill(source);
+    await analyzeAndReview(page);
+    await page.getByLabel('Review Fields stage').getByRole('button',{name:'Map Fields'}).click();
+    const map=page.getByLabel('Map Fields stage');
+    await expect(map.getByRole('region',{name:'Source fields'})).toBeVisible();
+    await map.getByRole('button',{name:'src_ip',exact:true}).click();
+    const row=map.locator('[data-source-path="src_ip"]');
+    await expect(row).toHaveClass(/selected-source/);
+    await row.getByRole('button',{name:'Choose Stellar field'}).click();
+    await map.getByLabel('Search Stellar field list').fill('srcip');
+    await map.getByLabel('Stellar field chooser').getByRole('button',{name:'Use'}).first().click();
+    await expect(map.getByLabel('Field changes only')).toContainText('192.0.2.10');
+    await expect(map.getByLabel('Final event preview')).toContainText('192.0.2.10');
+    await map.getByRole('button',{name:'Create Parser'}).click();
+    const generated=page.waitForResponse(r=>r.url().endsWith('/parser-pairs/generate')&&
+      r.request().method()==='POST');
+    await page.getByRole('button',{name:'Create Parser Files'}).click();
+    expect((await generated).status()).toBe(200);
+    const pair=await verifyGeneratedDraftPair(page,generated);
+    expect(pair.files.some(file=>file.name.endsWith('.conf'))).toBe(true);
+    expect(pair.files.some(file=>file.name.endsWith('.conf')&&file.content.length>0)).toBe(true);
+    expect(pair.files.some(file=>!file.name.endsWith('.conf')&&file.content.includes('STELLAR_PARSE_BEGIN'))).toBe(true);
   });
 
 

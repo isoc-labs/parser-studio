@@ -26,22 +26,17 @@ end
 
 # src/grammar/syslogHeader.ts: COMPILED_RULES
 def psg_k_compiled_rules
-  @psg_k_compiled_rules ||= {'rfc3164_tagged' => /\A<(?<pri>[0-9]{1,3})>(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.\-]{0,95})(?:\[(?<procid>[0-9]{1,8})\])?:[ ]+(?<message>[^\r\n]+)\z/, 'rfc3164_tagless' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\r\n]+)\z/, 'rfc3164_hostless' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)[^\r\n]*)\z/, 'rfc5424' => /\A<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\r\n]+)\z/}
+  @psg_k_compiled_rules ||= {'rfc3164_tagged' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?!(?:(?:CEF|LEEF))(?:(?:[ \t]))*:(?:(?:[ \t]))*(?:[0-9]))(?<tag>[A-Za-z_][A-Za-z0-9_.\-]{0,95})(?:\[(?<procid>[0-9]{1,8})\])?:[ ]+(?<message>[^\r\n]+)\z/, 'rfc3164_tagless' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\r\n]+)\z/, 'rfc3164_hostless' => /\A(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)[^\r\n]*)\z/, 'rfc5424' => /\A<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\r\n]+)\z/}
+end
+
+# src/grammar/syslogHeader.ts: COMPILED_TOKENS
+def psg_k_compiled_tokens
+  @psg_k_compiled_tokens ||= {'PRI' => /\A(?:[0-9]{1,3})\z/, 'BSD_MONTH' => /\A(?:[A-Z][a-z]{2})\z/, 'BSD_DAY' => /\A(?:[0-9]{1,2})\z/, 'CLOCK2' => /\A(?:[0-9]{2})\z/, 'BSD_HOSTNAME' => /\A(?:(?!\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])\z/, 'TAG' => /\A(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95})\z/, 'PROCID_NUM' => /\A(?:[0-9]{1,8})\z/, 'REST' => /\A(?:[^\r\n]+)\z/, 'STRUCTURED_BODY' => /\A(?:(?:\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)[^\r\n]*)\z/, 'RFC5424_VERSION' => /\A(?:[1-9][0-9]{0,2})\z/, 'RFC5424_TIMESTAMP' => /\A(?:[!-~]{1,64})\z/, 'RFC5424_HOSTNAME' => /\A(?:[!-~]{1,255})\z/, 'RFC5424_APPNAME' => /\A(?:[!-~]{1,48})\z/, 'RFC5424_PROCID' => /\A(?:[!-~]{1,128})\z/, 'RFC5424_MSGID' => /\A(?:[!-~]{1,32})\z/, 'KV_GAP' => /\A(?:[ \t]*)\z/, 'KV_KEY' => /\A(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95})\z/, 'KV_DQ' => /\A(?:(?:\\[^\r\n]|[^"\\])*)\z/, 'KV_SQ' => /\A(?:(?:\\[^\r\n]|[^'\\])*)\z/, 'KV_BARE' => /\A(?:(?:\\[^ \t\n\r\f\x0b\x1c-\x1f]|[^ \t\n\r\f\x0b\x1c-\x1f"'\\]|\\)+)\z/, 'KV_LIST_BARE' => /\A(?:[^ \t\n\r\f\x0b\x1c-\x1f"',;|=]+)\z/, 'KV_LIST_DQ' => /\A(?:[^"]*)\z/, 'KV_LIST_SQ' => /\A(?:[^']*)\z/, 'KV_LIST_DELIMITER' => /\A(?:[,;|])\z/, 'KV_TRAILING' => /\A(?:[ \t\n\r\f\x0b]*)\z/, 'RFC3339_DATE_PREFIX' => /\A(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T)\z/, 'FAMILY_NAME' => /\A(?:(?:CEF|LEEF))\z/, 'ASCII_DIGIT' => /\A(?:[0-9])\z/, 'CEF_KEY' => /\A(?:[A-Za-z_][A-Za-z0-9_.\-]{0,127})\z/, 'LEEF_KEY' => /\A(?:[A-Za-z_][A-Za-z0-9_.\-]*)\z/, 'CEF_WS' => /\A(?:[ \t])\z/, 'CEF_WS_RUN' => /\A(?:[ \t]+)\z/, 'CEF_NOT_WS' => /\A(?:[^ \t])\z/, 'CEF_ESCAPE' => /\A(?:\\[^ \t])\z/, 'CEF_PLAIN' => /\A(?:[^\\ \t])\z/, 'CEF_BACKSLASH' => /\A(?:\\)\z/, 'LEEF_DELIMITER_LITERAL' => /\A(?:[\t!-<>-\[\]-~])\z/, 'LEEF_HEX_DIGITS' => /\A(?:[0-9A-Fa-f]{1,4})\z/}
 end
 
 # src/grammar/extractEvent.ts: CSV_DELIMITERS
 def psg_k_csv_delimiters
   @psg_k_csv_delimiters ||= [',', ';', "\u{9}"]
-end
-
-# src/grammar/kvBody.ts: FORBIDDEN
-def psg_k_forbidden
-  @psg_k_forbidden ||= ['__proto__', 'constructor', 'prototype']
-end
-
-# src/structuredFamilies.ts: FORBIDDEN_KEYS
-def psg_k_forbidden_keys
-  @psg_k_forbidden_keys ||= ['__proto__', 'constructor', 'prototype']
 end
 
 # src/grammar/lossGuard.ts: JSON_ESCAPES
@@ -79,6 +74,11 @@ def psg_k_mixed_families
   @psg_k_mixed_families ||= ['json', 'kv', 'cef', 'leef', 'rfc5424_cef', 'rfc5424_leef', 'rfc3164_kv', 'rfc5424_json', 'rfc5424_kv', 'rfc3164_cef', 'rfc3164_leef', 'csv']
 end
 
+# src/grammar/sourceFieldNames.ts: RESERVED
+def psg_k_reserved
+  @psg_k_reserved ||= ['__proto__', 'constructor', 'prototype']
+end
+
 # src/grammar/syslogHeaderGrammar.generated.ts: SYSLOG_HEADER_ALTERNATIVES
 def psg_k_syslog_header_alternatives
   @psg_k_syslog_header_alternatives ||= {'rfc3164' => ['rfc3164_tagged', 'rfc3164_tagless', 'rfc3164_hostless']}
@@ -86,7 +86,7 @@ end
 
 # src/grammar/syslogHeaderGrammar.generated.ts: SYSLOG_HEADER_RULES
 def psg_k_syslog_header_rules
-  @psg_k_syslog_header_rules ||= {'rfc3164_tagged' => {'source' => '^<(?<pri>[0-9]{1,3})>(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'hostname', 'tag', 'procid', 'message']}, 'rfc3164_tagless' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'hostname', 'message']}, 'rfc3164_hostless' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'message']}, 'rfc5424' => {'source' => '^<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\\r\\n]+)$', 'captures' => ['pri', 'version', 'timestamp', 'hostname', 'appname', 'procid', 'msgid', 'rest']}}
+  @psg_k_syslog_header_rules ||= {'rfc3164_tagged' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?!(?:(?:CEF|LEEF))(?:(?:[ \\t]))*:(?:(?:[ \\t]))*(?:[0-9]))(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'hostname', 'tag', 'procid', 'message']}, 'rfc3164_tagless' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<message>[^\\r\\n]+)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'hostname', 'message']}, 'rfc3164_hostless' => {'source' => '^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<message>(?:\\{|CEF:|LEEF:|[A-Za-z_][A-Za-z0-9_.-]{0,95}=)[^\\r\\n]*)$', 'captures' => ['pri', 'month', 'day', 'hour', 'minute', 'second', 'message']}, 'rfc5424' => {'source' => '^<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?<timestamp>[!-~]{1,64})[ ](?<hostname>[!-~]{1,255})[ ](?<appname>[!-~]{1,48})[ ](?<procid>[!-~]{1,128})[ ](?<msgid>[!-~]{1,32})[ ](?<rest>[^\\r\\n]+)$', 'captures' => ['pri', 'version', 'timestamp', 'hostname', 'appname', 'procid', 'msgid', 'rest']}}
 end
 
 # src/grammar/syslogHeaderGrammar.generated.ts: SYSLOG_HEADER_SEMANTICS
@@ -121,7 +121,7 @@ def psg_bounded_json_object(text)
     if !psg_json_source_value_valid(parsed)
       return psg_failure_2('RFC5424 JSON body exceeds native nesting depth or contains invalid Unicode')
     end
-    return {'fields' => parsed, 'errors' => []}
+    return {'fields' => psg_with_source_field_names(parsed), 'errors' => []}
   rescue StandardError
     return psg_failure_2('RFC5424 JSON body is not valid JSON')
   end
@@ -163,7 +163,7 @@ def psg_cef_event_unaccounted(text, fields)
       return 'text of the CEF extension is not part of any extracted field'
     end
     cursor += 1
-    value = (psg_k_cef_header_fields.include?(key) ? nil : fields[key])
+    value = (psg_k_cef_header_fields.include?(key) ? nil : fields[psg_source_field_name(key)])
     if !value.is_a?(String)
       return 'a key=value pair of the CEF extension is missing from the extracted fields'
     end
@@ -232,10 +232,7 @@ def psg_cef_extension_values(input)
     if (((count += 1) - 1) >= 1024)
       return psg_failure_2('CEF extension field limit exceeded')
     end
-    key = psg_group(match, 'key')
-    if psg_k_forbidden_keys.include?(key)
-      return psg_failure_2('Unsupported CEF extension field')
-    end
+    key = psg_source_field_name(psg_group(match, 'key'))
     if values.key?(key)
       return psg_failure_2(psg_duplicate_field_message(key))
     end
@@ -274,15 +271,16 @@ def psg_classify_structured_parse(raw, outcome, bodyFormat)
   psg_collect_leaves(scope, '', leaves)
   taken = {}
   lostPairs = psg_filter(psg_independent_key_value_pairs(raw), lambda { |pair|
-  values = consumed = at = nil
-  values = (psg_null?(psg_t1 = leaves[pair['key']]) ? [] : psg_t1)
-  consumed = (psg_null?(psg_t2 = taken[pair['key']]) ? {} : psg_t2)
+  field = values = consumed = at = nil
+  field = psg_source_field_name(pair['key'])
+  values = (psg_null?(psg_t1 = leaves[field]) ? [] : psg_t1)
+  consumed = (psg_null?(psg_t2 = taken[field]) ? {} : psg_t2)
   at = psg_find_index(values, lambda { |value, index| (!consumed.key?(index) && (pair['quoted'] ? (((value == pair['value']) || (value == pair['rawValue'])) || (psg_join(psg_split(value, '\\'), '') == psg_join(psg_split(pair['rawValue'], '\\'), ''))) : (value == pair['rawValue']))) })
   if (at < 0)
     return true
   end
   consumed[at] = true
-  taken[pair['key']] = consumed
+  taken[field] = consumed
   return false
 })
   if ((lostPairs.length > 0) || (headerReasons.length > 0))
@@ -415,7 +413,7 @@ def psg_count_json_value_tokens(value, counts)
   end
   if (!value.equal?(:psg_null) && (psg_typeof(value) == 'object'))
     psg_entries(value).each do |(name, item_2)|
-      psg_bump(counts, ('s:' + name), (-1))
+      psg_bump(counts, ('s:' + psg_original_field_name(name)), (-1))
       psg_count_json_value_tokens(item_2, counts)
     end
     return nil
@@ -537,7 +535,7 @@ def psg_extract_event(raw, settings)
     return psg_extract_structured_family(raw, v_format, (psg_null?(psg_t3 = settings['syslogBodyFormat']) ? 'raw' : psg_t3), settings['pattern'])
   end
   if ((v_format == 'cef') || (v_format == 'leef'))
-    return psg_extract_structured_family(raw, v_format)
+    return psg_extract_standalone_family(raw, v_format)
   end
   if (v_format == 'regex')
     return psg_x_portable_regex_fields(raw, (psg_null?(psg_t4 = settings['pattern']) ? '' : psg_t4))
@@ -562,7 +560,7 @@ def psg_extract_json_object(raw)
     if !psg_json_source_value_valid(parsed)
       return psg_failure('JSON source exceeds the native nesting limit or has an invalid Unicode surrogate')
     end
-    result = {'fields' => parsed, 'errors' => []}
+    result = {'fields' => psg_with_source_field_names(parsed), 'errors' => []}
     psg_set_tag(result, 'bodyKind', 'json')
     return result
   rescue StandardError
@@ -594,7 +592,7 @@ def psg_extract_mixed(raw, settings)
     if ((!psg_t(body) || !psg_t(mode)) || !selected.include?(mode))
       return psg_failure((bsdEnvelope ? 'RFC3164 TAG body is unsupported or not allowlisted' : 'Wrapped Syslog is malformed or not in mixed allowlist'))
     end
-    return psg_extract_structured_family(raw, grammar, body)
+    return psg_mixed_family(psg_extract_structured_family(raw, grammar, body), mode)
   end
   columns = (psg_null?(psg_t2 = settings['csvColumns']) ? [] : psg_t2)
   delimiter = (psg_null?(psg_t3 = settings['csvDelimiter']) ? ',' : psg_t3)
@@ -603,20 +601,40 @@ def psg_extract_mixed(raw, settings)
     return psg_failure('Mixed event is unsupported or excluded by allowlist')
   end
   if (family == 'kv')
-    return psg_strict_key_values(raw)
+    return psg_mixed_family(psg_strict_key_values(raw), family)
   end
   if (family == 'csv')
-    return psg_extract_csv_row(raw, columns, delimiter)
+    return psg_mixed_family(psg_extract_csv_row(raw, columns, delimiter), family)
   end
   if (family == 'json')
-    return psg_extract_json_object(raw)
+    return psg_mixed_family(psg_extract_json_object(raw), family)
   end
-  return psg_extract_structured_family(raw, family)
+  return psg_mixed_family(psg_extract_structured_family(raw, family), family)
+end
+
+# src/structuredFamilies.ts: extractStandaloneFamily
+def psg_extract_standalone_family(input, v_format)
+  prefix = text = nested = result = nil
+  prefix = psg_pri_only_prefix(input)
+  if prefix.equal?(:psg_null)
+    return psg_extract_structured_family(input, v_format)
+  end
+  if (prefix['family'] != v_format)
+    return psg_failure_2(((v_format == 'cef') ? 'A LEEF event is not a CEF event' : 'A CEF event is not a LEEF event'))
+  end
+  text = psg_slice(input, prefix['end'])
+  nested = psg_extract_structured_family(text, v_format)
+  if (nested['errors'].length > 0)
+    return nested
+  end
+  result = psg_with_body_kind({'fields' => {'syslog_pri' => prefix['pri'], 'body' => nested['fields']}, 'errors' => []}, v_format)
+  psg_set_tag(result, 'bodyText', text)
+  return result
 end
 
 # src/structuredFamilies.ts: extractStructuredFamily
 def psg_extract_structured_family(input, v_format, bodyFormat = nil, regexPattern = nil)
-  scanned = body = bodyKind = mode = nested = result = match = parts = record = extension = match_2 = carriesDelimiter = headerFields = parts_2 = delimiter = record_2 = attribute = key = nil
+  scanned = body = bodyKind = mode = nested = result = match = parts = record = extension = match_2 = carriesDelimiter = headerFields = parts_2 = delimiter = record_2 = attribute = name = key = nil
   bodyFormat = 'raw' if bodyFormat.nil?
   if (input.include?("\u{a}") || input.include?("\u{d}"))
     return psg_failure_2('Only one logical record per physical line is supported for pairing.')
@@ -653,7 +671,7 @@ def psg_extract_structured_family(input, v_format, bodyFormat = nil, regexPatter
     return result
   end
   if (v_format == 'cef')
-    match = (/\ACEF:([0-9]+)\|((?m:.)*)\z/.match(input) || :psg_null)
+    match = (/\ACEF: ?([0-9]+)\|((?m:.)*)\z/.match(input) || :psg_null)
     if (!psg_t(match) || !psg_k_cef_versions.include?(match[1]))
       return psg_failure_2('Only standalone CEF version zero events are supported')
     end
@@ -694,10 +712,11 @@ def psg_extract_structured_family(input, v_format, bodyFormat = nil, regexPatter
   if psg_t(psg_at(parts_2, (parts_2.length - 1)))
     psg_split(psg_at(parts_2, (parts_2.length - 1)), delimiter).each do |part|
       attribute = psg_match_at(/\G(?:(?<key>[A-Za-z_][A-Za-z0-9_.\-]*)=)/, part, 0)
-      key = psg_group(attribute, 'key')
-      if ((!psg_t(attribute) || key.nil?) || psg_k_forbidden_keys.include?(key))
+      name = psg_group(attribute, 'key')
+      if (!psg_t(attribute) || name.nil?)
         return psg_failure_2('Unsupported LEEF extension token')
       end
+      key = psg_source_field_name(name)
       if record_2.key?(key)
         return psg_failure_2(psg_duplicate_field_message(key))
       end
@@ -719,7 +738,7 @@ end
 
 # src/grammar/readEvent.ts: gradeExtraction
 def psg_grade_extraction(raw, settings, extraction)
-  keyValueBody = verdict = reason = nil
+  keyValueBody = verdict = reason = claim = nil
   if (settings['format'] == 'generic_structural')
     return psg_classify_generic_structural(raw, extraction)
   end
@@ -729,7 +748,14 @@ def psg_grade_extraction(raw, settings, extraction)
     return verdict
   end
   reason = psg_unaccounted_text(raw, settings, extraction)
-  return (reason.equal?(:psg_null) ? verdict : {'status' => 'PARTIAL', 'lostPairs' => [], 'reasons' => [reason]})
+  if !reason.equal?(:psg_null)
+    return {'status' => 'PARTIAL', 'lostPairs' => [], 'reasons' => [reason]}
+  end
+  claim = psg_malformed_family_claim(settings, extraction)
+  if (claim == '')
+    return verdict
+  end
+  return {'status' => 'PARTIAL', 'lostPairs' => [], 'textKept' => true, 'reasons' => [(((('the message claims to be ' + claim) + ' but has no valid ') + claim) + ' header; it is kept as text')]}
 end
 
 # src/jsonDuplicateKeys.ts: hasDuplicateJsonObjectKeys
@@ -842,12 +868,16 @@ end
 
 # src/grammar/lossGuard.ts: headerEnd
 def psg_header_end(text, prefix, names, fields)
-  version = cursor = index = field = nil
+  version = lead = cursor = index = field = nil
   version = fields[names[0]]
-  if (!version.is_a?(String) || !text.start_with?(((prefix + version) + '|')))
+  if !version.is_a?(String)
     return (-1)
   end
-  cursor = ((psg_len(prefix) + psg_len(version)) + 1)
+  lead = (text.start_with?(((prefix + version) + '|')) ? prefix : (((prefix == 'CEF:') && text.start_with?((((prefix + ' ') + version) + '|'))) ? (prefix + ' ') : :psg_null))
+  if lead.equal?(:psg_null)
+    return (-1)
+  end
+  cursor = ((psg_len(lead) + psg_len(version)) + 1)
   index = 1
   while (index < names.length)
     field = psg_header_field_at(text, cursor)
@@ -890,38 +920,10 @@ end
 
 # src/grammar/parseStatus.ts: independentKeyValuePairs
 def psg_independent_key_value_pairs(raw)
-  pairs = length = index = key = quote = cursor = rawValue = value = v_end = value_2 = nil
-  pairs = []
-  length = psg_len(raw)
-  index = psg_positional_header_end(raw)
-  while (index < length)
-    index = psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, index))
-    if (index >= length)
-      break
-    end
-    key = psg_match_at(/\G(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)/, raw, index)
-    if psg_t(key)
-      index += psg_len(key[0])
-      quote = psg_at(raw, index)
-      if ((quote == '"') || (quote == '\''))
-        cursor = psg_closing_quote(raw, quote, (index + 1))
-        if (cursor >= 0)
-          rawValue = psg_slice(raw, (index + 1), cursor)
-          value = (rawValue.include?('\\') ? psg_replace(rawValue, /\\(?m:.)/, true, lambda { |pair| psg_slice(pair, 1) }) : rawValue)
-          pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value, 'rawValue' => rawValue, 'quoted' => true})
-          index = (cursor + 1)
-          next
-        end
-      end
-      v_end = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
-      value_2 = psg_slice(raw, index, v_end)
-      pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value_2, 'rawValue' => value_2, 'quoted' => false})
-      index = v_end
-      next
-    end
-    index = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
-  end
-  return pairs
+  bareGaps = whole = nil
+  bareGaps = []
+  whole = psg_read_raw_pairs(raw, false, bareGaps)
+  return ((bareGaps.length > 0) ? whole : psg_read_raw_pairs(raw, true, bareGaps))
 end
 
 # src/guided/declaredForwarder.ts: inspectDeclaredForwarders
@@ -963,6 +965,44 @@ def psg_inspect_declared_forwarders(raw, config = nil)
     i += 1
   end
   return (psg_t(hops.length) ? {'status' => 'UNWRAPPED', 'payload' => text, 'payloadStartByte' => startByte, 'hops' => hops, 'reason' => 'DECLARED_SYSLOG_RELAY'} : direct)
+end
+
+# src/grammar/kvBody.ts: isDelimitedPairList
+def psg_is_delimited_pair_list(input)
+  delimiter = count = cursor = match = separator = found = nil
+  delimiter = ''
+  count = 0
+  cursor = 0
+  while (cursor <= psg_len(input))
+    match = psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)'|(?<bare>[^ \t\n\r\f\x0b\x1c-\x1f"',;|=]+)))/, input, cursor)
+    if (!psg_t(match) || (psg_match_end(match) <= cursor))
+      return false
+    end
+    count += 1
+    if (count > 100)
+      return true
+    end
+    cursor = psg_match_end(match)
+    if /\A(?:[ \t\n\r\f\x0b]*)\z/.match?(psg_slice(input, cursor))
+      return (count >= 2)
+    end
+    separator = psg_match_at(/\G(?:(?<delimiter>[,;|]))/, input, cursor)
+    if !psg_t(separator)
+      return false
+    end
+    found = psg_group(separator, 'delimiter')
+    if ((delimiter != '') && (found != delimiter))
+      return false
+    end
+    delimiter = found
+    cursor = psg_match_end(separator)
+  end
+  return false
+end
+
+# src/grammar/parseStatus.ts: isListDelimiter
+def psg_is_list_delimiter(ch)
+  return (((ch == ',') || (ch == ';')) || (ch == '|'))
 end
 
 # src/grammar/syslogHeader.ts: isSupportedRfc5424Version
@@ -1031,6 +1071,13 @@ def psg_json_text_unaccounted(text, fields)
   return :psg_null
 end
 
+# src/grammar/parseStatus.ts: keyStartsAt
+def psg_key_starts_at(raw, at, v_end)
+  key = nil
+  key = psg_match_at(/\G(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)/, raw, at)
+  return (!key.equal?(:psg_null) && (psg_match_end(key) <= v_end))
+end
+
 # src/structuredFamilies.ts: leefDelimiter
 def psg_leef_delimiter(field = nil)
   match = code = named = valid = nil
@@ -1090,7 +1137,7 @@ def psg_leef_event_unaccounted(text, fields)
       return 'text of the LEEF extension is not part of any extracted attribute'
     end
     cursor += 1
-    value = (psg_k_leef_header_fields.include?(key) ? nil : fields[key])
+    value = (psg_k_leef_header_fields.include?(key) ? nil : fields[psg_source_field_name(key)])
     if !value.is_a?(String)
       return 'an attribute of the LEEF extension is missing from the extracted fields'
     end
@@ -1113,6 +1160,33 @@ def psg_leef_event_unaccounted(text, fields)
   return ((fields.keys.length == (5 + seen)) ? :psg_null : 'an extracted field is not in the LEEF extension')
 end
 
+# src/grammar/readEvent.ts: malformedFamilyClaim
+def psg_malformed_family_claim(settings, extraction)
+  kind = message = start = text = claim = family = nil
+  if ((settings['format'] != 'syslog_rfc3164') && (settings['format'] != 'syslog_rfc5424'))
+    return ''
+  end
+  kind = psg_body_kind_of(extraction)
+  if (!kind.nil? && (kind != 'raw'))
+    return ''
+  end
+  message = extraction['fields']['message']
+  if !message.is_a?(String)
+    return ''
+  end
+  start = 0
+  while ((start < psg_len(message)) && (((psg_at(message, start) == "\u{feff}") || (psg_at(message, start) == ' ')) || (psg_at(message, start) == "\u{9}")))
+    start += 1
+  end
+  text = psg_slice(message, start)
+  claim = psg_match_at(/\G(?:(?<family>(?:CEF|LEEF))(?:(?:[ \t]))*:(?:(?:[ \t]))*(?:[0-9]))/, text, 0)
+  if claim.equal?(:psg_null)
+    return ''
+  end
+  family = ((psg_group(claim, 'family') == 'LEEF') ? 'leef' : 'cef')
+  return ((psg_extract_structured_family(text, family)['errors'].length > 0) ? psg_group(claim, 'family') : '')
+end
+
 # src/grammar/syslogHeader.ts: matchHeaderRule
 def psg_match_header_rule(rule, text)
   match = captures = nil
@@ -1133,6 +1207,9 @@ def psg_match_rfc3164_header(text)
   psg_k_syslog_header_alternatives['rfc3164'].each do |rule|
     captures = psg_match_header_rule(rule, text)
     if !psg_t(captures)
+      next
+    end
+    if (((rule == 'rfc3164_tagged') && captures['pri'].nil?) && !psg_matches_header_token('STRUCTURED_BODY', captures['message']))
       next
     end
     pri = (captures['pri'].nil? ? nil : psg_num(captures['pri']))
@@ -1165,6 +1242,37 @@ def psg_match_rfc5424_header(text)
     return {'ok' => false, 'reason' => 'VERSION_UNSUPPORTED'}
   end
   return {'ok' => true, 'pri' => pri, 'version' => captures['version'], 'timestamp' => captures['timestamp'], 'hostname' => captures['hostname'], 'appname' => captures['appname'], 'procid' => captures['procid'], 'msgid' => captures['msgid'], 'rest' => captures['rest']}
+end
+
+# src/grammar/syslogHeader.ts: matchesHeaderToken
+def psg_matches_header_token(token, text)
+  return psg_k_compiled_tokens[token].match?(text)
+end
+
+# src/grammar/extractEvent.ts: mixedFamily
+def psg_mixed_family(result, family)
+  if (result['errors'].length == 0)
+    psg_set_tag(result, 'mixedFamily', family)
+  end
+  return result
+end
+
+# src/grammar/sourceFieldNames.ts: needsRenaming
+def psg_needs_renaming(value)
+  record = nil
+  if value.is_a?(Array)
+    return psg_some(value, method(:psg_needs_renaming))
+  end
+  if (value.equal?(:psg_null) || !(psg_typeof(value) == 'object'))
+    return false
+  end
+  record = value
+  return psg_some(record.keys, lambda { |name| ((psg_source_field_name(name) != name) || psg_needs_renaming(record[name])) })
+end
+
+# src/grammar/sourceFieldNames.ts: originalFieldName
+def psg_original_field_name(name)
+  return (name.start_with?('parserstudio_key_') ? psg_slice(name, 17) : name)
 end
 
 # src/javaStacktrace.ts: parseJavaStacktrace
@@ -1257,22 +1365,27 @@ end
 
 # src/grammar/kvBody.ts: parseStrictKeyValues
 def psg_parse_strict_key_values(input)
-  pairs = seen = cursor = match = key = quoted = nil
+  pairs = seen = listed = cursor = separator = match = key = quoted = value = nil
   pairs = []
   seen = {}
+  listed = psg_is_delimited_pair_list(input)
   cursor = 0
   while (cursor < psg_len(input))
     if /\A(?:[ \t\n\r\f\x0b]*)\z/.match?(psg_slice(input, cursor))
       break
     end
-    match = psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>(?:\\[^\r\n]|[^"\\])*)"|'(?<sq>(?:\\[^\r\n]|[^'\\])*)'|(?<bare>(?:\\[^ \t\n\r\f\x0b\x1c-\x1f]|[^ \t\n\r\f\x0b\x1c-\x1f"'\\]|\\)+)))/, input, cursor)
+    if (listed && (pairs.length > 0))
+      separator = psg_match_at(/\G(?:(?<delimiter>[,;|]))/, input, cursor)
+      if !psg_t(separator)
+        return {'ok' => false, 'reason' => 'MALFORMED_PAIR'}
+      end
+      cursor = psg_match_end(separator)
+    end
+    match = (listed ? psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)'|(?<bare>[^ \t\n\r\f\x0b\x1c-\x1f"',;|=]+)))/, input, cursor) : psg_match_at(/\G(?:(?:[ \t]*)(?<key>[A-Za-z_][A-Za-z0-9_.\-]{0,95})=(?:"(?<dq>(?:\\[^\r\n]|[^"\\])*)"|'(?<sq>(?:\\[^\r\n]|[^'\\])*)'|(?<bare>(?:\\[^ \t\n\r\f\x0b\x1c-\x1f]|[^ \t\n\r\f\x0b\x1c-\x1f"'\\]|\\)+)))/, input, cursor))
     if (!psg_t(match) || (psg_match_end(match) <= cursor))
       return {'ok' => false, 'reason' => 'MALFORMED_PAIR'}
     end
-    key = psg_group(match, 'key')
-    if psg_k_forbidden.include?(key)
-      return {'ok' => false, 'reason' => 'FORBIDDEN_KEY', 'key' => key}
-    end
+    key = psg_source_field_name(psg_group(match, 'key'))
     if seen.key?(key)
       return {'ok' => false, 'reason' => 'DUPLICATE_KEY', 'key' => key}
     end
@@ -1281,7 +1394,8 @@ def psg_parse_strict_key_values(input)
     end
     seen[key] = true
     quoted = (psg_null?(psg_t1 = psg_group(match, 'dq')) ? psg_group(match, 'sq') : psg_t1)
-    pairs.push([key, (quoted.nil? ? (psg_null?(psg_t2 = psg_group(match, 'bare')) ? '' : psg_t2) : psg_unescape_kv_value(quoted))])
+    value = (quoted.nil? ? (psg_null?(psg_t2 = psg_group(match, 'bare')) ? '' : psg_t2) : psg_unescape_kv_value(quoted))
+    pairs.push([key, ((listed && !quoted.nil?) ? quoted : value)])
     cursor = psg_match_end(match)
   end
   return ((pairs.length > 0) ? {'ok' => true, 'pairs' => pairs} : {'ok' => false, 'reason' => 'NO_PAIRS'})
@@ -1316,23 +1430,108 @@ def psg_positional_header_end(raw)
   return psg_structured_data_end(raw, index)
 end
 
+# src/structuredFamilies.ts: priOnlyPrefix
+def psg_pri_only_prefix(input)
+  match = pri = v_end = rest = nil
+  match = (/\A<([0-9]{1,3})>[ \t]*/.match(input) || :psg_null)
+  if match.equal?(:psg_null)
+    return :psg_null
+  end
+  pri = psg_num(match[1])
+  if (pri > 191)
+    return :psg_null
+  end
+  v_end = psg_len(match[0])
+  rest = psg_slice(input, v_end)
+  if rest.start_with?('CEF:')
+    return {'pri' => pri, 'end' => v_end, 'family' => 'cef'}
+  end
+  if rest.start_with?('LEEF:')
+    return {'pri' => pri, 'end' => v_end, 'family' => 'leef'}
+  end
+  return :psg_null
+end
+
 # src/grammar/readEvent.ts: readEvent
 def psg_read_event(raw, settings)
-  relay = reason = source = extraction = verdict = nil
+  relay = reason = source = extraction = verdict = family = nil
   relay = psg_inspect_declared_forwarders(raw, settings['forwarder'])
   if (relay['status'] == 'ABSTAIN_UNSAFE')
     reason = ('The forwarded log cannot be safely unwrapped: ' + relay['reason'])
-    return {'fields' => {}, 'errors' => [reason], 'status' => 'UNKNOWN', 'reasons' => [reason], 'lostKeys' => [], 'forwarderHops' => []}
+    return {'fields' => {}, 'errors' => [reason], 'status' => 'UNKNOWN', 'reasons' => [reason], 'lostKeys' => [], 'forwarderHops' => [], 'family' => '', 'textKept' => false}
   end
   source = ((relay['status'] == 'UNWRAPPED') ? relay['payload'] : raw)
   extraction = psg_extract_event(source, settings)
   verdict = psg_grade_extraction(source, settings, extraction)
-  return {'fields' => extraction['fields'], 'errors' => extraction['errors'], 'status' => verdict['status'], 'reasons' => verdict['reasons'], 'lostKeys' => psg_map(verdict['lostPairs'], lambda { |pair| pair['key'] }), 'forwarderHops' => relay['hops']}
+  family = psg_get_tag(extraction, 'mixedFamily')
+  return {'fields' => extraction['fields'], 'errors' => extraction['errors'], 'status' => verdict['status'], 'reasons' => verdict['reasons'], 'lostKeys' => psg_map(verdict['lostPairs'], lambda { |pair| pair['key'] }), 'forwarderHops' => relay['hops'], 'family' => (family.is_a?(String) ? family : ''), 'textKept' => (verdict['textKept'] == true)}
+end
+
+# src/grammar/parseStatus.ts: readRawPairs
+def psg_read_raw_pairs(raw, split, bareGaps)
+  pairs = length = index = gapStart = tokenStart = key = quote = cursor = rawValue = value = v_end = stop = value_2 = nil
+  pairs = []
+  length = psg_len(raw)
+  index = psg_positional_header_end(raw)
+  while (index < length)
+    gapStart = index
+    index = psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, index))
+    if (index >= length)
+      break
+    end
+    tokenStart = ((index > gapStart) || (pairs.length == 0))
+    key = (tokenStart ? psg_match_at(/\G(?:[A-Za-z_][A-Za-z0-9_.\-]{0,95}=)/, raw, index) : psg_match_at(/\G(?:[^ \t\n\x0b\f\r,;|="']+=)/, raw, index))
+    if psg_t(key)
+      if (((index > gapStart) && (pairs.length > 0)) && !psg_is_list_delimiter(psg_at(raw, (gapStart - 1))))
+        bareGaps.push(index)
+      end
+      index += psg_len(key[0])
+      quote = psg_at(raw, index)
+      if ((quote == '"') || (quote == '\''))
+        cursor = psg_closing_quote(raw, quote, (index + 1))
+        if (cursor >= 0)
+          rawValue = psg_slice(raw, (index + 1), cursor)
+          value = (rawValue.include?('\\') ? psg_replace(rawValue, /\\(?m:.)/, true, lambda { |pair| psg_slice(pair, 1) }) : rawValue)
+          pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value, 'rawValue' => rawValue, 'quoted' => true})
+          index = (cursor + 1)
+          if (((index < length) && psg_is_list_delimiter(psg_at(raw, index))) && (!psg_match_at(/\G(?:[^ \t\n\x0b\f\r,;|="']+=)/, raw, (index + 1)).equal?(:psg_null) || psg_key_starts_at(raw, psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, (index + 1))), length)))
+            index += 1
+          end
+          next
+        end
+      end
+      v_end = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
+      stop = psg_unquoted_value_end(raw, index, v_end, split)
+      value_2 = psg_slice(raw, index, stop)
+      pairs.push({'key' => psg_slice(key[0], 0, (-1)), 'value' => value_2, 'rawValue' => value_2, 'quoted' => false})
+      index = ((stop < v_end) ? (stop + 1) : v_end)
+      next
+    end
+    index = psg_match_end(psg_match_at(/\G(?:[^ \t\n\x0b\f\r]*)/, raw, index))
+  end
+  return pairs
 end
 
 # src/structuredFamilies.ts: regexBody
 def psg_regex_body(message, pattern = nil)
   return psg_x_portable_regex_fields(message, (psg_null?(psg_t1 = pattern) ? '' : psg_t1))
+end
+
+# src/grammar/sourceFieldNames.ts: renamed
+def psg_renamed(value)
+  record = out = nil
+  if value.is_a?(Array)
+    return psg_map(value, method(:psg_renamed))
+  end
+  if (value.equal?(:psg_null) || !(psg_typeof(value) == 'object'))
+    return value
+  end
+  record = value
+  out = {}
+  record.keys.each do |name|
+    out[psg_source_field_name(name)] = psg_renamed(record[name])
+  end
+  return out
 end
 
 # src/grammar/lossGuard.ts: rowUnaccounted
@@ -1537,6 +1736,11 @@ def psg_single_envelope(raw)
   return {'host' => parsed_2['fields']['syslog_hostname'], 'timestamp' => parsed_2['fields']['syslog_timestamp'], 'format' => 'rfc3164', 'payload' => parsed_2['fields']['message']}
 end
 
+# src/grammar/sourceFieldNames.ts: sourceFieldName
+def psg_source_field_name(name)
+  return ((psg_k_reserved.include?(name) || name.start_with?('parserstudio_key_')) ? ('parserstudio_key_' + name) : name)
+end
+
 # src/structuredFamilies.ts: splitEscaped
 def psg_split_escaped(text, delimiter, splits)
   output = escaped = nil
@@ -1734,6 +1938,40 @@ def psg_unescape_kv_value(raw)
   return out
 end
 
+# src/grammar/parseStatus.ts: unquotedValueEnd
+def psg_unquoted_value_end(raw, from, v_end, split)
+  query = at = ch = nil
+  query = false
+  at = from
+  psg_t1 = true
+  while true
+    if psg_t1 then psg_t1 = false else at += 1 end
+    break unless (at < v_end)
+    ch = psg_at(raw, at)
+    if (ch == '?')
+      query = true
+      next
+    end
+    if (ch == '&')
+      if (((split && !query) && ((at + 1) < v_end)) && !psg_match_at(/\G(?:[^ \t\n\x0b\f\r,;|="']+=)/, raw, (at + 1)).equal?(:psg_null))
+        return at
+      end
+      next
+    end
+    if !psg_is_list_delimiter(ch)
+      next
+    end
+    if ((at + 1) < v_end)
+      if (split && !psg_match_at(/\G(?:[^ \t\n\x0b\f\r,;|="']+=)/, raw, (at + 1)).equal?(:psg_null))
+        return at
+      end
+    elsif psg_key_starts_at(raw, psg_match_end(psg_match_at(/\G(?:[ \t\n\x0b\f\r]*)/, raw, v_end)), psg_len(raw))
+      return at
+    end
+  end
+  return v_end
+end
+
 # src/guided/declaredForwarder.ts: validForwarderConfig
 def psg_valid_forwarder_config(config = nil)
   return (!config || ((((((psg_integer?(config['maxHops']) && (config['maxHops'] >= 1)) && (config['maxHops'] <= 3)) && (config['relayHosts'].length >= 1)) && (config['relayHosts'].length <= 8)) && (psg_set(config['relayHosts']).length == config['relayHosts'].length)) && psg_every(config['relayHosts'], lambda { |host| /\A[A-Za-z0-9_][A-Za-z0-9_.\-]{0,254}\z/.match?(host) })))
@@ -1745,6 +1983,11 @@ def psg_with_body_kind(extraction, kind = nil)
     psg_set_tag(extraction, 'bodyKind', kind)
   end
   return extraction
+end
+
+# src/grammar/sourceFieldNames.ts: withSourceFieldNames
+def psg_with_source_field_names(value)
+  return (psg_needs_renaming(value) ? psg_renamed(value) : value)
 end
 
 # src/grammar/extractEvent.ts: withoutEdgeBlanks

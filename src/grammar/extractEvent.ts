@@ -17,10 +17,11 @@ import { hasDuplicateJsonObjectKeys } from '../jsonDuplicateKeys';
 import { hasUnsafeJsonNumbers } from '../jsonNumberSafety';
 import { jsonSourceValueValid } from '../jsonSourceSafety';
 import { extractPortableRegexFields } from '../portableRegexExtraction';
-import { extractStructuredFamily, strictKeyValues, type StructuredExtraction } from '../structuredFamilies';
+import { extractStructuredFamily, strictKeyValues, type StructuredExtraction, extractStandaloneFamily } from '../structuredFamilies';
 import { setTag } from './primitives';
 import { matchRfc3164Header } from './syslogHeader';
 import { SYSLOG_HEADER_TOKENS } from './syslogHeaderGrammar.generated';
+import { withSourceFieldNames } from './sourceFieldNames';
 
 /** The `extraction` object of a compiled parser project (backend/src/types.ts), as far as the grammar reads it. */
 export interface ExtractionSettings {
@@ -46,7 +47,8 @@ export function extractJsonObject(raw: string): StructuredExtraction {
     if (hasDuplicateJsonObjectKeys(raw)) return failure('Duplicate JSON object key: review the source before generating a parser');
     if (hasUnsafeJsonNumbers(raw)) return failure('Unsafe JSON numeric precision: quote large integer identifiers as strings before mapping');
     if (!jsonSourceValueValid(parsed)) return failure('JSON source exceeds the native nesting limit or has an invalid Unicode surrogate');
-    const result: StructuredExtraction = { fields: parsed as Record<string, unknown>, errors: [] };
+    // Member names the JavaScript object model reserves are kept under their reversible field names (G-5).
+    const result: StructuredExtraction = { fields: withSourceFieldNames(parsed) as Record<string, unknown>, errors: [] };
     setTag(result, 'bodyKind', 'json');
     return result;
   } catch {
@@ -138,6 +140,16 @@ const BSD_ENVELOPE = new RegExp('^(?:<\\d{1,3}>)?' + SYSLOG_HEADER_TOKENS.BSD_MO
 const KEY_VALUE_START = /^[A-Za-z_][A-Za-z0-9_.-]*=/u;
 
 /**
+ * The family the mixed router read an event with, on the extraction and out of band (a tag, never a field):
+ * the reading itself, not a value of the event. Conditional event-family normalization can route on it
+ * (eventProfiles discriminator `@reading_family`); no field of the event can claim it.
+ */
+function mixedFamily(result: StructuredExtraction, family: string): StructuredExtraction {
+  if (result.errors.length === 0) setTag(result, 'mixedFamily', family);
+  return result;
+}
+
+/**
  * The mixed router. The family of a line is decided by its exact prefix, and the family of a Syslog envelope by
  * the exact prefix of its message: nothing is trimmed and no body parser is tried on spec. A BSD timestamp
  * opens an RFC 3164 envelope with or without PRI. A broken header never falls back to key=value.
@@ -167,7 +179,7 @@ export function extractMixed(raw: string, settings: ExtractionSettings): Structu
     const mode = body ? (bsdEnvelope ? 'rfc3164' : 'rfc5424') + '_' + body : null;
     if (!body || !mode || !selected.includes(mode))
       return failure(bsdEnvelope ? 'RFC3164 TAG body is unsupported or not allowlisted' : 'Wrapped Syslog is malformed or not in mixed allowlist');
-    return extractStructuredFamily(raw, grammar, body);
+    return mixedFamily(extractStructuredFamily(raw, grammar, body), mode);
   }
   const columns = settings.csvColumns ?? [];
   const delimiter = settings.csvDelimiter ?? ',';
@@ -179,10 +191,10 @@ export function extractMixed(raw: string, settings: ExtractionSettings): Structu
     // CSV is a family only with a reviewed schema of at least two columns.
     selected.includes('csv') && columns.length >= 2 && raw.includes(delimiter) ? 'csv' : null;
   if (!family || !selected.includes(family)) return failure('Mixed event is unsupported or excluded by allowlist');
-  if (family === 'kv') return strictKeyValues(raw);
-  if (family === 'csv') return extractCsvRow(raw, columns, delimiter);
-  if (family === 'json') return extractJsonObject(raw);
-  return extractStructuredFamily(raw, family);
+  if (family === 'kv') return mixedFamily(strictKeyValues(raw), family);
+  if (family === 'csv') return mixedFamily(extractCsvRow(raw, columns, delimiter), family);
+  if (family === 'json') return mixedFamily(extractJsonObject(raw), family);
+  return mixedFamily(extractStructuredFamily(raw, family), family);
 }
 
 export function extractEvent(raw: string, settings: ExtractionSettings): StructuredExtraction {
@@ -196,7 +208,7 @@ export function extractEvent(raw: string, settings: ExtractionSettings): Structu
   if (format === 'mixed') return extractMixed(raw, settings);
   if (format === 'syslog_rfc3164' || format === 'syslog_rfc5424')
     return extractStructuredFamily(raw, format, settings.syslogBodyFormat ?? 'raw', settings.pattern);
-  if (format === 'cef' || format === 'leef') return extractStructuredFamily(raw, format);
+  if (format === 'cef' || format === 'leef') return extractStandaloneFamily(raw, format);
   if (format === 'regex') return extractPortableRegexFields(raw, settings.pattern ?? '');
   return failure('Unsupported extraction format');
 }

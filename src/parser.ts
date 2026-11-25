@@ -1,16 +1,18 @@
 import {meetsStellar7ValueConstraints,officialProtocolPairConflict} from './stellar7ValueConstraints';
 import type { ConcreteFormat, Detection, Diagnostic, EventParseStatus, EventResult, Format, ParserDraft, SuiteResult, TraceStep } from './model';
-import { detectStructuredFamily } from './structuredFamilies';
+import { detectStructuredFamily, extractStandaloneFamily, priOnlyPrefix } from './structuredFamilies';
 import { hasAmbiguousFieldPath,lookupFieldValue,mappingWhenApplies } from './fieldPaths';
 import {parseJavaStacktrace} from './javaStacktrace';
 import {coerceCanonicalValue as convertValue} from '../backend/src/canonical-value-contract';
 import {findStellarMetadataField} from './guided/stellarMetadataCatalog';
 import {extractEvent,tokenizeCsvRow,type ExtractionSettings} from './grammar/extractEvent';
 import {gradeExtraction} from './grammar/readEvent';
+import {getTag} from './grammar/primitives';
 import type { EventBoundary } from './guided/contract';
 import {inspectDeclaredForwarders} from './guided/declaredForwarder';
 import {inspectEventProfile} from './guided/multiEventRouting';
 import {canonicalCaseTransform,canonicalIgnoreSourceValue} from '../backend/src/canonical-operator-contract';
+import {assignUnmapped,reservedForUnmapped,unmappedLeaves,unmappedOutputPath,unmappedText,type ReservedName} from './unmappedFields';
 
 export const MAX_DATASET_BYTES = 64 * 1024;
 export const MAX_EVENTS = 500;
@@ -56,6 +58,10 @@ export function detectFormat(raw: string): Detection {
   };
   const structured = detectStructuredFamily(value);
   if (structured) return { format: structured, confidence: 0.96, reason: 'Recognized standalone structured log header' };
+  // A bare PRI before a CEF or LEEF event (structuredFamilies.priOnlyPrefix), read by the standalone CEF/LEEF reader.
+  const pri = priOnlyPrefix(value);
+  if (pri && extractStandaloneFamily(value, pri.family).errors.length === 0)
+    return { format: pri.family, confidence: 0.96, reason: 'Recognized a Syslog PRI before a standalone structured log header' };
   if (/^[{[]/.test(value)) return { format: 'json', confidence: 0.96, reason: 'Starts with JSON object or array syntax' };
   // Cisco ASA/FTD messages contain commas and key=value fragments inside the
   // free-form message body. Browser-only CSV/KV heuristics must not reinterpret
@@ -147,8 +153,9 @@ export function inferConsistentCsvColumnCount(
 }
 
 function extractSyslog(raw: string): Extraction {
-  // Narrow, explicitly approximate RFC 5424 header; no claim of full Fluentd equivalence.
-  const match = raw.match(/^<(\d{1,3})>(\d)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(?:-|\[[^\]]*\])\s+(.*)$/);
+  // Narrow, explicitly approximate RFC 5424 header; no claim of full Fluentd equivalence. Only VERSION 1 is read
+  // (owner decision of 2026-11-13): another version is never a successful RFC 5424 event in any reader.
+  const match = raw.match(/^<(\d{1,3})>(1)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(?:-|\[[^\]]*\])\s+(.*)$/);
   if (!match) return { fields: {}, errors: ['Unsupported Syslog header; preview accepts a subset of RFC 5424'] };
   const priority = Number(match[1]);
   if (priority > 191) return { fields: {}, errors: ['Syslog priority must be 0..191'] };
@@ -228,6 +235,8 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
   let fields: Record<string, unknown> = {};
   let matched = false;
   let parseStatus: EventParseStatus = 'UNKNOWN';
+  let readingFamily: string | undefined;
+  let bodyKind: string | undefined;
   if (raw.length > MAX_LINE_CHARS) {
     error('break', 'LINE_TOO_LONG', 'Event exceeds ' + MAX_LINE_CHARS + ' characters');
   } else if(new TextEncoder().encode(raw).byteLength>(draft.guided?.receiver.messageLimit??65536)){
@@ -242,6 +251,10 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
     const extraction = extractFields(eventSource, effectiveFormat, draft);
     extraction.errors.forEach((message) => error('extract', 'EXTRACTION_FAILED', message));
     fields = extraction.fields;
+    const family = getTag(extraction, 'mixedFamily');
+    if (typeof family === 'string' && family) readingFamily = family;
+    const kind = getTag(extraction, 'bodyKind') ?? getTag(extraction.fields, 'bodyKind');
+    if (typeof kind === 'string' && kind) bodyKind = kind;
     matched = Object.keys(fields).length > 0;
     // Parsing Success Contract: the extractor's own "no errors" is not proof. For a key=value body the
     // original line is re-read by an independent tokenizer, and a pair that is visible there but missing
@@ -256,6 +269,11 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
     if (effectiveFormat === 'generic_structural' && verdict.status === 'PARTIAL')
       diagnostics.push({ stage: 'extract', severity: 'warning', code: 'GENERIC_STRUCTURAL_NOT_FULL',
         message: 'This event is not completely parsed: ' + verdict.reasons.slice(0, 3).join('; ') + '.' });
+    // Owner decision D-2: the envelope is read and a message that only claims CEF/LEEF is kept whole as text. The
+    // event is handed over (the generated Ruby does the same), reported as not completely parsed.
+    else if (verdict.status === 'PARTIAL' && verdict.textKept === true)
+      diagnostics.push({ stage: 'extract', severity: 'warning', code: 'BODY_KEPT_AS_TEXT',
+        message: 'This event is not completely parsed: ' + verdict.reasons.join('; ') + '.' });
     else
     if (verdict.status === 'PARTIAL' && verdict.lostPairs.length > 0)
       error('extract', 'FIELD_LOSS_NOT_FULL',
@@ -275,7 +293,7 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
     // nowhere else than in that copy (the generated Ruby decides the same, per event).
     ? {parserstudio_source:structuredClone(draft.omitSourceRaw===true&&parseStatus==='FULL'?withoutSourceRaw(fields):fields)}
     : {};
-  const family=inspectEventProfile(fields,draft.eventProfiles);
+  const family=inspectEventProfile(fields,draft.eventProfiles,readingFamily);
   if(draft.eventProfiles&&!family.profile)
     error('normalize','UNRECOGNIZED_EVENT_FAMILY',
       'Event type is missing, ambiguous or not in the reviewed family list.');
@@ -291,7 +309,17 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
       ok:true});
   }
   const mapped = new Set<string>();
+  // While fields are kept (Q3-1) the manufacturer name is the vendor namespace: a top or ns mapping never writes into
+  // it, whatever the event holds (final re-audit H-1; backend/src/validate.ts refuses the project).
+  const keptNamespace=draft.preserveUnmapped===true&&draft.format!=='generic_structural'?draft.vendor.trim()||'vendor':undefined;
   for (const mapping of [...draft.mappings,...(family.profile?.mappings??[])]) {
+    if(keptNamespace!==undefined&&(draft.guided?.groups[mapping.id]??'vendor_fields')!=='vendor_fields'){
+      const target=mapping.target.trim();
+      if(target===keptNamespace||target.startsWith(keptNamespace+'.')){
+        error('normalize','TARGET_COLLISION','While unmapped fields are kept, the manufacturer name is the vendor namespace: '+target,target);
+        continue;
+      }
+    }
     if(!mappingWhenApplies(fields,mapping.when))continue;
     const source = mapping.source.trim();
     const target = mapping.target.trim();
@@ -334,6 +362,10 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
       continue;
     }
     let container=normalized;
+    if(group==='vendor_fields'&&target.split('.')[0]==='parserstudio_unmapped'){
+      error('normalize','TARGET_COLLISION','parserstudio_unmapped is reserved for fields no mapping reads: '+target,target);
+      continue;
+    }
     if(group==='vendor_fields'){
       const vendor=draft.vendor.trim()||'vendor';
       if(RUNTIME_OUTPUT_ROOTS.has(vendor)){
@@ -359,6 +391,37 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
       error('normalize','INVALID_MAPPING','Could not assign output field: '+target,target);
     }
   }
+  // Owner decision Q3-1: a field no mapping reads is kept in the vendor namespace (src/unmappedFields.ts).
+  if(draft.preserveUnmapped===true&&draft.format!=='generic_structural'&&matched){
+    const active=[...draft.mappings,...(family.profile?.mappings??[])];
+    const covered=active.filter(rule=>mappingWhenApplies(fields,rule.when))
+      .map(rule=>({source:rule.source.trim(),literal:rule.sourcePathKind==='literal_root',
+        nestedOnly:rule.sourcePathKind==='nested'}));
+    const vendor=draft.vendor.trim()||'vendor';
+    // Reserved names: the vendor fields of every family, so that one source keeps one name in every event (audit
+    // A-5), and the enrichment targets inside the vendor namespace, which an unmapped field must not take (A-1).
+    const occupied=[...draft.mappings,...(draft.eventProfiles?.variants.flatMap(variant=>variant.mappings)??[])]
+      .filter(rule=>(draft.guided?.groups[rule.id]??'vendor_fields')==='vendor_fields')
+      .map((rule):ReservedName=>({target:rule.target.trim(),source:rule.sourcePathKind==='literal_root'?undefined:rule.source.trim()}))
+      .concat((draft.guided?.enrichment??[]).flatMap(rule=>{
+        const {target,targets}=rule as {target?:unknown;targets?:unknown};
+        return [target,...(Array.isArray(targets)?targets:[])].filter((item):item is string=>typeof item==='string');
+      }).filter(target=>target.startsWith(vendor+'.')).map((target):ReservedName=>({target:target.slice(vendor.length+1)})));
+    for(const leaf of unmappedLeaves(fields,covered)){
+      const field=leaf.path.join('.');
+      const text=unmappedText(leaf.value);
+      if(text===undefined)continue;
+      if(text instanceof Error){error('normalize','TYPE_ERROR',field+': '+text.message,field);continue;}
+      const existing=Object.prototype.hasOwnProperty.call(normalized,vendor)?normalized[vendor]:undefined;
+      if(RUNTIME_OUTPUT_ROOTS.has(vendor)||(existing!==undefined&&(!existing||typeof existing!=='object'||Array.isArray(existing)))){
+        error('normalize','TARGET_COLLISION','Vendor namespace collides with an existing output: '+vendor,field);
+        break;
+      }
+      if(existing===undefined)ownSet(normalized,vendor,{});
+      if(!assignUnmapped(normalized[vendor] as Record<string,unknown>,unmappedOutputPath(leaf.path,occupied),text))
+        error('normalize','TARGET_COLLISION','An unmapped source field could not be kept without overwriting another: '+field,field);
+    }
+  }
   // Native Ruby checks typed protocol-pair semantics at normalization exit.
   // A contradiction in mapped values must not be blamed on enrichment.
   if(matched&&!diagnostics.some(issue=>issue.severity==='error')&&
@@ -375,6 +438,8 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
     const step=index+1;
     const safeOutput=(target:string)=>VALID_TARGET.test(target)&&
       !RUNTIME_OUTPUT_ROOTS.has(target.split('.')[0]!)&&
+      !reservedForUnmapped(target,draft.vendor.trim()||'vendor',
+        draft.preserveUnmapped===true&&draft.format!=='generic_structural')&&
       !normalizedPathExists(normalized,target)&&
       !target.split('.').some((part)=>UNSAFE_OUTPUT_SEGMENTS.has(part));
     const validDelimiter=(value:string|undefined)=>typeof value==='string'&&value.length>=1&&value.length<=8&&
@@ -482,7 +547,7 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
   if (unmapped.length) diagnostics.push({ stage: 'normalize', severity: 'warning', code: 'UNMAPPED_FIELDS', message: unmapped.length + ' source fields remain available without mappings' });
   const hasErrors = diagnostics.some((issue) => issue.severity === 'error');
   const normalizedOk = matched && Object.keys(normalized).length > 0 && !hasErrors;
-  if (matched && !draft.mappings.length) {
+  if (matched && !draft.mappings.length && !family.profile?.mappings.length) {
     diagnostics.push({ stage: 'normalize', severity: 'warning', code: 'NO_MAPPINGS', message: 'No output mapping has been defined' });
   }
   trace.push({ stage: 'Normalization', detail: Object.keys(normalized).length + ' mapped fields', ok: normalizedOk });
@@ -490,6 +555,8 @@ function processEvent(raw: string, line: number, index: number, draft: ParserDra
   return {
     id: 'event-' + (index + 1), line, raw, detected, effectiveFormat, fields, normalized, unmapped,
     ...(draft.eventProfiles?{eventFamily:family.name}:{}),
+    ...(readingFamily?{readingFamily}:{}),
+    ...(bodyKind?{bodyKind}:{}),
     ...(wrapped.hops.length?{forwarderHops:wrapped.hops}:{}),
     matched, extracted: matched, normalizedOk,
     parseStatus,

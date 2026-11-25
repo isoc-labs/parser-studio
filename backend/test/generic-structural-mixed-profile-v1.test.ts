@@ -130,7 +130,8 @@ for(const reverse of [false,true]){
 test('combined generated callback retains static extraction errors without dropping malformed or unknown events',()=>{
   const output=replay(artifact(prepared()),fixture.negative.map(sample=>sample.raw));
   output.forEach((callback,index)=>assert.deepEqual(callback,{
-    time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction'},
+    time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction',
+      parser_raw_msg:fixture.negative[index]!.raw},
   },fixture.negative[index]!.name));
 });
 
@@ -140,7 +141,8 @@ test('LEEF ownership blocks an otherwise legacy-readable malformed header before
   assert.ok(replay(artifact(legacy),[raw])[0]!.record?.parserstudio_source,
     'This negative case must exercise an existing permissive legacy route');
   assert.deepEqual(replay(artifact(prepared()),[raw])[0],{
-    time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction'},
+    time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction',
+      parser_raw_msg:raw},
   });
 });
 

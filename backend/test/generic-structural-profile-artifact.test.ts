@@ -182,9 +182,10 @@ test('compiled callbacks reject new-profile events when the selected grammar is 
       ?'leef2_implicit_tab':'syslog_prefix_kv';
     for(const project of [absent,different])cases.push({artifact:artifact(project),events:[input.sample.raw]});
   }
-  for(const output of replay(cases))assert.deepEqual(output.events[0]!.callbacks[0],{
-    time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction'},
-  });
+  replay(cases).forEach((output,index)=>assert.deepEqual(output.events[0]!.callbacks[0],{
+    time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction',
+      parser_raw_msg:cases[index]!.events[0]},
+  }));
 });
 
 test('compiled callbacks retain static extraction errors for malformed profile records',()=>{
@@ -197,18 +198,20 @@ test('compiled callbacks retain static extraction errors for malformed profile r
       events:leefFixture.negative.filter(item=>leefNames.includes(item.name)).map(item=>item.raw)},
   ];
   for(const sample of samples)assert.equal(sample.events.length,4,'Every named negative control must be present');
-  for(const output of replay(samples.map(item=>({artifact:artifact(item.project),events:item.events})))){
-    for(const event of output.events)assert.deepEqual(event.callbacks[0],{
-      time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction'},
-    });
-  }
+  replay(samples.map(item=>({artifact:artifact(item.project),events:item.events}))).forEach((output,which)=>{
+    output.events.forEach((event,index)=>assert.deepEqual(event.callbacks[0],{
+      time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction',
+      parser_raw_msg:samples[which]!.events[index]},
+    }));
+  });
 });
 
 
 test('compiled selected LEEF callback refuses out-of-profile standalone input before legacy KV fallback',()=>{
   const project=leefCase(leefPrecedence.positive[0]!).project;
   const [output]=replay([{artifact:artifact(project),events:leefPrecedence.negative.map(item=>item.raw)}]);
-  for(const event of output!.events)assert.deepEqual(event.callbacks[0],{
-    time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction'},
-  });
+  output!.events.forEach((event,index)=>assert.deepEqual(event.callbacks[0],{
+    time:null,record:{stellar_log_index:'syslog',parser_err_msg:'ArgumentError',parser_err_stage:'extraction',
+      parser_raw_msg:leefPrecedence.negative[index]!.raw},
+  }));
 });

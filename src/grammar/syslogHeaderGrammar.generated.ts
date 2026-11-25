@@ -1,13 +1,13 @@
 // GENERATED FILE - DO NOT EDIT.
-// Source: contracts/syslog-header-grammar.v1.json (revision 7); regenerate with
+// Source: contracts/syslog-header-grammar.v1.json (revision 9); regenerate with
 //   node scripts/grammar/generate-grammar.mjs --write
 // CI runs the generator with --verify, so a hand edit of this file fails the gate.
-export const GRAMMAR_CONTRACT_SHA256 = "b2516fb96d8c605faae09db9cbafeb96fb21a63ac8f821b3479349bf0a99f4d8";
-export const GRAMMAR_CONTRACT_REVISION = 7;
+export const GRAMMAR_CONTRACT_SHA256 = "98f8143baac18f5855ad5993834f3b6afebd3ee0d51a99ebc841b92916d4292e";
+export const GRAMMAR_CONTRACT_REVISION = 9;
 export interface CompiledHeaderRule { readonly source: string; readonly captures: readonly string[] }
 export const SYSLOG_HEADER_RULES = {
   "rfc3164_tagged": {
-    "source": "^<(?<pri>[0-9]{1,3})>(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)$",
+    "source": "^(?:<(?<pri>[0-9]{1,3})>)?(?<month>[A-Z][a-z]{2})[ ]+(?<day>[0-9]{1,2})[ ]+(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})[ ]+(?<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?!(?:(?:CEF|LEEF))(?:(?:[ \\t]))*:(?:(?:[ \\t]))*(?:[0-9]))(?<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?<procid>[0-9]{1,8})\\])?:[ ]+(?<message>[^\\r\\n]+)$",
     "captures": [
       "pri",
       "month",
@@ -71,6 +71,21 @@ export const GRAMMAR_FRAGMENTS = {
       "bare"
     ]
   },
+  "kv_list_pair": {
+    "source": "(?:[ \\t]*)(?<key>[A-Za-z_][A-Za-z0-9_.-]{0,95})=(?:\"(?<dq>[^\"]*)\"|'(?<sq>[^']*)'|(?<bare>[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"',;|=]+))",
+    "captures": [
+      "key",
+      "dq",
+      "sq",
+      "bare"
+    ]
+  },
+  "kv_list_separator": {
+    "source": "(?<delimiter>[,;|])",
+    "captures": [
+      "delimiter"
+    ]
+  },
   "rfc5424_version_head": {
     "source": "<(?<pri>[0-9]{1,3})>(?<version>[1-9][0-9]{0,2})[ ](?:-[ ]|(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T))",
     "captures": [
@@ -79,7 +94,7 @@ export const GRAMMAR_FRAGMENTS = {
     ]
   },
   "structured_family_claim": {
-    "source": "(?<family>(?:CEF|LEEF)):(?:[0-9])",
+    "source": "(?<family>(?:CEF|LEEF))(?:(?:[ \\t]))*:(?:(?:[ \\t]))*(?:[0-9])",
     "captures": [
       "family"
     ]
@@ -126,6 +141,10 @@ export const SYSLOG_HEADER_TOKENS = {
   "KV_DQ": "(?:\\\\[^\\r\\n]|[^\"\\\\])*",
   "KV_SQ": "(?:\\\\[^\\r\\n]|[^'\\\\])*",
   "KV_BARE": "(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+",
+  "KV_LIST_BARE": "[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"',;|=]+",
+  "KV_LIST_DQ": "[^\"]*",
+  "KV_LIST_SQ": "[^']*",
+  "KV_LIST_DELIMITER": "[,;|]",
   "KV_TRAILING": "[ \\t\\n\\r\\f\\v]*",
   "RFC3339_DATE_PREFIX": "[0-9]{4}-[0-9]{2}-[0-9]{2}T",
   "FAMILY_NAME": "(?:CEF|LEEF)",

@@ -7,7 +7,11 @@ import {lookupFieldValue,listSafeLeafPaths,safeLocalFieldPath} from '../fieldPat
 import {MAX_EVENTS,splitEvents} from '../parser';
 
 const SELECTORS=['type','subtype','event_type','eventtype','eventType','category','log_type'] as const;
-const MAX_KINDS=16,MAX_FIELDS=24,MAX_MAPPINGS=24;
+const MAX_KINDS=16,MAX_FIELDS=24,MAX_MAPPINGS=24,MAX_RECORD_RESULTS=50;
+// The key names the loss guard reports as not read (src/grammar/parseStatus.ts); the message holds no value.
+const NOT_READ=/raw pair ([A-Za-z_@][A-Za-z0-9_.@-]{0,63})= is not present/gu;
+/** Codes that describe the reading of a record; mapping-review notes are left out. */
+const READING_STAGES=new Set(['break','detect','extract']);
 type ObservedKind={selector:string;records:number};
 type ProtectedMapping={source:string;target:string;group:'top_fields'|'ns_fields'|'vendor_fields';type:string;observedRecords:number};
 
@@ -134,6 +138,25 @@ export function buildEventCoverageEvidence(
       JSON.stringify({sourceFields,additionalPaths:Math.max(0,sourceFieldCounts.size-MAX_FIELDS)}),
       'Preserve the observed source fields if proposing a replacement grammar. Do not replace a previously extracted value with guessed or empty data.',
     );
+    // Per original record: the verdict of the automatic reading, how many fields it extracted, which keys it did
+    // not read and the codes of the problems. Names and codes only - no field value leaves the source block.
+    const verdicts:Record<string,number>={};
+    const records=verified.map((event,index)=>{
+      const verdict=String(event.parseStatus??'UNKNOWN');
+      verdicts[verdict]=(verdicts[verdict]??0)+1;
+      const notRead=[...new Set(event.diagnostics.flatMap(item=>[...item.message.matchAll(NOT_READ)].map(match=>match[1]!)))];
+      const issues=[...new Set(event.diagnostics.filter(item=>item.severity==='error'||READING_STAGES.has(item.stage))
+        .map(item=>item.code))].slice(0,6);
+      return {record:index+1,format:String(event.effectiveFormat??'unknown'),verdict,
+        extractedFields:listSafeLeafPaths(event.fields,101).length,
+        ...(notRead.length?{notRead:notRead.slice(0,12)}:{}),issues};
+    });
+    notes.push(
+      'Automatic parse result per original record (local browser preview; FULL = read completely, PARTIAL = some data not read, UNKNOWN/ERROR = not read):',
+      JSON.stringify({events:records.slice(0,MAX_RECORD_RESULTS),verdicts,
+        additionalRecords:Math.max(0,records.length-MAX_RECORD_RESULTS)}),
+      'The records that are not FULL above are the unparsed or uncertain parts. Propose a rule for them only where the original text proves it; keep what the FULL records already read.',
+    );
     if(draft){
       const mappings:ProtectedMapping[]=[];
       for(const mapping of draft.mappings){
@@ -156,6 +179,11 @@ export function buildEventCoverageEvidence(
       );
     }
   }
+  notes.push(
+    'Parsing success criteria Parser Studio applies to the returned recipe, on these exact records: exactly one event per original record, in order;',
+    'a record is FULL only when every byte of its body and every key=value pair is held by an extracted field with its unchanged value - a record with unread or merged data is never FULL;',
+    'no value may be invented, normalized, trimmed or taken from another record; a record the recipe cannot read stays unparsed and keeps its original text (parser_raw_msg) instead of being forced into another event type.',
+  );
   return {text:notes.join('\n'),sourceRecords:events.length,
     observedKinds:sorted.length,unclassifiedRecords:unclassified,protectedMappings};
 }

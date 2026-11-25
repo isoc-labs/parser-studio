@@ -6,7 +6,7 @@
 
 # src/genericStructural.ts: GENERIC_FAMILY_MODES
 def psg_k_generic_family_modes
-  @psg_k_generic_family_modes ||= ['structured_family_cef', 'structured_family_leef', 'syslog_envelope_cef', 'syslog_envelope_leef', 'leef2_implicit_tab']
+  @psg_k_generic_family_modes ||= ['structured_family_cef', 'structured_family_leef', 'syslog_envelope_cef', 'syslog_envelope_leef', 'syslog_envelope_leef2_implicit_tab', 'leef2_implicit_tab']
 end
 
 # src/grammar/genericParseStatus.ts: GRAMMAR_OWNED_NODES
@@ -14,9 +14,24 @@ def psg_k_grammar_owned_nodes
   @psg_k_grammar_owned_nodes ||= ['generic', 'watchguard_message', 'session_envelope', 'asa', 'juniper', 'watchguard']
 end
 
+# src/genericStructural.ts: MERAKI_RECORD_MODES
+def psg_k_meraki_record_modes
+  @psg_k_meraki_record_modes ||= {'flows' => 'meraki_flows', 'firewall' => 'meraki_firewall', 'vpn_firewall' => 'meraki_vpn_firewall', 'cellular_firewall' => 'meraki_cellular_firewall', 'bridge_anyconnect_client_vpn_firewall' => 'meraki_anyconnect_firewall', 'urls' => 'meraki_urls', 'ids-alerts' => 'meraki_ids_alerts', 'security_event' => 'meraki_security_event'}
+end
+
 # src/syslogEnvelope.ts: MONTH_DAYS
 def psg_k_month_days
   @psg_k_month_days ||= {'Jan' => 31, 'Feb' => 29, 'Mar' => 31, 'Apr' => 30, 'May' => 31, 'Jun' => 30, 'Jul' => 31, 'Aug' => 31, 'Sep' => 30, 'Oct' => 31, 'Nov' => 30, 'Dec' => 31}
+end
+
+# src/genericStructural.ts: PANOS_SYSTEM
+def psg_k_panos_system
+  @psg_k_panos_system ||= ['domain', 'receive_time', 'serial', 'type', 'subtype', 'config_version', 'time_generated', 'vsys', 'eventid', 'object', 'column_10', 'column_11', 'module', 'severity', 'opaque', 'seqno', 'actionflags', 'dg_hier_level_1', 'dg_hier_level_2', 'dg_hier_level_3', 'dg_hier_level_4', 'vsys_name', 'device_name', 'column_23', 'column_24', 'high_res_timestamp']
+end
+
+# src/genericStructural.ts: PANOS_THREAT
+def psg_k_panos_threat
+  @psg_k_panos_threat ||= ['domain', 'receive_time', 'serial', 'type', 'subtype', 'config_version', 'time_generated', 'src', 'dst', 'natsrc', 'natdst', 'rule', 'srcuser', 'dstuser', 'app', 'vsys', 'from', 'to', 'inbound_if', 'outbound_if', 'logset', 'time_received', 'sessionid', 'repeatcnt', 'sport', 'dport', 'natsport', 'natdport', 'flags', 'protocol', 'action', 'misc', 'threatid', 'category', 'severity', 'direction', 'seqno', 'actionflags', 'srcloc', 'dstloc', 'column_40', 'contenttype', 'pcap_id', 'filedigest', 'cloud', 'url_idx', 'user_agent', 'filetype', 'xff', 'referer', 'sender', 'subject', 'recipient', 'reportid', 'dg_hier_level_1', 'dg_hier_level_2', 'dg_hier_level_3', 'dg_hier_level_4', 'vsys_name', 'device_name']
 end
 
 # src/genericStructural.ts: PANOS_TRAFFIC_53
@@ -585,7 +600,7 @@ end
 
 # src/genericStructural.ts: extractGenericStructural
 def psg_extract_generic_structural(raw, profile = nil, familyGrammar = nil)
-  unsupportedVersion = includesLeef = includesSyslog = fields = claim = parsed = enveloped = fields_2 = generic = fields_3 = nil
+  unsupportedVersion = includesLeef = includesSyslog = fields = envelope = parsed = body = claim = parsed_2 = enveloped = fields_2 = generic = fields_3 = nil
   if /[\x00\x0a-\x0d\x1c-\x1f]/.match?(raw)
     return {'fields' => {}, 'errors' => ['Unsupported physical control separator in Generic Structural source']}
   end
@@ -599,13 +614,23 @@ def psg_extract_generic_structural(raw, profile = nil, familyGrammar = nil)
     fields = psg_extract_leef2_implicit_tab(raw)
     return (psg_t(fields) ? {'fields' => fields, 'errors' => []} : {'fields' => {}, 'errors' => ['Event does not match the bounded Generic Structural compiler grammar']})
   end
+  if (includesLeef && (familyGrammar == 'dedicated'))
+    envelope = psg_parse_syslog_envelope(raw)
+    if ((psg_t(envelope) && (envelope['variant'] != 'colon_date')) && envelope['message'].start_with?('LEEF:2.0|'))
+      parsed = psg_extract_leef2_implicit_tab(envelope['message'])
+      if psg_t(parsed)
+        body = {'leef_header' => parsed['leef_header'], 'leef_extension' => parsed['leef_extension']}
+        return {'fields' => {'syslog' => psg_envelope_to_syslog_fields(envelope), 'body' => body, 'generic' => {'mode' => 'syslog_envelope_leef2_implicit_tab', 'source_raw' => raw, 'message_raw' => envelope['message']}}, 'errors' => []}
+      end
+    end
+  end
   claim = ((familyGrammar == 'dedicated') ? psg_structured_family_claim(raw) : :psg_null)
   if psg_t(claim)
-    parsed = psg_extract_structured_family(raw, ((claim == 'CEF') ? 'cef' : 'leef'))
-    if psg_t(parsed['errors'].length)
+    parsed_2 = psg_extract_structured_family(raw, ((claim == 'CEF') ? 'cef' : 'leef'))
+    if psg_t(parsed_2['errors'].length)
       return {'fields' => {}, 'errors' => [(((('The event claims to be ' + claim) + ' but does not match the ') + claim) + ' grammar; it is not read as generic key=value')]}
     end
-    return {'fields' => psg_with_body_text({'body' => parsed['fields'], 'generic' => {'mode' => ((claim == 'CEF') ? 'structured_family_cef' : 'structured_family_leef'), 'source_raw' => raw}}, ((claim == 'CEF') ? 'cef' : 'leef'), raw), 'errors' => []}
+    return {'fields' => psg_with_body_text({'body' => parsed_2['fields'], 'generic' => {'mode' => ((claim == 'CEF') ? 'structured_family_cef' : 'structured_family_leef'), 'source_raw' => raw}}, ((claim == 'CEF') ? 'cef' : 'leef'), raw), 'errors' => []}
   end
   enveloped = ((familyGrammar == 'dedicated') ? psg_enveloped_family_claim(raw) : :psg_null)
   if psg_t(enveloped)
@@ -619,7 +644,7 @@ def psg_extract_generic_structural(raw, profile = nil, familyGrammar = nil)
   if ((familyGrammar == 'dedicated') && psg_enveloped_json_declined(raw))
     return {'fields' => {}, 'errors' => ['The message claims to be a JSON object but the JSON body contract does not read it (not valid JSON, a repeated member name, a number that cannot be kept exactly, or the bounded size); it is not read as free text']}
   end
-  fields_3 = (psg_null?(psg_t3 = (psg_null?(psg_t4 = (psg_null?(psg_t5 = (psg_null?(psg_t6 = (psg_null?(psg_t7 = (psg_null?(psg_t8 = (psg_null?(psg_t9 = (psg_null?(psg_t10 = (psg_null?(psg_t11 = (psg_null?(psg_t12 = (psg_null?(psg_t13 = (psg_null?(psg_t14 = (psg_null?(psg_t15 = (psg_null?(psg_t16 = (psg_null?(psg_t17 = (psg_null?(psg_t18 = (psg_null?(psg_t19 = (psg_null?(psg_t20 = (psg_null?(psg_t21 = (psg_null?(psg_t22 = (psg_null?(psg_t23 = (psg_null?(psg_t24 = psg_short_rfc5424_structured(raw)) ? psg_short_rfc5424_json(raw) : psg_t24)) ? psg_prefixed_json(raw) : psg_t23)) ? psg_iso_pri_mixed(raw) : psg_t22)) ? psg_iso_pri_positional(raw) : psg_t21)) ? psg_asa(raw) : psg_t20)) ? psg_watchguard_profile(raw) : psg_t19)) ? psg_watchguard_message_profile(raw) : psg_t18)) ? psg_dual_timestamp_session_profile(raw) : psg_t17)) ? psg_bsd_bracket_pid_message_profile(raw) : psg_t16)) ? psg_juniper_legacy_profile(raw) : psg_t15)) ? psg_junos_rfc5424_sd(raw) : psg_t14)) ? psg_bracket_colon_kv(raw) : psg_t13)) ? psg_rfc3164_delimited_comma_kv(raw) : psg_t12)) ? psg_rfc3164_positional_csv(raw) : psg_t11)) ? psg_pri_space_kv(raw) : psg_t10)) ? psg_syslog_envelope_structured_fallback(raw) : psg_t9)) ? psg_comma_kv(raw) : psg_t8)) ? psg_delimited_comma_kv(raw) : psg_t7)) ? psg_space_kv(raw) : psg_t6)) ? psg_bsd_classic_pid_message_profile(raw) : psg_t5)) ? psg_bsd_tagged_message_profile(raw) : psg_t4)) ? (includesSyslog ? psg_syslog_prefixed_key_values(raw) : :psg_null) : psg_t3)
+  fields_3 = (psg_null?(psg_t3 = (psg_null?(psg_t4 = (psg_null?(psg_t5 = (psg_null?(psg_t6 = (psg_null?(psg_t7 = (psg_null?(psg_t8 = (psg_null?(psg_t9 = (psg_null?(psg_t10 = (psg_null?(psg_t11 = (psg_null?(psg_t12 = (psg_null?(psg_t13 = (psg_null?(psg_t14 = (psg_null?(psg_t15 = (psg_null?(psg_t16 = (psg_null?(psg_t17 = (psg_null?(psg_t18 = (psg_null?(psg_t19 = (psg_null?(psg_t20 = (psg_null?(psg_t21 = (psg_null?(psg_t22 = (psg_null?(psg_t23 = (psg_null?(psg_t24 = (psg_null?(psg_t25 = (psg_null?(psg_t26 = psg_short_rfc5424_structured(raw)) ? psg_short_rfc5424_json(raw) : psg_t26)) ? psg_prefixed_json(raw) : psg_t25)) ? psg_iso_pri_mixed(raw) : psg_t24)) ? psg_iso_pri_positional(raw) : psg_t23)) ? psg_asa(raw) : psg_t22)) ? psg_watchguard_profile(raw) : psg_t21)) ? psg_watchguard_message_profile(raw) : psg_t20)) ? psg_watchguard_traffic_monitor_profile(raw) : psg_t19)) ? psg_meraki_profile(raw) : psg_t18)) ? psg_dual_timestamp_session_profile(raw) : psg_t17)) ? psg_bsd_bracket_pid_message_profile(raw) : psg_t16)) ? psg_juniper_legacy_profile(raw) : psg_t15)) ? psg_junos_rfc5424_sd(raw) : psg_t14)) ? psg_bracket_colon_kv(raw) : psg_t13)) ? psg_rfc3164_delimited_comma_kv(raw) : psg_t12)) ? psg_rfc3164_positional_csv(raw) : psg_t11)) ? psg_pri_space_kv(raw) : psg_t10)) ? psg_syslog_envelope_structured_fallback(raw) : psg_t9)) ? psg_comma_kv(raw) : psg_t8)) ? psg_delimited_comma_kv(raw) : psg_t7)) ? psg_space_kv(raw) : psg_t6)) ? psg_bsd_classic_pid_message_profile(raw) : psg_t5)) ? psg_bsd_tagged_message_profile(raw) : psg_t4)) ? (includesSyslog ? psg_syslog_prefixed_key_values(raw) : :psg_null) : psg_t3)
   return (psg_t(fields_3) ? {'fields' => fields_3, 'errors' => []} : {'fields' => {}, 'errors' => ['Event does not match the bounded Generic Structural compiler grammar']})
 end
 
@@ -909,6 +934,67 @@ def psg_looks_like_malformed_timestamp(rest)
   return ((/\A[A-Z][a-z]{2} +[0-9]{1,2} +/.match?(rest) || /\A[0-9]{4}[\-\/:][0-9]{2}[\-\/:][0-9]{2}/.match?(rest)) || /\A[0-9]{1,3} +[0-9]{4}-[0-9]{2}-[0-9]{2}T/.match?(rest))
 end
 
+# src/genericStructural.ts: merakiProfile
+def psg_meraki_profile(raw)
+  head = kv = generic = pos = pairs = rest = label = pair = header = nil
+  if ((raw.bytesize > 8192) || raw.include?("\u{0}"))
+    return :psg_null
+  end
+  head = (/\A([0-9]{9,10}\.[0-9]{1,9}) ([A-Za-z0-9_.\-]{1,64}) (flows|firewall|vpn_firewall|cellular_firewall|bridge_anyconnect_client_vpn_firewall|urls|ids-alerts|security_event)(?: ([a-z][a-z_]{0,31}))? /.match(raw) || :psg_null)
+  if !psg_t(head)
+    return :psg_null
+  end
+  kv = {}
+  generic = {'mode' => psg_k_meraki_record_modes[head[3]], 'source_raw' => raw, 'kv' => kv}
+  pos = psg_len(head[0])
+  pairs = 0
+  while (pos < psg_len(raw))
+    rest = psg_slice(raw, pos)
+    label = (/\A(pattern|message|request): ([^\n\r\u2028\u2029]+)\z/.match(rest) || :psg_null)
+    if psg_t(label)
+      generic[label[1]] = label[2]
+      break
+    end
+    pair = (/\A([A-Za-z_][A-Za-z0-9_.\-]{0,63})=([^ ]*)(?: |\z)/.match(rest) || :psg_null)
+    if ((!psg_t(pair) || !psg_source_key_safe(pair[1])) || kv.key?(pair[1]))
+      return :psg_null
+    end
+    pairs += 1
+    if (pairs > 100)
+      return :psg_null
+    end
+    kv[pair[1]] = pair[2]
+    pos += psg_len(pair[0])
+  end
+  if (!kv['src'].is_a?(String) || !kv['dst'].is_a?(String))
+    return :psg_null
+  end
+  header = {'epoch' => head[1], 'device' => head[2], 'record_type' => head[3]}
+  if !head[4].nil?
+    header['event_type'] = head[4]
+  end
+  return {'meraki_header' => header, 'generic' => generic}
+end
+
+# src/genericStructural.ts: panosNamedFields
+def psg_panos_named_fields(values)
+  return (psg_null?(psg_t1 = (psg_null?(psg_t2 = psg_panos_traffic_fields(values)) ? psg_panos_threat_fields(values) : psg_t2)) ? psg_panos_system_fields(values) : psg_t1)
+end
+
+# src/genericStructural.ts: panosNamedMode
+def psg_panos_named_mode(values)
+  if psg_t(psg_panos_traffic_fields(values))
+    return 'panos_traffic_csv'
+  end
+  if psg_t(psg_panos_threat_fields(values))
+    return 'panos_threat_csv'
+  end
+  if psg_t(psg_panos_system_fields(values))
+    return 'panos_system_csv'
+  end
+  return :psg_null
+end
+
 # src/genericStructural.ts: panosPositionalCsvBody
 def psg_panos_positional_csv_body(text)
   values = received = columns = nil
@@ -935,6 +1021,53 @@ def psg_panos_positional_csv_body(text)
   nil
 })
   return columns
+end
+
+# src/genericStructural.ts: panosSystemFields
+def psg_panos_system_fields(values)
+  datetime = fields = nil
+  if ((values.length < 15) || (values[3] != 'SYSTEM'))
+    return :psg_null
+  end
+  datetime = /\A[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\z/
+  if (((!datetime.match?((psg_null?(psg_t1 = values[1]) ? '' : psg_t1)) || !datetime.match?((psg_null?(psg_t2 = values[6]) ? '' : psg_t2))) || !/\A[A-Za-z0-9_.\-]{1,64}\z/.match?((psg_null?(psg_t3 = values[8]) ? '' : psg_t3))) || !/\A(?:informational|low|medium|high|critical)\z/.match?((psg_null?(psg_t4 = values[13]) ? '' : psg_t4)))
+    return :psg_null
+  end
+  fields = {}
+  psg_for_each(values, lambda { |value, index|
+  fields[(psg_null?(psg_t5 = psg_at(psg_k_panos_system, index)) ? ('column_' + psg_str(index)) : psg_t5)] = value
+  nil
+})
+  return fields
+end
+
+# src/genericStructural.ts: panosThreatFields
+def psg_panos_threat_fields(values)
+  datetime = ip = validIp = value = fields = nil
+  if ((values.length < 42) || (values[3] != 'THREAT'))
+    return :psg_null
+  end
+  datetime = /\A[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\z/
+  ip = /\A(?:[0-9]{1,3}\.){3}[0-9]{1,3}\z/
+  validIp = lambda { |value_2| (ip.match?(value_2) && psg_every(psg_split(value_2, '.'), lambda { |part| (psg_num(part) <= 255) })) }
+  if ((((((!datetime.match?((psg_null?(psg_t1 = values[1]) ? '' : psg_t1)) || !datetime.match?((psg_null?(psg_t2 = values[6]) ? '' : psg_t2))) || !datetime.match?((psg_null?(psg_t3 = values[21]) ? '' : psg_t3))) || !validIp.call((psg_null?(psg_t4 = values[7]) ? '' : psg_t4))) || !validIp.call((psg_null?(psg_t5 = values[8]) ? '' : psg_t5))) || !validIp.call((psg_null?(psg_t6 = values[9]) ? '' : psg_t6))) || !validIp.call((psg_null?(psg_t7 = values[10]) ? '' : psg_t7)))
+    return :psg_null
+  end
+  [24, 25, 26, 27].each do |index|
+    value = (psg_null?(psg_t8 = psg_at(values, index)) ? '' : psg_t8)
+    if (!/\A[0-9]{1,5}\z/.match?(value) || (psg_num(value) > 65535))
+      return :psg_null
+    end
+  end
+  if (((!/\A[A-Za-z0-9_.\-]{1,24}\z/.match?((psg_null?(psg_t9 = values[29]) ? '' : psg_t9)) || !/\A[A-Za-z0-9_. \-]{1,64}\z/.match?((psg_null?(psg_t10 = values[30]) ? '' : psg_t10))) || !/\A(?:informational|low|medium|high|critical)\z/.match?((psg_null?(psg_t11 = values[34]) ? '' : psg_t11))) || !/\A(?:client-to-server|server-to-client|0|1)\z/.match?((psg_null?(psg_t12 = values[35]) ? '' : psg_t12)))
+    return :psg_null
+  end
+  fields = {}
+  psg_for_each(values, lambda { |value_3, index_2|
+  fields[(psg_null?(psg_t13 = psg_at(psg_k_panos_threat, index_2)) ? ('column_' + psg_str(index_2)) : psg_t13)] = value_3
+  nil
+})
+  return fields
 end
 
 # src/genericStructural.ts: panosTrafficFields
@@ -1238,7 +1371,7 @@ end
 
 # src/genericStructural.ts: rfc3164PositionalCsv
 def psg_rfc3164_positional_csv(raw)
-  head = body = values = panosLike = ip = ips = securityCategory = panos = columns = syslog = nil
+  head = body = values = panosLike = ip = ips = securityCategory = panos = panosMode = columns = syslog = nil
   if (raw.bytesize > 8192)
     return :psg_null
   end
@@ -1267,7 +1400,8 @@ def psg_rfc3164_positional_csv(raw)
   if ((ips < 2) || !securityCategory)
     return :psg_null
   end
-  panos = psg_panos_traffic_fields(values)
+  panos = psg_panos_named_fields(values)
+  panosMode = psg_panos_named_mode(values)
   columns = {}
   psg_for_each(values, lambda { |value_3, index|
   columns[('column_' + psg_str(index))] = value_3
@@ -1277,7 +1411,7 @@ def psg_rfc3164_positional_csv(raw)
   if !head[1].nil?
     syslog['pri'] = head[1]
   end
-  return psg_with_body_text({'syslog' => syslog, 'generic' => (psg_t(panos) ? {'mode' => 'panos_traffic_csv', 'delimiter' => ',', 'source_raw' => raw, 'fields' => panos} : {'mode' => 'rfc3164_positional_csv', 'delimiter' => ',', 'source_raw' => raw, 'columns' => columns})}, 'positional_csv', body)
+  return psg_with_body_text({'syslog' => syslog, 'generic' => (psg_t(panos) ? {'mode' => panosMode, 'delimiter' => ',', 'source_raw' => raw, 'fields' => panos} : {'mode' => 'rfc3164_positional_csv', 'delimiter' => ',', 'source_raw' => raw, 'columns' => columns})}, 'positional_csv', body)
 end
 
 # src/genericStructural.ts: scanProfileTokens
@@ -1434,7 +1568,7 @@ end
 # src/genericStructural.ts: shortRfc5424Structured
 def psg_short_rfc5424_structured(raw)
   match = pri = source = parsed = nil
-  match = (/\A<([0-9]{1,3})>(1) ([^ \t\n\r\f\x0b]{1,64}) ([!-~]{1,255}) ((?:CEF:0\|(?m:.)*|LEEF:(?:1\.0|2\.0)\|(?m:.)*))\z/.match(raw) || :psg_null)
+  match = (/\A<([0-9]{1,3})>(1) ([^ \t\n\r\f\x0b]{1,64}) ([!-~]{1,255}) ((?:CEF: ?0\|(?m:.)*|LEEF:(?:1\.0|2\.0)\|(?m:.)*))\z/.match(raw) || :psg_null)
   if !psg_t(match)
     return :psg_null
   end
@@ -1632,13 +1766,13 @@ end
 # src/genericStructural.ts: structuredFamilyClaim
 def psg_structured_family_claim(raw)
   match = nil
-  match = psg_match_at(/\G(?:(?<family>(?:CEF|LEEF)):(?:[0-9]))/, raw, 0)
+  match = psg_match_at(/\G(?:(?<family>(?:CEF|LEEF))(?:(?:[ \t]))*:(?:(?:[ \t]))*(?:[0-9]))/, raw, 0)
   return (psg_t(match) ? psg_group(match, 'family') : :psg_null)
 end
 
 # src/genericStructural.ts: syslogEnvelopeStructuredFallback
 def psg_syslog_envelope_structured_fallback(raw)
-  envelope = syslog = message = parsed = vendorSyslog = juniper = bracket = watchguard = parsed_2 = parsed_3 = json = panosValues = panosLike = panos = named = positional = comma = spaced = nil
+  envelope = syslog = message = parsed = vendorSyslog = juniper = bracket = watchguard = parsed_2 = parsed_3 = json = panosValues = panosLike = panos = named = namedMode = positional = comma = spaced = nil
   envelope = psg_parse_syslog_envelope(raw)
   if (!psg_t(envelope) || (envelope['variant'] == 'colon_date'))
     return :psg_null
@@ -1675,7 +1809,7 @@ def psg_syslog_envelope_structured_fallback(raw)
     return :psg_null
   end
   if message.start_with?('CEF:')
-    if !/\ACEF:0\|/.match?(message)
+    if !/\ACEF: ?0\|/.match?(message)
       return :psg_null
     end
     parsed_2 = psg_extract_structured_family(message, 'cef')
@@ -1705,8 +1839,9 @@ def psg_syslog_envelope_structured_fallback(raw)
   panosLike = (((((!!psg_t(panosValues) && (panosValues.length >= 7)) && /\A[0-9]{0,10}\z/.match?((psg_null?(psg_t2 = panosValues[0]) ? '' : psg_t2))) && /\A[0-9]{4}\/[0-9]{2}\/[0-9]{2} +[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?\z/.match?((psg_null?(psg_t3 = panosValues[1]) ? '' : psg_t3))) && /\A[A-Za-z0-9_.:\-]{4,64}\z/.match?((psg_null?(psg_t4 = panosValues[2]) ? '' : psg_t4))) && /\A[A-Z][A-Z0-9_]{2,31}\z/.match?((psg_null?(psg_t5 = panosValues[3]) ? '' : psg_t5)))
   panos = psg_panos_positional_csv_body(message)
   if psg_t(panos)
-    named = (psg_t(panosValues) ? psg_panos_traffic_fields(panosValues) : :psg_null)
-    return psg_with_body_text({'syslog' => syslog, 'generic' => (psg_t(named) ? {'mode' => 'panos_traffic_csv', 'profile' => 'panos', 'delimiter' => ',', 'source_raw' => raw, 'message_raw' => message, 'fields' => named} : {'mode' => 'syslog_envelope_positional_csv', 'profile' => 'panos', 'delimiter' => ',', 'source_raw' => raw, 'message_raw' => message, 'columns' => panos})}, 'positional_csv', message)
+    named = (psg_t(panosValues) ? psg_panos_named_fields(panosValues) : :psg_null)
+    namedMode = (psg_t(panosValues) ? psg_panos_named_mode(panosValues) : :psg_null)
+    return psg_with_body_text({'syslog' => syslog, 'generic' => (psg_t(named) ? {'mode' => namedMode, 'profile' => 'panos', 'delimiter' => ',', 'source_raw' => raw, 'message_raw' => message, 'fields' => named} : {'mode' => 'syslog_envelope_positional_csv', 'profile' => 'panos', 'delimiter' => ',', 'source_raw' => raw, 'message_raw' => message, 'columns' => panos})}, 'positional_csv', message)
   end
   if panosLike
     return :psg_null
@@ -1972,6 +2107,54 @@ def psg_watchguard_traffic_body(text)
     return :psg_null
   end
   return {'header' => {}.merge!((psg_t(head[1]) ? {'serial' => head[1]} : {})).merge!((psg_t(head[2]) ? {'device_time' => head[2]} : {})).merge!({'app_tag' => head[3]}), 'body' => body}
+end
+
+# src/genericStructural.ts: watchguardTrafficMonitorProfile
+def psg_watchguard_traffic_monitor_profile(raw)
+  head = details = msgId = record = header = nil
+  if ((raw.bytesize > 8192) || raw.include?("\u{0}"))
+    return :psg_null
+  end
+  head = (/\A([0-9]{4}-[0-9]{2}-[0-9]{2}) ([0-9]{2}:[0-9]{2}:[0-9]{2}) (?:([A-Za-z0-9._\-]{1,64}) )?(Allow|Deny|Drop) ([0-9A-Fa-f:.]{2,45}) ([0-9A-Fa-f:.]{2,45}) ([A-Za-z0-9._\-]{1,64})\/([A-Za-z0-9\-]{1,16}) (?:([0-9]{1,5}) ([0-9]{1,5}) )?([A-Za-z0-9._\-]{1,64}) ([A-Za-z0-9._\-]{1,64}) ([A-Za-z]{1,32}) (?:([0-9]{1,5}) ([0-9]{1,3}) )?\(([^()]{1,128})\) /.match(raw) || :psg_null)
+  if (((!psg_t(head) || !psg_iso_timestamp_ok(((head[1] + 'T') + head[2]))) || !psg_ip_token(head[5])) || !psg_ip_token(head[6]))
+    return :psg_null
+  end
+  if (!head[9].nil? && ((psg_num(head[9]) > 65535) || (psg_num(head[10]) > 65535)))
+    return :psg_null
+  end
+  if (!head[9].nil? && !/\A(?:[Tt][Cc][Pp]|[Uu][Dd][Pp])\z/.match?(head[8]))
+    return :psg_null
+  end
+  if (!head[15].nil? && (psg_num(head[15]) > 255))
+    return :psg_null
+  end
+  details = psg_scan_profile_tokens(raw, psg_len(head[0]))
+  if ((!psg_t(details) || (details['tokens'].length > 0)) || (details['groups'].length > 0))
+    return :psg_null
+  end
+  msgId = details['kv']['msg_id']
+  if (!msgId.is_a?(String) || !/\A[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}\z/.match?(msgId))
+    return :psg_null
+  end
+  record = {'disp' => head[4], 'src_ip' => head[5], 'dst_ip' => head[6], 'service' => head[7], 'protocol' => head[8]}
+  if !head[9].nil?
+    record['src_port'] = head[9]
+    record['dst_port'] = head[10]
+  end
+  record['src_intf'] = head[11]
+  record['dst_intf'] = head[12]
+  record['connection_action'] = head[13]
+  if !head[14].nil?
+    record['pckt_len'] = head[14]
+    record['ttl'] = head[15]
+  end
+  record['policy'] = head[16]
+  record['kv'] = details['kv']
+  header = {'date' => head[1], 'time' => head[2]}
+  if !head[3].nil?
+    header['cluster'] = head[3]
+  end
+  return {'watchguard_header' => header, 'watchguard' => record, 'generic' => {'mode' => 'watchguard_traffic_monitor', 'source_raw' => raw}}
 end
 
 # src/genericStructural.ts: withBodyText

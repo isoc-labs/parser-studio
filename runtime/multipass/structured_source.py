@@ -11,6 +11,7 @@ from dataclasses import dataclass,field
 import re
 from typing import Any
 from syslog_header_grammar_generated import FRAGMENTS,PRI_MAX,RFC5424_SUPPORTED_VERSIONS,SEMANTICS,TOKENS
+from source_field_names import source_field_name
 
 # Supported CEF versions: shared grammar contract.
 CEF_VERSIONS=tuple(SEMANTICS['cefSupportedVersions'])
@@ -48,6 +49,8 @@ class Fragment:
     issues:list[str]=field(default_factory=list)
     primitive_fields:int=0
 
+
+_SD_BYTE_LIMIT=8192
 
 def _unescape(segment:str)->str:
     out=[]
@@ -129,10 +132,8 @@ def _cef_extension(raw:str,begin:int)->Fragment:
         if ext.primitive_fields>=CEF_MAX_FIELDS:
             ext.issues.append("CEF_EXTENSION_LIMIT")
             return ext
-        key=matched["key"]
-        if key in FORBIDDEN_KEYS:
-            ext.issues.append("CEF_INVALID_EXTENSION_KEY_OR_BOUNDARY")
-            return ext
+        # A name the JavaScript object model reserves is kept under its reversible field name (G-5).
+        key=source_field_name(matched["key"])
         key_start=matched.start("key")
         start,end=matched.span("value")
         if pos<key_start:ext.covered.append((pos,key_start))
@@ -192,13 +193,14 @@ def _leef_extension(raw:str,begin:int,delimiter:str,*,skip_empty:bool=False)->Fr
             i=end+1
             continue
         matched=LEEF_ATTRIBUTE.match(raw,i,end)
-        if matched is None or matched["key"] in FORBIDDEN_KEYS:
+        if matched is None:
             ext.issues.append("LEEF_INVALID_EXTENSION_TOKEN")
             break
         if ext.primitive_fields>=1024:
             ext.issues.append("LEEF_EXTENSION_LIMIT")
             break
-        key=matched["key"]
+        # A name the JavaScript object model reserves is kept under its reversible field name (G-5).
+        key=source_field_name(matched["key"])
         _pair(ext.fields,key,raw[matched.end():end],ext.issues)
         ext.spans.append(("leef_extension."+key,matched.end(),end))
         ext.primitive_fields+=1
@@ -215,7 +217,8 @@ def decode_cef_or_leef(raw:str,offset:int=0)->Fragment:
     """Parse only on exact CEF:/LEEF: prefix. Never substring-fallback."""
     out=Fragment()
     if raw.startswith("CEF:",offset):
-        start=offset+4
+        # One space after the colon is the FortiGate form "CEF: 0|" (shared CEF grammar).
+        start=offset+(5 if raw.startswith("CEF: ",offset) else 4)
         names=("version","vendor","product","device_version","signature_id",
                "name","severity")
         try:
@@ -417,7 +420,11 @@ def extract_rfc5424(raw:str,*,source_preserving:bool=False,
                     raise ValueError("RFC5424_SD_UNCLOSED")
                 pos+=1
                 structured[ident]=fields
-                if len(raw[sd_start:pos].encode("utf8"))>1024:
+                # RFC 5424 sets no length for structured data. The bound was 1024 bytes; a Junos
+                # RT_FLOW_SESSION_CLOSE record with NAT and application fields is longer, and the browser's Junos
+                # reader accepts up to 8192 bytes, so the preview called PARTIAL what the generated parser reads.
+                # The bound here is the browser's.
+                if len(raw[sd_start:pos].encode("utf8"))>_SD_BYTE_LIMIT:
                     raise ValueError("RFC5424_SD_BYTE_LIMIT")
             except ValueError as exc:
                 result.issues.append(str(exc))
