@@ -114,24 +114,24 @@ require_managed_processes() {
 }
 
 installed_at() {
-  # When the files of a part last changed, in microseconds: the later of the stamp `apply` writes and the newest
-  # change time of a file. A copy made behind the tool's back can keep a modification time, not the change time.
-  { [ -f "$1/.parser-studio-release" ] && awk '{print $2}' "$1/.parser-studio-release"
-    find "$1" -type f -not -path '*/__pycache__/*' -not -name .parser-studio-release -printf '%C@\n' \
-      | awk -F. '{print $1 substr($2 "000000", 1, 6)}'
+  # When the files of a part last changed: "<microseconds> <what>", the later of the stamp `apply` writes and the
+  # newest change time of a file. A copy made behind the tool's back can keep a modification time, not the change time.
+  { [ -f "$1/.parser-studio-release" ] && awk '{print $2 " release-stamp"}' "$1/.parser-studio-release"
+    find "$1" -type f -not -path '*/__pycache__/*' -not -name .parser-studio-release -printf '%C@ %P\n' \
+      | awk '{split($1, t, "."); $1 = t[1] substr(t[2] "000000", 1, 6); print}'
   } | sort -n | tail -1
 }
 
 require_process_newer_than_files() {
   # A process that started before its files were installed still runs the code it loaded then.
-  local ok=0 unit dir pid
+  local ok=0 unit dir pid started last changed
   for pair in "$MULTIPASS_UNIT|$MULTIPASS" "$AUTHORING_UNIT|$BACKEND/dist"; do
     unit=${pair%%|*}; dir=${pair#*|}; pid=$(main_pid "$unit")
-    local started changed; started=$(started_at "$unit" 2>/dev/null); changed=$(installed_at "$dir")
+    started=$(started_at "$unit" 2>/dev/null); last=$(installed_at "$dir"); changed=${last%% *}
     if ! [[ "$started" =~ ^[0-9]+$ && "$changed" =~ ^[0-9]+$ ]]; then
       log "CHECK_FAIL the start of $unit or the last change of $dir cannot be read"; ok=1
     elif [ "$started" -lt "$changed" ]; then
-      log "CHECK_FAIL $unit (pid $pid) started before the files in $dir last changed"; ok=1
+      log "CHECK_FAIL $unit (pid $pid) started $(( changed - started )) microseconds before the files in $dir last changed (${last#* })"; ok=1
     fi
   done
   [ "$ok" = 0 ] && log "check: both processes started after their files last changed"
