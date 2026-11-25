@@ -40,7 +40,9 @@ sha() { sha256sum "$1" | cut -c1-64; }
 public_sha() { curl -fsS -m 15 -H 'Cache-Control: no-cache' "$ORIGIN/$1" | sha256sum | cut -c1-64; }
 health() { for _ in $(seq 1 40); do [ "$(curl -s -o /dev/null -w '%{http_code}' -m 3 "http://127.0.0.1:$1/health")" = 200 ] && return 0; sleep 0.8; done; return 1; }
 main_pid() { systemctl show "$1" -p MainPID --value; }
-started_at() { date -d "$(ps -o lstart= -p "$1")" +%s; }
+# Start of the main process of a unit, in microseconds, as systemd recorded it. (`ps` derives start times from the
+# boot time and is off by up to a second after weeks of uptime.)
+started_at() { date -d "$(systemctl show "$1" -p ExecMainStartTimestamp --timestamp=us+utc --value)" +%s%6N; }
 # Differences between a built tree and an installed one, ignoring what the host adds (byte code, the release stamp).
 tree_diff() { diff -rq -x __pycache__ -x .parser-studio-release "$1" "$2"; }
 
@@ -90,9 +92,9 @@ require_managed_processes() {
 }
 
 installed_at() {
-  # When the files of a part were last installed: the stamp `apply` writes, else the newest file.
+  # When the files of a part were last installed, in microseconds: the stamp `apply` writes, else the newest file.
   if [ -f "$1/.parser-studio-release" ]; then awk '{print $2}' "$1/.parser-studio-release"
-  else find "$1" -type f -not -path '*/__pycache__/*' -not -path '*/.dist_*' -printf '%T@\n' | sort -n | tail -1 | cut -d. -f1; fi
+  else find "$1" -type f -not -path '*/__pycache__/*' -printf '%T@\n' | sort -n | tail -1 | awk -F. '{print $1 substr($2 "000000", 1, 6)}'; fi
 }
 
 require_process_newer_than_files() {
@@ -100,7 +102,7 @@ require_process_newer_than_files() {
   local ok=0 unit dir pid
   for pair in "$MULTIPASS_UNIT|$MULTIPASS" "$AUTHORING_UNIT|$BACKEND/dist"; do
     unit=${pair%%|*}; dir=${pair#*|}; pid=$(main_pid "$unit")
-    if [ "$(started_at "$pid")" -lt "$(installed_at "$dir")" ]; then
+    if [ "$(started_at "$unit")" -lt "$(installed_at "$dir")" ]; then
       log "CHECK_FAIL $unit (pid $pid) started before the files in $dir were installed"; ok=1
     fi
   done
@@ -157,7 +159,7 @@ DEPS
   log "check: the run-time packages of the backend are the installed ones"
 }
 
-stamp() { echo "$SHA $(date -u +%s)" > "$1/.parser-studio-release"; chown "$RUN_USER:$RUN_USER" "$1/.parser-studio-release"; }
+stamp() { echo "$SHA $(date +%s%6N)" > "$1/.parser-studio-release"; chown "$RUN_USER:$RUN_USER" "$1/.parser-studio-release"; }
 
 restart_and_confirm() {
   # $1 unit, $2 port: the unit has a new main process after the restart and answers.
@@ -176,7 +178,7 @@ rollback() {
     cp -p "$REL/rollback/index.html" "$WEB/.idx.rb" && chown "$RUN_USER:$RUN_USER" "$WEB/.idx.rb" && mv -f "$WEB/.idx.rb" "$WEB/index.html" && log "web index restored"
   fi
   if [ -d "$BACKEND/.dist_rollback_$S" ]; then
-    mv "$BACKEND/dist" "$BACKEND/.dist_failed_$S" && mv "$BACKEND/.dist_rollback_$S" "$BACKEND/dist" && stamp "$BACKEND/dist" \
+    mv "$BACKEND/dist" "$BACKEND/.dist_failed_${S}_$(date -u +%Y%m%dT%H%M%SZ)" && mv "$BACKEND/.dist_rollback_$S" "$BACKEND/dist" && stamp "$BACKEND/dist" \
       && restart_and_confirm "$AUTHORING_UNIT" "$AUTHORING_PORT" && log "backend restored"
   fi
   if [ -s "$REL/rollback/multipass.changed" ] || [ -s "$REL/rollback/multipass.new" ] || [ -s "$REL/rollback/multipass.removed" ]; then

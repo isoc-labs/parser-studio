@@ -143,7 +143,7 @@ when one of its checks fails. Roll back when a check of `apply` or `verify` fail
 the owner asks.
 
 After a rollback the public `index.html` hash must equal the one in `baseline-before.txt`. The failed candidate
-stays in place as `.dist_failed_<short-sha>` for diagnosis. Keep the release directory: it is the evidence, and the
+stays in place as `.dist_failed_<short-sha>_<time>` for diagnosis. Keep the release directory: it is the evidence, and the
 rollback material of the release that is live now.
 
 ## 6. The receipt
