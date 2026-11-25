@@ -3,11 +3,11 @@
   "documents": {
     "docs/02_WEB_UI_SPEC.md": {
       "status": "active",
-      "sha256": "12ef3c238fa8ff75fe3ad768b066cb9b1db735f8811170e3946eb5957d890ed5"
+      "sha256": "aaf7e48ef54ba4a791ad85fd7afa367029202da7e29ed5696ccf385df6870c8d"
     },
     "docs/14_TWO_PATH_PRODUCT_V2.md": {
       "status": "active",
-      "sha256": "9d2d41d651717ea02eb1c168204e2d338dc85cd826452a3763894ea21ca880b5"
+      "sha256": "7dda8dd6e83d66fc24d5942c6745547c9a66b1ba9a903aa646d479be929849f5"
     }
   },
   "requirements": [
