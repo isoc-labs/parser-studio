@@ -65,6 +65,7 @@ elif verb == 'is-active':
 elif verb == 'show':
     prop = rest[rest.index('-p') + 1]; now = state()
     if prop == 'MainPID': print(now['pid'] if alive(now['pid']) else 0)
+    elif prop == 'ExecMainStartTimestamp' and os.path.exists(stub + '/no-start-time'): print('n/a')
     else: print(datetime.datetime.fromtimestamp(now['started'], datetime.timezone.utc).strftime('%a %Y-%m-%d %H:%M:%S.%f UTC'))
 else: sys.exit('systemctl stand-in: ' + verb)
 '''
@@ -405,6 +406,83 @@ class ReleaseContract(unittest.TestCase):
         self.assertNotEqual(code, 0, out)
         self.assertIn('processes outside ' + MULTIPASS_UNIT, out)
         self.assertIn(str(extra.pid), out)
+
+    def test_status_refuses_a_backend_that_was_swapped_behind_the_tool(self):
+        # Second audit R-1: a prepared tree renamed into place keeps the times of its files. The process answers as
+        # the previous release, the files are the release, and nothing compares the answers of the backend.
+        box = self.box
+        box.must('apply')
+        dist, released, older = box.backend / 'dist', box.backend / 'released', box.backend / 'older'
+        shutil.copytree(dist, older)
+        (older / 'src/mainline-authoring-server.js').write_text(BACKEND % ('A', 'A'))
+        dist.rename(released)
+        older.rename(dist)
+        subprocess.run([str(box.bin / 'systemctl'), 'restart', AUTHORING_UNIT], env=box.env, check=True)
+        box.wait_health(box.authoring_port)
+        dist.rename(older)
+        released.rename(dist)                                # the files are the release again, with their old times
+        self.assertEqual(box.backend_release(), 'A')
+        self.assertIn('release B', (dist / 'src/mainline-authoring-server.js').read_text())
+        code, out = box.run('status')
+        self.assertNotEqual(code, 0, out)
+        self.assertIn(AUTHORING_UNIT, out)
+        self.assertIn('last changed', out)
+
+    def test_a_start_time_that_cannot_be_read_is_a_failure(self):
+        box = self.box
+        box.must('apply')
+        (box.stub / 'no-start-time').write_text('')
+        code, out = box.run('status')
+        self.assertNotEqual(code, 0, out)
+        self.assertIn('cannot be read', out)
+
+    def test_rollback_is_refused_while_a_newer_release_is_the_installed_one(self):
+        # Releases go back in order: this one is not the installed one, and it is not an unfinished apply either.
+        box = self.box
+        box.must('apply')
+        (box.rollouts / 'current-release').write_text('release-of-a-later-commit\n')
+        pids = box.pid(AUTHORING_UNIT), box.pid(MULTIPASS_UNIT)
+        code, out = box.run('rollback')
+        self.assertNotEqual(code, 0, out)
+        self.assertIn('ROLLBACK_REFUSED', out)
+        self.assertEqual(box.installed(), ('B', 'B', 'B'))
+        self.assertEqual((box.pid(AUTHORING_UNIT), box.pid(MULTIPASS_UNIT)), pids)
+
+    def test_rollback_does_not_report_ok_when_the_kept_backend_is_not_the_one_replaced(self):
+        box = self.box
+        box.must('apply')
+        kept = next(box.backend.glob('.dist_rollback_*')) / 'src/mainline-authoring-server.js'
+        kept.write_text(kept.read_text() + '// changed after it was kept\n')
+        code, out = box.run('rollback')
+        self.assertNotEqual(code, 0, out)
+        self.assertNotIn('ROLLBACK_OK', out)
+        self.assertIn('the backend is not the one this release replaced', out)
+
+    def test_rollback_does_not_report_ok_when_a_kept_engine_file_is_not_the_one_replaced(self):
+        box = self.box
+        box.must('apply')
+        kept = box.release / 'rollback/multipass/multipass_preview_api.py'
+        kept.write_text(kept.read_text() + '# changed after it was kept\n')
+        code, out = box.run('rollback')
+        self.assertNotEqual(code, 0, out)
+        self.assertNotIn('ROLLBACK_OK', out)
+        self.assertIn('the engine files are not the ones this release replaced', out)
+
+    def test_a_rollback_that_was_interrupted_can_be_finished(self):
+        # Second audit R-4: the automatic rollback of a failed apply could not confirm the previous page, and the
+        # operator's rollback was then refused although nothing newer was installed.
+        box = self.box
+        box.public.replace_page = b'<title>rewritten by a proxy</title>\n'
+        code, out = box.run('apply')
+        self.assertNotEqual(code, 0, out)
+        self.assertIn('ROLLBACK_INCOMPLETE', out)
+        box.public.replace_page = None
+        code, out = box.run('rollback')
+        self.assertEqual(code, 0, out)
+        self.assertIn('ROLLBACK_OK', out)
+        self.assertEqual(box.installed(), ('A', 'A', 'A'))
+        code, out = box.run('rollback')
+        self.assertNotEqual(code, 0, out)                    # used once
 
     def test_status_without_the_candidate_does_not_report_ok(self):
         # Audit F-06: with no checkout of the commit nothing was compared, and the answer was STATUS_OK.

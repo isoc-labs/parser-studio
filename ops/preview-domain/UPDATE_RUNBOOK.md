@@ -74,8 +74,8 @@ $R $SHA verify     # browser journey on the public site, Ruby 2.4.9, receipt
 ```
 
 `PS_RUBY249_RUNNER` is a host tool, not part of the repository: a command `<runner> <parser file> <file of lines>`
-that prints `ruby <version>` and one record per line. On `dev-atlas` it wraps the Ruby 2.4.9 container of the audit
-tools.
+that prints `ruby <version>` and one record per line. On `dev-atlas` it runs the parser with the Ruby 2.4.9 of the
+audit tools.
 
 The release directory is `REL=/home/aella/.local/state/parserstudio-public-rollouts/release-<short-sha>-<date>`.
 
@@ -141,8 +141,9 @@ A health endpoint that answers 200 says that a process listens. It does not say 
 checkout of that commit (`$REL/src`, left by `build`): without it nothing can be compared and the answer is
 `STATUS_INCOMPLETE`, not OK. Use it when in doubt about what runs.
 
-The start-time check compares the start of each process, as systemd recorded it, with the last change of any of its
-files (change time, which a copy cannot preserve) and with the release stamp. The file `.parser-studio-release` in
+The start-time check compares the start of each process, as systemd recorded it, with the release stamp and with
+the last change of any of its files (change time, which a copy cannot preserve). For the backend the folders count
+as well: a prepared tree that is renamed into place keeps the times of its files, but not the time of the folder. The file `.parser-studio-release` in
 the backend and engine directories names the commit a part was last installed from, or the name it had before when
 a rollback put it back; a release that does not change a part leaves its stamp alone, so the stamp can name an
 earlier commit while the files still equal the current one.
@@ -161,6 +162,10 @@ This happened on 2026-11-14 after the Python suite was run as root.
 $R $SHA rollback
 ```
 
+Use the tool of the commit that is `main` now, also to roll back the directory of an older release: the tool of an
+older commit does not know what later versions record (which release is installed, material that is used once).
+Remove copies of older tools (`/root/parser-studio-release-*.sh`) when a newer one is taken from Git.
+
 Restores, from `$REL/rollback/`, the previous `index.html`, the previous backend `dist` and the previous engine
 files, restarts the units whose files were restored, and checks that the restored backend and engine files are the
 ones that were replaced, that only the two units run them, and that the previous page is public. `apply` does the
@@ -169,7 +174,8 @@ explained, or when the owner asks.
 
 A rollback restores the state before that release, once: afterwards the material is marked used, and a second
 rollback of the same release is refused. Only the installed release can be rolled back
-(`parserstudio-public-rollouts/current-release` names it). To go back further, roll back the release directories one
+(`parserstudio-public-rollouts/current-release` names it); a release whose apply failed and whose automatic rollback
+could not finish can be rolled back as well, as long as nothing was applied after it. To go back further, roll back the release directories one
 after the other, newest first: each holds the material of the release it replaced. A release that changed no
 installed file restores nothing; the release before it restores what it had replaced.
 
