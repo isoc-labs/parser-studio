@@ -33,8 +33,8 @@ ChatGPT Assisted prepares a manually copied prompt containing the exact
 user-entered source, source digest/count metadata and applicable declarative
 recipe context. The user decides whether to redact source values before manually
 sharing. Show one clear sensitive-data warning; no separate masking editor,
-mandatory masking-consent checkbox, extra source-copy action or automatic
-external LLM request. The separate same-origin Multi-Pass analysis request is
+mandatory masking-consent checkbox, extra source-copy action, provider API key
+requirement or automatic external LLM request. The separate same-origin Multi-Pass analysis request is
 not a ChatGPT request. Keep the original source in browser memory and do not
 automatically transfer it to a third-party service.
 
@@ -42,7 +42,9 @@ The restricted ParserRecipe v0.2 result must verify the exact source SHA, stage
 order and allowed schema. If the v0.1 project is unavailable, use the local
 draft identity and keep recovery REVIEW_ONLY and unverified. Changed supported
 rules require local sample and applicable independent holdout regression and
-explicit user approval before replacement or generation. Unrecognized raw
+explicit user approval before replacement or generation. The applicable v0.1/v0.2
+compiler artifacts must agree on the exact approved backend candidate and
+corresponding output hashes. Unrecognized raw
 formats, unsafe regex, arbitrary Ruby/JSONata or arbitrary stage edits cannot
 fabricate a deployable parser. Use a bounded, reviewed compiler subset, not
 arbitrary code execution. Changing the source invalidates the prepared prompt.
@@ -58,7 +60,7 @@ target actions. The separate generated Python sender is run manually by the user
 Real target compatibility must never be inferred from local preview or synthetic tests.
 
 For an eligible reviewed source, provide the individual Ruby and CONF files and
-supported ZIP. Validate matching hashes and source/CONF port consistency.
+supported deterministic ZIP. Validate matching hashes and source/CONF port consistency.
 A tampered ZIP hash must never trigger a download or verified claim; missing ZIP
 capability must not initiate a ZIP request or suppress valid individual files.
 Reject malformed mapping destinations and ancestor/child path collisions before
@@ -68,15 +70,18 @@ verification status accurately; no unverified compatibility badge or deployment.
 ## Reviewed mixed CSV and explicit framing
 
 CSV contains no trustworthy field names. For eligible candidate CSV rows, present
-inline reviewed ordered column names and explicit comma, semicolon or TAB
-delimiter. Preview, conversion and generation must use the reviewed schema,
-not inferred names. Source/schema/delimiter edits revoke the approval.
+inline reviewed ordered column names (2–100 unique names matching the safe
+identifier grammar) and explicit comma, semicolon or TAB delimiter. Preview, conversion and generation must use the reviewed schema,
+not inferred names. Source/schema/delimiter edits revoke the approval, including
+an edit followed by a revert.
 Reject wrong column counts, invalid quotes, unrecognized families, unreviewed
 prefix, unsupported multiline framing and source/CONF port mismatch.
 Source-free authoring metadata and the explicit same-origin Multi-Pass analysis
 request are different interfaces. Runtime family vocabulary and capability
 compatibility are governed by the current executable schemas and native compiler
 contracts, not the historical fixed-count snapshots in the old combined roadmap.
+Reject unknown, duplicate or forged family capability entries; do not compile
+unreviewed mixed CSV or unframed arbitrary multiline input.
 
 ## Downloadable Python synthetic log sender
 
