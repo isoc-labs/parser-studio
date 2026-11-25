@@ -46,6 +46,26 @@ started_at() { date -d "$(systemctl show "$1" -p ExecMainStartTimestamp --timest
 # Differences between a built tree and an installed one, ignoring what the host adds (byte code, the release stamp).
 tree_diff() { diff -rq -x __pycache__ -x .parser-studio-release "$1" "$2"; }
 
+# Process ids of interpreters (python, node) that were started with this file as an argument, however the path was
+# written. A shell or editor that merely names the file on its command line is not one of them.
+running_entry() {
+  python3 - "$1" <<'ENTRY'
+import os, sys
+entry = os.path.realpath(sys.argv[1])
+for pid in filter(str.isdigit, os.listdir('/proc')):
+    if int(pid) == os.getpid():
+        continue  # this lookup itself is a python started with the file as an argument
+    try:
+        argv = [part.decode('utf-8', 'replace') for part in open('/proc/%s/cmdline' % pid, 'rb').read().split(b'\0') if part]
+        cwd = os.readlink('/proc/%s/cwd' % pid)
+    except OSError:
+        continue
+    if len(argv) > 1 and os.path.basename(argv[0]).startswith(('python', 'node')) \
+            and any(os.path.realpath(os.path.join(cwd, part)) == entry for part in argv[1:]):
+        print(pid)
+ENTRY
+}
+
 # --- checks -----------------------------------------------------------------------------------------------------
 
 require_canonical_head() {
@@ -84,7 +104,8 @@ require_managed_processes() {
     unit=${pair%%|*}; entry=${pair#*|}
     [ "$(systemctl is-active "$unit")" = active ] || { log "CHECK_FAIL $unit is not active"; ok=1; continue; }
     pid=$(main_pid "$unit")
-    others=$(pgrep -f -- "$entry" | grep -vx "$pid" | tr '\n' ' ')
+    others=$(running_entry "$entry" | grep -vx "$pid" | tr '\n' ' ')
+    running_entry "$entry" | grep -qx "$pid" || { log "CHECK_FAIL the main process of $unit does not run $entry"; ok=1; }
     [ -z "$others" ] || { log "CHECK_FAIL processes outside $unit run $entry: $others"; ok=1; }
   done
   [ "$ok" = 0 ] && log "check: only $MULTIPASS_UNIT and $AUTHORING_UNIT run the installed code"
