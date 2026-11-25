@@ -125,6 +125,9 @@ A health endpoint that answers 200 says that a process listens. It does not say 
 | health, and a large request body answers 422 | both services answer; Nginx passes bodies above its memory buffer to the backend |
 
 `release.sh <sha> status` runs these checks at any time and changes nothing. Use it when in doubt about what runs.
+The file `.parser-studio-release` in the backend and engine directories names the commit a part was last installed
+from; a release that does not change a part leaves its stamp alone, so the stamp can name an earlier commit while
+the files still equal the current one.
 
 If the large-body check answers 500 and `/var/log/nginx/error.log` shows `open() "/var/lib/nginx/body/..." failed
 (13: Permission denied)`, the temporary directories of Nginx no longer belong to its worker user. Repair:
@@ -141,6 +144,10 @@ Restores, from `$REL/rollback/`, the previous `index.html`, the previous backend
 files, restarts the units whose files were restored and repeats the process checks. `apply` does the same by itself
 when one of its checks fails. Roll back when a check of `apply` or `verify` fails and cannot be explained, or when
 the owner asks.
+
+A rollback restores the state before that release. To go back further, roll back the release directories one after
+the other, newest first: each holds the material of the release it replaced. A release that changed only the web
+page restores only the page; the release before it restores backend and engine.
 
 After a rollback the public `index.html` hash must equal the one in `baseline-before.txt`. The failed candidate
 stays in place as `.dist_failed_<short-sha>_<time>` for diagnosis. Keep the release directory: it is the evidence, and the
