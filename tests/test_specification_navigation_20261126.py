@@ -46,6 +46,16 @@ class SpecificationNavigationContract(unittest.TestCase):
         self.assertIn("body:JSON.stringify({raw})", read("src/guided/multipassPreviewClient.ts"))
         self.assertIn("MANUAL COPY & PASTE", read("src/guided/ChatGPTAssist.tsx"))
 
+    def test_local_replay_is_not_sensor_replay(self):
+        self.assertIn("The optional browser-only synthetic replay preview never sends logs to a sensor or starts a server session.", read("docs/14_TWO_PATH_PRODUCT_V2.md"))
+        self.assertIn("<AutoParserLocalReplay sample={sample} draft={draft}/>",
+                      read("src/guided/AutoParser.tsx"))
+        replay = read("src/guided/AutoParserLocalReplay.tsx")
+        self.assertIn("Validate the *entire* current sample", replay)
+        self.assertIn("return ()=>stopTimer();", replay)
+        self.assertIn("does not upload, store, or transmit these events.", replay)
+        self.assertIn("This local preview is not available for mixed or multi-line parser formats.", replay)
+
     def test_inventory_and_traceability(self):
         result = subprocess.run(
             [sys.executable, str(ROOT / "tools/specification_contract.py"), "--root", str(ROOT),
