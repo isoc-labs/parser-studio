@@ -21,7 +21,8 @@ Auto Parser follows Add Logs → Review Fields → Map Fields → Create Parser.
   not a third creation method. New Parser confirms before discarding existing logs.
 - Wizard, Workbench, standalone Library/Test Lab/Schema Explorer creation menus,
   separate Existing Parser import and standalone Tools & Diagnostics are not
-  current public navigation. Preserve useful internal libraries where appropriate.
+  current public navigation. Legacy deep links to retired routes resolve to Auto
+  Parser; preserve useful internal libraries where appropriate.
 
 ## Auto Parser stages
 
