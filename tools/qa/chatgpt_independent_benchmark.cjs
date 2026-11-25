@@ -13,7 +13,7 @@ const fatal = message => { throw new Error(message); };
 const assert = (condition,message) => { if(!condition)fatal(message); };
 const sourceFile = path.resolve(__dirname,'../../evals/chatgpt/security-cases.json');
 const defaultOut = path.join(os.homedir(),'.local/state/parserstudio-independent-chatgpt-qa-20261025');
-const origin = 'https://app.parser.xdr.ooo';
+const origin = 'https://app.parser.isoc.ooo';
 const pinnedBundle = 'index-BwZ2Ek3z.js';
 const file = (p,value) => { fs.mkdirSync(path.dirname(p),{recursive:true,mode:0o700}); fs.writeFileSync(p,value,{mode:0o600}); };
 const json = p => JSON.parse(fs.readFileSync(p,'utf8'));

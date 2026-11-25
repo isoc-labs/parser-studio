@@ -21,7 +21,7 @@ test('ten security cases require complete source-bound, SHA-checked preparation'
    fs.writeFileSync(path.join(folder,'original-source.sha256'),c.originalSha256+'\n');
    matrix.push({id:c.id,promptReady:true,promptSha256:sha(prompt),externalRequestCount:0});
   }
-  const audit={pass:10,fail:0,modelInvocations:0,origin:'https://app.parser.xdr.ooo',
+  const audit={pass:10,fail:0,modelInvocations:0,origin:'https://app.parser.isoc.ooo',
    pinnedBundle:'index-BwZ2Ek3z.js',cases:matrix};
   fs.writeFileSync(path.join(out,'prepare-audit.json'),JSON.stringify(audit));
   const result=prepared(fixtures,out);

@@ -150,8 +150,8 @@ class SecurePreviewHost(unittest.TestCase):
                         '--max-time','6'],
                         capture_output=True,text=True,timeout=9)
                     self.assertEqual(wrong_host.returncode,60,wrong_host.stderr)
-                    def request(path,method='GET',origin=None,size=0):
-                        headers={'Host':'app.parser.isoc.ooo'}
+                    def request(path,method='GET',origin=None,size=0,host='app.parser.isoc.ooo'):
+                        headers={'Host':host}
                         if origin is not None:
                             headers['Origin']=origin
                         raw=b'{"raw":"{\"action\":\"allow\"}"}' if method=='POST' else None
@@ -173,6 +173,12 @@ class SecurePreviewHost(unittest.TestCase):
                     self.assertEqual(request('/api/v1/multipass/preview','POST','https://app.parser.isoc.ooo')[0],200)
                     self.assertEqual(request('/api/v1/parser-pairs/capabilities')[0],200)
                     self.assertEqual(request('/api/v1/parser-pairs/generate','POST','https://app.parser.isoc.ooo')[0],200)
+                    # Under any other name this server gives nothing of Parser Studio. It can be the default
+                    # server of its listener and then receives the requests for names that no site claims.
+                    for other in ('unclaimed.example','203.0.113.7','app.parser.isoc.ooo.example'):
+                        self.assertEqual(request('/',host=other)[0],421)
+                        self.assertEqual(request('/api/v1/parser-pairs/capabilities',host=other)[0],421)
+                        self.assertEqual(request('/api/v1/multipass/preview','POST','https://app.parser.isoc.ooo',host=other)[0],421)
                     # A generated parser is above nginx's memory buffer for a request body (16 KB): the body goes
                     # through the temporary directory, which must be the fixture's own.
                     self.assertEqual(request('/api/v1/parser-pairs/package','POST','https://app.parser.isoc.ooo',size=200_000)[0],200)

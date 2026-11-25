@@ -19,7 +19,7 @@ const flatten=(value,p='',out=[])=>{
    const raw=fs.readFileSync(path.join(root,'raw',sample.id+'.log'),'utf8');
    const r={id:sample.id,sha256:crypto.createHash('sha256').update(raw,'utf8').digest('hex'),product:sample.product,official_example:true,authenticated_device_original:false,ui:'real deployed public Chromium',analysis_status:'',parser_file_creation:false,raw_preserved:false};
    try{
-    await page.goto('https://app.parser.xdr.ooo/');
+    await page.goto('https://app.parser.isoc.ooo/');
     await page.getByLabel('Auto Parser raw logs').fill(raw);
     r.raw_preserved=await page.getByLabel('Auto Parser raw logs').inputValue()===raw;
     const promise=page.waitForResponse(resp=>resp.request().method()==='POST'&&(/\/api\/v1\/multipass\/preview(?:-batch)?$/.test(new URL(resp.url()).pathname)),{timeout:27000});
