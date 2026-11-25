@@ -7,7 +7,7 @@
     },
     "docs/14_TWO_PATH_PRODUCT_V2.md": {
       "status": "active",
-      "sha256": "7dda8dd6e83d66fc24d5942c6745547c9a66b1ba9a903aa646d479be929849f5"
+      "sha256": "d054039084818b89bfaa377317af86b63c828e0fc2dbfa946a9a07cdb03da6cb"
     }
   },
   "requirements": [
@@ -108,6 +108,30 @@
         {
           "path": "tests/test_specification_navigation_20261126.py",
           "contains": "def test_explicit_first_party_transfer_not_automatic_llm(self):"
+        }
+      ]
+    },
+    {
+      "id": "PS-005",
+      "state": "implemented",
+      "source": {
+        "path": "docs/14_TWO_PATH_PRODUCT_V2.md",
+        "contains": "The optional browser-only synthetic replay preview never sends logs to a sensor or starts a server session."
+      },
+      "implementation": [
+        {
+          "path": "src/guided/AutoParser.tsx",
+          "contains": "<AutoParserLocalReplay sample={sample} draft={draft}/>"
+        },
+        {
+          "path": "src/guided/AutoParserLocalReplay.tsx",
+          "contains": "does not upload, store, or transmit these events."
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_specification_navigation_20261126.py",
+          "contains": "def test_local_replay_is_not_sensor_replay(self):"
         }
       ]
     }
