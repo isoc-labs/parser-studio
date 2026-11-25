@@ -50,13 +50,13 @@ test('common PAN-OS Traffic syslog is auto-adopted and mapped without a repair c
   await page.getByRole('button',{name:'Map Fields',exact:true}).click();
   const map=page.getByLabel('Map Fields stage');
   await expect(map.getByLabel(/Source field/).filter({hasText:''}).first()).toBeVisible();
-  await expect(map).toContainText('parserstudio_source.generic.fields.src');
+  await expect(map.locator('article.normalization-map-row[data-source-path="generic.fields.src"]')).toHaveCount(1);
   await expect(map).toContainText('srcip');
-  await expect(map).toContainText('parserstudio_source.generic.fields.dst');
+  await expect(map.locator('article.normalization-map-row[data-source-path="generic.fields.dst"]')).toHaveCount(1);
   await expect(map).toContainText('dstip');
-  await expect(map).toContainText('parserstudio_source.generic.fields.protocol');
+  await expect(map.locator('article.normalization-map-row[data-source-path="generic.fields.protocol"]')).toHaveCount(1);
   await expect(map).toContainText('proto_name');
-  await expect(map).toContainText('parserstudio_source.generic.fields.action');
+  await expect(map.locator('article.normalization-map-row[data-source-path="generic.fields.action"]')).toHaveCount(1);
 });
 
 test('common year-bearing ASA 302013 wrapper is auto-adopted as a complete event',async({page})=>{
@@ -73,12 +73,23 @@ test('common year-bearing ASA 302013 wrapper is auto-adopted as a complete event
   await expect(page.getByRole('button',{name:'Review Fields',exact:true})).toBeEnabled();
 });
 
-test('BIG-IP ASM comma KV is auto-adopted and nested leaf names drive Stellar suggestions',async({page})=>{
+// Read natively since 77bbe39 (RFC 3164 without a PRI + key=value list); the fields are body.<key>.
+test('BIG-IP ASM comma KV is read completely and its leaf names drive Stellar suggestions',async({page})=>{
   const raw='Oct 15 00:14:27 bigip-waf01 ASM: unit_hostname="bigip-waf01",management_ip_address="10.1.1.10",request_status="blocked",ip_client="203.0.113.210",route_domain="0",method="POST",protocol="HTTPS",date_time="2026-10-15T00:14:27+09:00",dest_port="443",dest_ip="10.20.1.25",uri="/api/login"';
-  await routeLocalAnalysis(page,raw,'GENERIC_BSD_ENVELOPE+DELIMITED_KV',{
-    syslog:{month:'Oct',day:'15',time:'00:14:27',host:'bigip-waf01',tag:'ASM'},
-    generic:{mode:'delimited_kv'},
+  // What the Multi-Pass preview answers for this line (runtime/multipass, checked 2026-11-22).
+  await routeLocalAnalysis(page,raw,'BSD_SYSLOG+KV',{
+    syslog:{month:'Oct',day:'15',time:'00:14:27',hostname:'bigip-waf01',app_tag:'ASM'},
+    body:{unit_hostname:'bigip-waf01',management_ip_address:'10.1.1.10',request_status:'blocked',
+      ip_client:'203.0.113.210',route_domain:'0',method:'POST',protocol:'HTTPS',
+      date_time:'2026-10-15T00:14:27+09:00',dest_port:'443',dest_ip:'10.20.1.25',uri:'/api/login'},
   });
+  // The record is read by the RFC 3164 grammar, so the mocked backend advertises that reader as the real
+  // backend does (backend/src/capabilities.ts); the capability of the other tests names Generic Structural only.
+  await page.route('**/api/v1/parser-pairs/capabilities',route=>route.fulfill({status:200,contentType:'application/json',
+    body:JSON.stringify({...cap,authoring:{...cap.authoring,extractionFormats:['generic_structural','syslog_rfc3164'],
+      rfc3164StrictTaggedMessageSubset:true,rfc3164TaglessStructuredSecuritySubset:true,
+      rfc3164TimePolicy:'YEAR_AND_ZONE_UNKNOWN',rfc3164NativeTimeReconstruction:false,
+      rfc3164BodyFormats:['raw','json','kv','cef','leef','regex']}})}));
   await page.goto('/');
   await page.getByLabel('Auto Parser raw logs').fill(raw);
   await page.getByRole('button',{name:'Analyze Logs'}).click();
@@ -87,10 +98,10 @@ test('BIG-IP ASM comma KV is auto-adopted and nested leaf names drive Stellar su
   await page.getByRole('button',{name:'Review Fields',exact:true}).click();
   await page.getByRole('button',{name:'Map Fields',exact:true}).click();
   const map=page.getByLabel('Map Fields stage');
-  await expect(map).toContainText('parserstudio_source.generic.fields.ip_client');
+  await expect(map.locator('article.normalization-map-row[data-source-path="body.ip_client"]')).toHaveCount(1);
   await expect(map).toContainText('srcip');
-  await expect(map).toContainText('parserstudio_source.generic.fields.dest_ip');
+  await expect(map.locator('article.normalization-map-row[data-source-path="body.dest_ip"]')).toHaveCount(1);
   await expect(map).toContainText('dstip');
-  await expect(map).toContainText('parserstudio_source.generic.fields.protocol');
+  await expect(map.locator('article.normalization-map-row[data-source-path="body.protocol"]')).toHaveCount(1);
   await expect(map).toContainText('proto_name');
 });

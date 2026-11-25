@@ -4,7 +4,10 @@
 set -euo pipefail
 umask 077
 
-SITE=app.parser.xdr.ooo
+SITE=app.parser.isoc.ooo
+# The certificate of this host is the shared ISOC certificate. It names other ISOC hosts as well, so this
+# installer never issues or replaces it.
+CERT_NAME=isoc-app-services
 ROOT=/home/aella/parser-studio-secure-domain-20261019
 STAGED=/etc/nginx/sites-available/$SITE
 ENABLED=/etc/nginx/sites-enabled/$SITE
@@ -30,7 +33,7 @@ die(){ printf 'FAILED: %s\n' "$*" >&2; exit 1; }
 [[ "$(cat "$ROOT/dist/.parser-studio-built-head")" == "$1" ]] || die 'Frontend build HEAD does not match the requested Git SHA.'
 [[ "$(git -C "$ROOT" rev-parse HEAD)" == "$1" ]] || die 'Current source HEAD changed.'
 [[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]] || die 'Tracked source is dirty; requalify it first.'
-[[ -f "$ROOT/ops/preview-domain/nginx-app.parser.xdr.ooo.conf" ]] || die 'Audited Nginx configuration missing.'
+[[ -f "$ROOT/ops/preview-domain/nginx-app.parser.isoc.ooo.conf" ]] || die 'Audited Nginx configuration missing.'
 [[ -f "$ROOT/ops/preview-domain/parser-studio-preview-multipass.service" ]] || die 'Multi-Pass unit missing.'
 [[ -f "$ROOT/ops/preview-domain/parser-studio-preview-authoring.service" ]] || die 'Authoring API unit missing.'
 [[ -f "$ROOT/ops/preview-domain/check-staged-files.sh" ]] || die 'Read-only staging verification is missing.'
@@ -40,7 +43,7 @@ die(){ printf 'FAILED: %s\n' "$*" >&2; exit 1; }
 if find "$PKG" -type l -print -quit | grep -q .; then
   die 'Deployment package contains symlinks; copy refused.'
 fi
-for bin in nginx certbot curl systemctl git openssl diff; do
+for bin in nginx curl systemctl git openssl diff; do
   command -v "$bin" >/dev/null || die "Required command missing: $bin"
 done
 stage_mode=$(bash "$ROOT/ops/preview-domain/check-staged-files.sh" "$PKG" "$WWW" "$BACKEND" "$MULTIPASS") ||
@@ -54,20 +57,16 @@ fi
 
 printf '\nThis installs a NEW no-login HTTPS Nginx virtual host for %s.\n' "$SITE"
 printf 'It configures existing verified files, loopback services and an isolated Nginx site.\n'
-printf 'The existing exporter.xdr.ooo configuration is preserved.\n'
+printf 'The existing exporter.isoc.ooo configuration is preserved.\n'
 printf 'Staged source files: %s\n' "$stage_mode"
-certificate=/etc/letsencrypt/live/$SITE/fullchain.pem
-private_key=/etc/letsencrypt/live/$SITE/privkey.pem
-if [[ -f "$certificate" && -f "$private_key" ]] &&
-   openssl x509 -checkend 86400 -noout -in "$certificate" >/dev/null; then
-  echo 'Reusing the already-issued valid HTTPS certificate.'
-  reuse_certificate=true
-else
-  reuse_certificate=false
-  read -r -p "Let's Encrypt certificate contact email: " email
-  [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] ||
-    die 'Invalid certificate contact email.'
-fi
+certificate=/etc/letsencrypt/live/$CERT_NAME/fullchain.pem
+private_key=/etc/letsencrypt/live/$CERT_NAME/privkey.pem
+[[ -f "$certificate" && -f "$private_key" ]] &&
+  openssl x509 -checkend 86400 -noout -in "$certificate" >/dev/null ||
+  die 'The shared ISOC certificate is missing or expires within a day; it is issued outside this installer.'
+openssl x509 -noout -ext subjectAltName -in "$certificate" | grep -q "DNS:$SITE" ||
+  die 'The shared ISOC certificate does not name this host.'
+echo 'Using the shared ISOC HTTPS certificate.'
 
 # In a failure, restore the old Nginx set of enabled sites. Never touch the
 # existing Exporter virtual host; certbot files can remain for manual review.
@@ -91,7 +90,7 @@ cat > "$STAGED" <<'NGINX_BOOTSTRAP'
 server {
     listen 80;
     listen [::]:80;
-    server_name app.parser.xdr.ooo;
+    server_name app.parser.isoc.ooo;
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/parser-studio-acme;
         default_type text/plain;
@@ -103,11 +102,6 @@ NGINX_BOOTSTRAP
 ln -s "$STAGED" "$ENABLED"
 nginx -t
 systemctl reload nginx
-
-if [[ "$reuse_certificate" != true ]]; then
-  certbot certonly --webroot --webroot-path "$ACME" -d "$SITE" \
-    --agree-tos --non-interactive --email "$email" --keep-until-expiring
-fi
 
 if [[ "$stage_mode" == FRESH ]]; then
   install -d -m 0755 "$WWW" "$BACKEND" "$MULTIPASS"
@@ -148,7 +142,7 @@ wait_for_service "$SVC" http://127.0.0.1:4304/health ||
 wait_for_service "$BACKEND_SVC" http://127.0.0.1:4305/api/v1/parser-pairs/capabilities ||
   die 'Exact-HEAD offline Authoring API did not become ready within the bounded startup window.'
 
-install -m 0644 "$ROOT/ops/preview-domain/nginx-app.parser.xdr.ooo.conf" "$STAGED"
+install -m 0644 "$ROOT/ops/preview-domain/nginx-app.parser.isoc.ooo.conf" "$STAGED"
 nginx -t
 systemctl reload nginx
 

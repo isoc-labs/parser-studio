@@ -24,7 +24,7 @@ class ActualReleaseGateTests(unittest.TestCase):
                 'exit 0\n',encoding='utf-8')
             tool.chmod(0o755)
             env={**os.environ,'PATH':tmp+os.pathsep+os.environ.get('PATH',''),
-                 'GITHUB_EVENT_NAME':event,'GH_REPO':'xdr-labs/parser-studio',
+                 'GITHUB_EVENT_NAME':event,'GH_REPO':'isoc-labs/parser-studio',
                  'GH_TOKEN':'synthetic-test-only','SIMULATE_OPEN_P1':'1' if blocker else '0'}
             return subprocess.run(['bash','-e','-o','pipefail','-c',SCRIPT],
                 env=env,text=True,capture_output=True,timeout=5,check=False)

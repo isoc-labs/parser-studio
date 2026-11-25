@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import type {ResidualRegion} from './residualProvenance';
 import {unsafeJsonNumberExplanation} from './unsafeJsonNumbers';
 import {independentKeyValuePairs} from '../grammar/parseStatus';
 import {Bot,CheckCircle2,Clipboard,TriangleAlert,Wrench} from 'lucide-react';
@@ -26,12 +27,15 @@ interface Props {
   metadataLineCount?:number;
   parserRuleReviewRequired?:boolean;
   parserRuleReviewEventIndexes?:number[];
+  /** The Auto Parser offers to create the parser for the readable events of this sample. */
+  readableEventsOffered?:boolean;
   csvReviewRequired?:boolean;
   csvConsistentShapeAvailable?:boolean;
   neutralCsvColumnCount?:number;
   onUseNeutralCsvColumns?:()=>void;
   protectedSourceValuesByEvent?:string[][];
   protectedResidualTextByEvent?:string[][];
+  protectedResidualRegionsByEvent?:ResidualRegion[][];
 }
 
 function utf8Slice(source:string,startByte:number,endByte:number):string{
@@ -292,7 +296,7 @@ function sourceSegments(raw:string,preview:MultiPassSourcePreview){
 export default function BeginnerAnalysisPanel({source,events,onOpenAssisted,draft,suite,onApplyCandidate,
   resolvedByReviewedCandidate=false,metadataLineCount=0,compilerBlockedReason,parserRuleReviewRequired=false,parserRuleReviewEventIndexes,
   csvReviewRequired=false,csvConsistentShapeAvailable=true,neutralCsvColumnCount,onUseNeutralCsvColumns,protectedSourceValuesByEvent,
-  protectedResidualTextByEvent}:Props){
+  protectedResidualTextByEvent,protectedResidualRegionsByEvent,readableEventsOffered=false}:Props){
   const [selected,setSelected]=useState(0);
   const [promptOpen,setPromptOpen]=useState(false);
   const [promptText,setPromptText]=useState('');
@@ -412,7 +416,9 @@ export default function BeginnerAnalysisPanel({source,events,onOpenAssisted,draf
         :problemTitle(current.event.preview)}</h3>
       <p>{parserRuleReviewRequired
         ?<>Parser Studio extracted the values in this <b>{friendlySyntax(current.event.preview,raw)}</b>. A reviewed parser rule is still required to create files; source extraction alone does not verify compatibility.</>
-        :<>Parser Studio recognized <b>{friendlySyntax(current.event.preview,raw)}</b>, but it will not let you continue until the remaining review is resolved.</>}</p>
+        :<>Parser Studio recognized <b>{friendlySyntax(current.event.preview,raw)}</b>{readableEventsOffered
+          ?', but this event still needs a fix. Fix it, or create the parser for the readable events below; this event is then left out and never shown as parsed.'
+          :', but it will not let you continue until the remaining review is resolved.'}</>}</p>
       <div className="beginner-problem-source">
         <span>Original event {current.index+1} · {parserRuleReviewRequired
           ?'parser-file rule needs review'
@@ -506,7 +512,8 @@ export default function BeginnerAnalysisPanel({source,events,onOpenAssisted,draf
             onChatGPT={onOpenAssisted} source={source} draft={draft} suite={suite}
             onApplyCandidate={onApplyCandidate}
             protectedSourceValuesByEvent={protectedSourceValuesByEvent}
-            protectedResidualTextByEvent={protectedResidualTextByEvent}/>
+            protectedResidualTextByEvent={protectedResidualTextByEvent}
+            protectedResidualRegionsByEvent={protectedResidualRegionsByEvent}/>
         </>}
         {recipeImportEligible&&draft&&!suite&&<div className="beginner-inline-wait" role="status">
           <strong>Preparing result review…</strong>

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
+import {diagnosticsOf} from './failure-record.js';
 import {sampleProject} from './fixture.js';
 import {validateProject} from '../src/validate.js';
 import {compilePair} from '../src/compiler.js';
@@ -106,5 +107,6 @@ test('Ruby native parser matches six independent synthetic golden records across
       assert.deepEqual(value[key],expectedValue,'Mismatch at '+i+':'+key);
   }
   assert.equal(output[6]?.parser_err_stage,'normalization');
-  assert.equal(JSON.stringify(output).includes('SECRET_DO_NOT_ECHO'),false);
+  assert.equal(output[6]?.parser_raw_msg,input[6]);
+  assert.equal(JSON.stringify(output.map(diagnosticsOf)).includes('SECRET_DO_NOT_ECHO'),false);
 });

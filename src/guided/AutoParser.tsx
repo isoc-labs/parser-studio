@@ -13,24 +13,26 @@ import {fetchBackendSchemaGuide} from './backendSchemaGuide';
 import {validateBackendProject,generateBackendPair,type GeneratedPair} from './backendClient';
 import {verifyGeneratedPair,packageGeneratedPair} from './artifactPackageClient';
 import {analyzeLogEnvelopes,assessEnvelopeCompilation} from './autoParserEnvelope';
+import {describeExcluded,readableEvents,type ExcludedEvents} from './readableEvents';
 import {prepareAutoParserDraft} from './autoParserDraft';
 import {selectDraftFormat} from './draftFormatTransition';
 import {buildReviewableRecipe} from './parserRecipeV2';
 import {compileReviewedRecipeV02} from './recipeV2BackendClient';
 import {materializeStructuralGroupSource,type StructuralHint,type StructuralMiningReport} from './localPatternMining';
-import NormalizationMappingReview from './NormalizationMappingReview';
+import EventTypeMappingReview from './EventTypeMappingReview';
 import {HelpTip,StageGuide} from './BeginnerHelp';
 import {inferConsistentCsvColumnCount,inspectCsvColumnShapes,splitEvents,MAX_EVENTS} from '../parser';
 import {parseJavaStacktrace} from '../javaStacktrace';
 import {defaultGuidedOptions} from './contract';
 import ParserIdentityCard from './ParserIdentityCard';
 import {reviewLogicalBoundaries,type LogicalBoundaryReport} from './logicalBoundaryReview';
-import {buildSourceReviewedGenericStructuralDraft} from './genericStructuralAutoDraft';
+import {buildSourceReviewedBoundedDraft,headerlessCsvEvents,nativelyReadEvents} from './genericStructuralAutoDraft';
 import {inspectZeekReview} from './zeekReview';
 
 
 import AutoParserAIReview from './AutoParserAIReview';
 import {requestMultiPassBatchPreview,requestMultiPassPreview,type MultiPassSourcePreview} from './multipassPreviewClient';
+import {sourceTextForByteRange} from './sourceByteSelection';
 import {buildMultiPassSourceHighlights,type MultiPassSourceSelection} from './multipassSourceHighlights';
 import AutoParserLocalReplay from './AutoParserLocalReplay';
 import PythonTestSenderPanel from './PythonTestSenderPanel';
@@ -80,6 +82,8 @@ type Zip={key:string;filename:string;sha256:string};
 type ParserSetOrigin={
  source:string;datasetName:string;sourceCount:number;draft:ParserDraft;
  fingerprint:string;groupCount:number;groupSource:string;
+ /** Set when the subset is the readable events of the sample: the events left out, by kind. */
+ excluded?:ExcludedEvents[];
 };
 type MultiPassReview={raw:string;events:Array<{startByte:number;endByte:number;preview:MultiPassSourcePreview}>;metadataLines?:number;transportFramingParts?:number};
 function download(filename:string,content:string|ArrayBuffer,binary=false){
@@ -413,6 +417,23 @@ export default function AutoParser({
    suite.counts.extracted===suite.counts.total&&suite.counts.failures===0;
  const neutralCsvComplete=csvReviewActive&&csvApproved&&csvNamesValid&&browserExtractionComplete;
  const beginnerResolved=beginnerAuthoritativeComplete||reviewedCandidateComplete||neutralCsvComplete;
+ // Owner decision 2026-11-22: events that cannot be read do not stop the parser for the events that can.
+ // Offered when the sample as a whole cannot go on and at least one event was read completely.
+ // The split follows the verdicts this journey goes on with (beginnerResolved): with the automatic draft the server
+ // analysis and the first scan, with a reviewed draft the browser suite.
+ const readable=useMemo(()=>{
+   if(advanced||parserSetOrigin||report.boundary!=='single-line')return null;
+   if(draft.format!=='auto')return readableEvents(sample,suite,report.events);
+   if(multiPass?.raw!==sample)return null;
+   return readableEvents(sample,suite,report.events,
+     multiPass.events.map(event=>event.preview.status==='SOURCE_PARSED'));
+ },[advanced,parserSetOrigin,report,sample,suite,draft.format,multiPass]);
+ const analyzeReadableEvents=useRef(false);
+ useEffect(()=>{
+   if(!analyzeReadableEvents.current||!parserSetOrigin?.excluded||sample!==parserSetOrigin.groupSource)return;
+   analyzeReadableEvents.current=false;
+   void previewMultiPass();
+ },[sample,parserSetOrigin]);
  const explicitBackendProject=useMemo(()=>draft.format==='auto'?null:toBackendProject(draft),[draft]);
  const explicitDraftCompilable=useMemo(()=>{
    if(!browserSuiteComplete||!explicitBackendProject?.ok||capability?.source!==sample)return false;
@@ -599,6 +620,18 @@ export default function AutoParser({
    setDraft(origin.draft);setStep(0);setSelected(0);setMultiPass(null);setMultiPassEvent(0);
    setSelectedMultiPass(null);setMultiPassNotice('');setMessage('');
  }
+ /** Goes on with the events that were read completely; the others stay in the original sample (Return). */
+ function continueWithReadableEvents(){
+   if(parserSetOrigin||busy||pending||!readable)return;
+   const origin:ParserSetOrigin={source:sample,datasetName,sourceCount:readable.total,draft,
+     fingerprint:'readable-events',groupCount:readable.count,groupSource:readable.source,excluded:readable.excluded};
+   parserSetOriginRef.current=origin;setParserSetOrigin(origin);
+   setSample(readable.source);
+   setDatasetName((datasetName||'Logs')+' \u00b7 Readable events');
+   setStep(0);setSelected(0);setMultiPass(null);setMultiPassEvent(0);
+   setSelectedMultiPass(null);setMultiPassNotice('');setMessage('');
+   analyzeReadableEvents.current=true;
+ }
  async function zipPair(){
    if(!currentPair||!capability||!draft.guided||busy)return;
    const token=++epoch.current,expected=identity;
@@ -655,9 +688,15 @@ export default function AutoParser({
    if(!analysisRun.isCurrent(run))return;
    // The bounded compiler can resolve a partial source diagnostic only when
    // its strict grammar preserves the same complete set of original records.
-   const automatic=!advanced&&draft.format==='auto'&&report.unsupported>0&&
-     review.events.length>0
-     ?buildSourceReviewedGenericStructuralDraft(original,draft,review):null;
+   // A line that only reads as positional CSV without column names (no PRI in front of a Syslog-wrapped
+   // firewall record, for example) is not "unsupported" for the first scan, but it has no field meaning
+   // either. The bounded compiler is asked for it too. Whatever opened the route, an event the first scan
+   // takes for a delimited record is adopted only with a reading that keeps its cells and has names for them,
+   // and an event it read natively only with a reading that holds everything the native reading holds
+   // (buildSourceReviewedBoundedDraft); otherwise the CSV column review and the native readings stay.
+   const headerlessCsv=headerlessCsvEvents(report.events);
+   const automatic=!advanced&&draft.format==='auto'&&review.events.length>0&&(report.unsupported>0||csvFound)
+     ?buildSourceReviewedBoundedDraft(original,draft,review,headerlessCsv,nativelyReadEvents(report.events)):null;
    // Finish before a successful automatic draft adoption changes the identity.
    analysisRun.finish(run);
    setMultiPass(review);
@@ -689,7 +728,12 @@ export default function AutoParser({
    event.preview.residuals.filter(region=>region.endByte>region.startByte)
     .map(region=>decode(event.startByte+region.startByte,event.startByte+region.endByte))
     .filter(text=>text.trim().length>0));
-  return {review,frame,preview,raw,highlights,counts,protectedValues,protectedResiduals};
+  // The same regions as UTF-8 byte ranges of each event, for the character-level residual review (H-2).
+  const protectedResidualRegions=review?.events.map(event=>
+   event.preview.residuals.filter(region=>region.endByte>region.startByte&&
+    decode(event.startByte+region.startByte,event.startByte+region.endByte).trim().length>0)
+    .map(region=>({startByte:region.startByte,endByte:region.endByte})));
+  return {review,frame,preview,raw,highlights,counts,protectedValues,protectedResiduals,protectedResidualRegions};
  },[multiPass,sample,multiPassEvent,advanced]);
  const currentMultiPassReview=multiPassDerived.review;
  const currentMultiPassFrame=multiPassDerived.frame;
@@ -699,6 +743,7 @@ export default function AutoParser({
  const currentMultiPassCounts=multiPassDerived.counts;
  const protectedSourceValuesByEvent=multiPassDerived.protectedValues;
  const protectedResidualTextByEvent=multiPassDerived.protectedResiduals;
+ const protectedResidualRegionsByEvent=multiPassDerived.protectedResidualRegions;
  useEffect(()=>{
    if(advanced||parserSetOrigin||report.unsupported<3||!currentMultiPassReview||
       currentStructural||busy||pending||!suite)return;
@@ -715,6 +760,19 @@ export default function AutoParser({
        Go to log input
      </button>}
    </header>
+   {parserSetOrigin?.excluded&&<div className="auto-parser-note beginner-essential-note" aria-label="Events not covered by this parser">
+     <strong>This parser covers {parserSetOrigin.groupCount} of your {parserSetOrigin.sourceCount} events</strong>
+     <p>{parserSetOrigin.sourceCount-parserSetOrigin.groupCount} event
+       {parserSetOrigin.sourceCount-parserSetOrigin.groupCount===1?'':'s'} could not be read and
+       {parserSetOrigin.sourceCount-parserSetOrigin.groupCount===1?' is':' are'} not parsed by this parser:
+       {' '}{describeExcluded(parserSetOrigin.excluded)}. They are not shown as parsed. When the generated parser
+       receives such an event it extracts nothing and invents nothing: it marks the event as not parsed
+       (parser_err_msg) and keeps its complete original text in parser_raw_msg, so the event is not dropped.
+       For a parser that reads these events, use ChatGPT Assisted Parser.</p>
+     <button type="button" onClick={restoreParserSetSource}>
+       Return to all {parserSetOrigin.sourceCount} logs
+     </button>
+   </div>}
    <nav aria-label="Auto Parser steps" className="auto-parser-steps">
      {STEPS.map((label,index)=>{
        const locked=index>furthestStep;
@@ -750,7 +808,7 @@ export default function AutoParser({
          </label>
          <small>{datasetName} · Maximum 64 KiB / 500 events</small>
        </div>
-       {parserSetOrigin&&<div className="auto-parser-note beginner-essential-note" aria-label="Separate log group context">
+       {parserSetOrigin&&!parserSetOrigin.excluded&&<div className="auto-parser-note beginner-essential-note" aria-label="Separate log group context">
          <strong>Working on one matching log group · {parserSetOrigin.groupCount} events
            <HelpTip label="Why is this a separate group?"
              text="These events repeat the same basic structure. Parser Studio separated them so a parser for one shape does not accidentally break different-looking events."/></strong>
@@ -809,12 +867,13 @@ export default function AutoParser({
          compilerBlockedReason={currentReviewBlock?.reason}
          parserRuleReviewRequired={parserRuleReviewRequired}
          parserRuleReviewEventIndexes={parserRuleReviewEventIndexes}
+         readableEventsOffered={Boolean(readable&&!beginnerResolved)}
          csvReviewRequired={csvReviewActive&&!csvApproved}
          csvConsistentShapeAvailable={csvConsistentShapeAvailable}
          neutralCsvColumnCount={neutralCsvColumnCount??undefined}
          onUseNeutralCsvColumns={suggestNeutralCsvColumns}
          protectedSourceValuesByEvent={protectedSourceValuesByEvent}
-           protectedResidualTextByEvent={protectedResidualTextByEvent}/>}
+           protectedResidualTextByEvent={protectedResidualTextByEvent} protectedResidualRegionsByEvent={protectedResidualRegionsByEvent}/>}
        {!advanced&&!parserSetOrigin&&parserSetCandidates.length>0&&currentStructural&&
          <div className="auto-parser-warning" aria-label="Similar log groups">
            <strong>Different log shapes were found
@@ -929,11 +988,11 @@ export default function AutoParser({
              initialByteRange={selectedMultiPass} selectionContext={{kind:selectedMultiPass.kind,path:selectedMultiPass.path}}
              source={sample} draft={draft} suite={suite} onApplyCandidate={setDraft}
              protectedSourceValuesByEvent={protectedSourceValuesByEvent}
-           protectedResidualTextByEvent={protectedResidualTextByEvent}/>}
+           protectedResidualTextByEvent={protectedResidualTextByEvent} protectedResidualRegionsByEvent={protectedResidualRegionsByEvent}/>}
            {advanced&&currentMultiPass.status==='RAW_ONLY'&&<AutoParserAIReview raw={currentMultiPassRaw} status="unsupported" onChatGPT={onChatGPT}
              source={sample} draft={draft} suite={suite} onApplyCandidate={setDraft}
              protectedSourceValuesByEvent={protectedSourceValuesByEvent}
-           protectedResidualTextByEvent={protectedResidualTextByEvent}/>}
+           protectedResidualTextByEvent={protectedResidualTextByEvent} protectedResidualRegionsByEvent={protectedResidualRegionsByEvent}/>}
 
          </div>}
        </div>}
@@ -1065,10 +1124,22 @@ export default function AutoParser({
          <p>{report.unsupported} of {report.sourceCount} events were not fully recognized. The original input is preserved; unsupported events are not silently discarded or marked parser-ready.</p>
          <AutoParserAIReview raw={sample} status="unsupported" onChatGPT={onChatGPT} source={sample} draft={draft} suite={suite}
            protectedSourceValuesByEvent={protectedSourceValuesByEvent}
-           protectedResidualTextByEvent={protectedResidualTextByEvent}/>
+           protectedResidualTextByEvent={protectedResidualTextByEvent} protectedResidualRegionsByEvent={protectedResidualRegionsByEvent}/>
+       </div>}
+       {readable&&!beginnerResolved&&<div className="auto-parser-warning" aria-label="Readable events">
+         <strong>{readable.count} of {readable.total} events were read completely</strong>
+         <p>{readable.total-readable.count} event{readable.total-readable.count===1?'':'s'} could not be read:
+           {' '}{describeExcluded(readable.excluded)}. You can create the parser for the readable events now.
+           The other events are left out of this parser and are never shown as parsed.</p>
+         <button type="button" aria-label="Continue with readable events" disabled={busy||pending}
+           onClick={continueWithReadableEvents}>
+           Create the parser for the {readable.count} readable event{readable.count===1?'':'s'}
+         </button>
        </div>}
        {report.unsupported>0&&!beginnerResolved&&<p className="auto-parser-note beginner-essential-note">
-         Some events could not be understood safely. Parser Studio keeps those events unchanged and will not let you continue until they are reviewed.
+         {readable
+           ?'Some events could not be understood safely. Parser Studio keeps those events unchanged. Fix them, or create the parser for the readable events above.'
+           :'Some events could not be understood safely. Parser Studio keeps those events unchanged and will not let you continue until they are reviewed.'}
          <HelpTip label="Why are some events blocked?"
            text="Security logs can contain unusual headers, broken timestamps, several lines per event, or vendor-specific text. Parser Studio stops instead of guessing when that could lose data or create the wrong fields."/>
        </p>}
@@ -1109,7 +1180,9 @@ export default function AutoParser({
        {!advanced&&sample.trim()&&!currentMultiPassReview&&
          <p className="beginner-next-step" role="status">Analyze the logs first. Parser Studio will not create a parser from an unreviewed sample.</p>}
        {!advanced&&currentMultiPassReview&&!beginnerResolved&&
-         <p className="beginner-next-step needs-fix" role="status">Resolve the events marked above before continuing. Already-correct fields remain preserved.</p>}
+         <p className="beginner-next-step needs-fix" role="status">{readable
+           ?'Resolve the events marked above, or create the parser for the readable events. Already-correct fields remain preserved.'
+           :'Resolve the events marked above before continuing. Already-correct fields remain preserved.'}</p>}
        {!advanced&&currentMultiPassReview&&beginnerResolved&&pending&&
          <p className="beginner-next-step" role="status">Your logs were understood. Preparing the parser draft for field review…</p>}
        {currentReviewBlock&&<div className="auto-parser-warning" role="alert" aria-label="Parser draft not ready">
@@ -1176,7 +1249,7 @@ export default function AutoParser({
          <summary>Need a different extraction? Fix a field with ChatGPT</summary>
          {chosen&&suite&&!pending?<AutoParserAIReview raw={chosen.raw} status={chosen.status} onChatGPT={onChatGPT} source={sample} draft={draft} suite={suite} onApplyCandidate={setDraft}
            protectedSourceValuesByEvent={protectedSourceValuesByEvent}
-           protectedResidualTextByEvent={protectedResidualTextByEvent}/>:
+           protectedResidualTextByEvent={protectedResidualTextByEvent} protectedResidualRegionsByEvent={protectedResidualRegionsByEvent}/>:
           <div className="stellar-ai-review" role="status" aria-label="Improve with AI preview status">
             <p>Preparing the optional ChatGPT correction tools for this event.</p>
           </div>}
@@ -1206,8 +1279,13 @@ export default function AutoParser({
          </button>
        </div>
      </section>}
-     {step===2&&<NormalizationMappingReview
+     {step===2&&<EventTypeMappingReview
        draft={draft} setDraft={setDraft} suite={suite}
+       originalRawSample={sample}
+       multipassSourceSample={multiPass?.raw}
+       multipassResiduals={multiPass?.raw===sample?multiPass.events.map(event=>event.preview.residuals):undefined}
+       multipassRawEvents={multiPass?.raw===sample?multiPass.events.map(event=>sourceTextForByteRange(multiPass.raw,event.startByte,event.endByte)??''):undefined}
+       onReviewResiduals={()=>setStep(1)}
        selected={selected} setSelected={setSelected} pending={pending}
        onBack={()=>setStep(1)} onContinue={()=>{setNavigationHint('');setFurthestStep(3);setStep(3);}}/>}
      {step===3&&<section aria-label="Create Parser stage">

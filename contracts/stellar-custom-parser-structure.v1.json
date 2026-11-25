@@ -297,7 +297,7 @@
     },
     {
       "id": "INFO-ERROR-RECORD-SHAPE",
-      "note": "Reference error records carry parser_raw_msg, timestamp, msg_class '<src>_err_msg', dev_type/dev_class. Parser Studio excludes raw text by default (decision D-4); whether the wrapper requires parser_raw_msg is tracked separately."
+      "note": "Reference error records carry parser_raw_msg, timestamp, msg_class '<src>_err_msg', dev_type/dev_class. Parser Studio writes parser_raw_msg with the complete original text of the event (owner decision 2026-11-22, which replaced the raw-text exclusion of decision D-4); it does not write timestamp, msg_class or dev_type/dev_class on that record."
     }
   ]
 }

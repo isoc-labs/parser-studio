@@ -19,7 +19,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, build_opener, HTTPSHandler
 
 ROOT=Path(__file__).resolve().parents[1]
-TEMPLATE=(ROOT/'ops/preview-domain/nginx-app.parser.xdr.ooo.conf').read_text()
+TEMPLATE=(ROOT/'ops/preview-domain/nginx-app.parser.isoc.ooo.conf').read_text()
 
 def port():
     with socket.socket() as s:
@@ -64,8 +64,8 @@ class SecurePreviewHost(unittest.TestCase):
             key=root/'key.pem'
             subprocess.run(['openssl','req','-x509','-newkey','rsa:2048',
                 '-keyout',str(key),'-out',str(cert),'-nodes','-days','1',
-                '-subj','/CN=app.parser.xdr.ooo',
-                '-addext','subjectAltName=DNS:app.parser.xdr.ooo'],check=True,
+                '-subj','/CN=app.parser.isoc.ooo',
+                '-addext','subjectAltName=DNS:app.parser.isoc.ooo'],check=True,
                 stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=20)
             backend=ThreadingHTTPServer(('127.0.0.1',0),UpstreamHandler)
             multipass=ThreadingHTTPServer(('127.0.0.1',0),UpstreamHandler)
@@ -83,8 +83,8 @@ class SecurePreviewHost(unittest.TestCase):
                     ('listen 80;',f'listen 127.0.0.1:{http_port};'),
                     ('listen [::]:443 ssl;',''),
                     ('listen 443 ssl;',f'listen 127.0.0.1:{https_port} ssl;'),
-                    ('/etc/letsencrypt/live/app.parser.xdr.ooo/fullchain.pem',str(cert)),
-                    ('/etc/letsencrypt/live/app.parser.xdr.ooo/privkey.pem',str(key)),
+                    ('/etc/letsencrypt/live/isoc-app-services/fullchain.pem',str(cert)),
+                    ('/etc/letsencrypt/live/isoc-app-services/privkey.pem',str(key)),
                     ('    include /etc/letsencrypt/options-ssl-nginx.conf;',''),
                     ('    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;',''),
                     ('/var/www/parser-studio-app',str(static)),
@@ -123,11 +123,11 @@ class SecurePreviewHost(unittest.TestCase):
                     else:
                         self.fail('Isolated Nginx did not start.')
                     conn=http.client.HTTPConnection('127.0.0.1',http_port,timeout=4)
-                    conn.request('GET','/',headers={'Host':'app.parser.xdr.ooo'})
+                    conn.request('GET','/',headers={'Host':'app.parser.isoc.ooo'})
                     response=conn.getresponse()
                     self.assertEqual(response.status,301)
                     self.assertEqual(response.getheader('Location'),
-                                     'https://app.parser.xdr.ooo/')
+                                     'https://app.parser.isoc.ooo/')
                     response.read()
                     conn.close()
 
@@ -137,21 +137,21 @@ class SecurePreviewHost(unittest.TestCase):
                     # This is an isolated fixture CA, not a public TLS bypass.
                     verified=subprocess.run([
                         'curl','--noproxy','*','--cacert',str(cert),
-                        '--resolve',f'app.parser.xdr.ooo:{https_port}:127.0.0.1',
-                        f'https://app.parser.xdr.ooo:{https_port}/',
+                        '--resolve',f'app.parser.isoc.ooo:{https_port}:127.0.0.1',
+                        f'https://app.parser.isoc.ooo:{https_port}/',
                         '--max-time','6'],
                         capture_output=True,text=True,timeout=9)
                     self.assertEqual(verified.returncode,0,verified.stderr)
                     self.assertIn('Parser Studio isolated verification',verified.stdout)
                     wrong_host=subprocess.run([
                         'curl','--noproxy','*','--cacert',str(cert),
-                        '--resolve',f'exporter.xdr.ooo:{https_port}:127.0.0.1',
-                        f'https://exporter.xdr.ooo:{https_port}/',
+                        '--resolve',f'exporter.isoc.ooo:{https_port}:127.0.0.1',
+                        f'https://exporter.isoc.ooo:{https_port}/',
                         '--max-time','6'],
                         capture_output=True,text=True,timeout=9)
                     self.assertEqual(wrong_host.returncode,60,wrong_host.stderr)
                     def request(path,method='GET',origin=None,size=0):
-                        headers={'Host':'app.parser.xdr.ooo'}
+                        headers={'Host':'app.parser.isoc.ooo'}
                         if origin is not None:
                             headers['Origin']=origin
                         raw=b'{"raw":"{\"action\":\"allow\"}"}' if method=='POST' else None
@@ -170,12 +170,12 @@ class SecurePreviewHost(unittest.TestCase):
                     self.assertEqual(request('/api/v1/test-lab/session')[0],404)
                     self.assertEqual(request('/api/v1/multipass/preview','POST','https://evil.example')[0],403)
                     self.assertEqual(request('/api/v1/parser-pairs/generate','POST','https://evil.example')[0],403)
-                    self.assertEqual(request('/api/v1/multipass/preview','POST','https://app.parser.xdr.ooo')[0],200)
+                    self.assertEqual(request('/api/v1/multipass/preview','POST','https://app.parser.isoc.ooo')[0],200)
                     self.assertEqual(request('/api/v1/parser-pairs/capabilities')[0],200)
-                    self.assertEqual(request('/api/v1/parser-pairs/generate','POST','https://app.parser.xdr.ooo')[0],200)
+                    self.assertEqual(request('/api/v1/parser-pairs/generate','POST','https://app.parser.isoc.ooo')[0],200)
                     # A generated parser is above nginx's memory buffer for a request body (16 KB): the body goes
                     # through the temporary directory, which must be the fixture's own.
-                    self.assertEqual(request('/api/v1/parser-pairs/package','POST','https://app.parser.xdr.ooo',size=200_000)[0],200)
+                    self.assertEqual(request('/api/v1/parser-pairs/package','POST','https://app.parser.isoc.ooo',size=200_000)[0],200)
                     for name in ('body','proxy','fastcgi','uwsgi','scgi'):
                         self.assertTrue((root/f'tmp-{name}').is_dir(),f'nginx did not keep its {name} directory inside the fixture')
                 finally:

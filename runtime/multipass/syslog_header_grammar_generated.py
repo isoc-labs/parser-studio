@@ -1,9 +1,9 @@
 # GENERATED FILE - DO NOT EDIT.
-# Source: contracts/syslog-header-grammar.v1.json (revision 7); regenerate with
+# Source: contracts/syslog-header-grammar.v1.json (revision 9); regenerate with
 #   node scripts/grammar/generate-grammar.mjs --write
 # CI runs the generator with --verify, so a hand edit of this file fails the gate.
 # Syslog header grammar for the Multi-Pass engine, generated from the shared grammar contract.
-GRAMMAR_CONTRACT_SHA256 = "b2516fb96d8c605faae09db9cbafeb96fb21a63ac8f821b3479349bf0a99f4d8"
+GRAMMAR_CONTRACT_SHA256 = "98f8143baac18f5855ad5993834f3b6afebd3ee0d51a99ebc841b92916d4292e"
 TOKENS = {
   "PRI": "[0-9]{1,3}",
   "BSD_MONTH": "[A-Z][a-z]{2}",
@@ -25,6 +25,10 @@ TOKENS = {
   "KV_DQ": "(?:\\\\[^\\r\\n]|[^\"\\\\])*",
   "KV_SQ": "(?:\\\\[^\\r\\n]|[^'\\\\])*",
   "KV_BARE": "(?:\\\\[^ \\t\\n\\r\\f\\v\\x1c-\\x1f]|[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"'\\\\]|\\\\)+",
+  "KV_LIST_BARE": "[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"',;|=]+",
+  "KV_LIST_DQ": "[^\"]*",
+  "KV_LIST_SQ": "[^']*",
+  "KV_LIST_DELIMITER": "[,;|]",
   "KV_TRAILING": "[ \\t\\n\\r\\f\\v]*",
   "RFC3339_DATE_PREFIX": "[0-9]{4}-[0-9]{2}-[0-9]{2}T",
   "FAMILY_NAME": "(?:CEF|LEEF)",
@@ -42,7 +46,7 @@ TOKENS = {
 }
 RULES = {
   "rfc3164_tagged": {
-    "source": "\\A<(?P<pri>[0-9]{1,3})>(?P<month>[A-Z][a-z]{2})[ ]+(?P<day>[0-9]{1,2})[ ]+(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2}):(?P<second>[0-9]{2})[ ]+(?P<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?P<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?P<procid>[0-9]{1,8})\\])?:[ ]+(?P<message>[^\\r\\n]+)\\Z",
+    "source": "\\A(?:<(?P<pri>[0-9]{1,3})>)?(?P<month>[A-Z][a-z]{2})[ ]+(?P<day>[0-9]{1,2})[ ]+(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2}):(?P<second>[0-9]{2})[ ]+(?P<hostname>(?!\\{|CEF:|LEEF:)[!-<>-~]{0,254}[!-9;<>-~])[ ]+(?!(?:(?:CEF|LEEF))(?:(?:[ \\t]))*:(?:(?:[ \\t]))*(?:[0-9]))(?P<tag>[A-Za-z_][A-Za-z0-9_.-]{0,95})(?:\\[(?P<procid>[0-9]{1,8})\\])?:[ ]+(?P<message>[^\\r\\n]+)\\Z",
     "captures": [
       "pri",
       "month",
@@ -105,6 +109,21 @@ FRAGMENTS = {
       "bare"
     ]
   },
+  "kv_list_pair": {
+    "source": "(?:[ \\t]*)(?P<key>[A-Za-z_][A-Za-z0-9_.-]{0,95})=(?:\"(?P<dq>[^\"]*)\"|'(?P<sq>[^']*)'|(?P<bare>[^ \\t\\n\\r\\f\\v\\x1c-\\x1f\"',;|=]+))",
+    "captures": [
+      "key",
+      "dq",
+      "sq",
+      "bare"
+    ]
+  },
+  "kv_list_separator": {
+    "source": "(?P<delimiter>[,;|])",
+    "captures": [
+      "delimiter"
+    ]
+  },
   "rfc5424_version_head": {
     "source": "<(?P<pri>[0-9]{1,3})>(?P<version>[1-9][0-9]{0,2})[ ](?:-[ ]|(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T))",
     "captures": [
@@ -113,7 +132,7 @@ FRAGMENTS = {
     ]
   },
   "structured_family_claim": {
-    "source": "(?P<family>(?:CEF|LEEF)):(?:[0-9])",
+    "source": "(?P<family>(?:CEF|LEEF))(?:(?:[ \\t]))*:(?:(?:[ \\t]))*(?:[0-9])",
     "captures": [
       "family"
     ]

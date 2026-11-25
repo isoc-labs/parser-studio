@@ -14,7 +14,7 @@ HTML = ROOT / "index.html"
 class AppFaviconTests(unittest.TestCase):
     def test_app_links_local_icons(self):
         content = HTML.read_text(encoding="utf-8")
-        self.assertIn("<title>Parser Studio — XDR Labs</title>", content)
+        self.assertIn("<title>Parser Studio — ISOC Labs</title>", content)
         self.assertRegex(content, r'<link rel="icon" type="image/svg\+xml" href="/favicon\.svg\?v=app-filetext-20261022"')
         self.assertRegex(content, r'<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32\.png\?v=app-filetext-20261022"')
         self.assertRegex(content, r'<link rel="shortcut icon" type="image/x-icon" href="/favicon\.ico\?v=app-filetext-20261022"')

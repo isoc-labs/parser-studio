@@ -21,6 +21,8 @@ import {HelpTip,StageGuide} from './BeginnerHelp';
 import ParserIdentityCard from './ParserIdentityCard';
 import NamedLogTypesPanel from './NamedLogTypesPanel';
 import ChatGPTConditionalDraft from './ChatGPTConditionalDraft';
+import {familyScopes,familySource,projectFamilyDraft,mergeFamilyCandidate,familyPromptContext,UNRECOGNIZED_SCOPE,
+  type FamilyScope} from './familyScopedAssist';
 import {validateNamedLogs,type NamedLogType} from './namedLogTypes';
 import {buildPromptSourceEvidence} from './chatGptSourceEvidence';
 import {buildEventCoverageEvidence} from './chatGptEventCoverage';
@@ -46,6 +48,10 @@ interface Props {
   onAutoParser:()=>void;
 }
 
+/** One event type of a draft with event profiles, handled as an ordinary single-type draft. */
+interface FamilyScopeBinding{label:string;context:string;onApply:(candidate:ParserDraft)=>void}
+type CoreProps=Props&{familyScope?:FamilyScopeBinding};
+
 const MAX_SAMPLE=64*1024;
 const MAX_RECIPE=32768;
 
@@ -56,9 +62,9 @@ const completeSuite=(value:SuiteResult)=>value.counts.total>0&&
 /** The raw source is put in a prompt only in browser memory.
  * Sending the generated prompt to an external AI remains a manual copy action.
  */
-export default function ChatGPTAssist({draft,setDraft,sample,setSample,suite,
+function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
   pending,runPreview,onAutoParser,namedLogTypes=null,onEnableNamedLogTypes,
-  onChangeNamedLogTypes,onExitNamedLogTypes}:Props){
+  onChangeNamedLogTypes,onExitNamedLogTypes,familyScope}:CoreProps){
   const [goal,setGoal]=useState('Extract event time, action, source and destination IP, user and URL when present.');
   const [prompt,setPrompt]=useState('');
   const [promptError,setPromptError]=useState('');
@@ -157,6 +163,7 @@ export default function ChatGPTAssist({draft,setDraft,sample,setSample,suite,
         goal,source:sample,sourceHash:prepared.sampleSha256,
         sourceCount:prepared.sourceCount,projectId,baseline,
         extraContext:reviewedContext.text+(namedSummary?'\n'+namedSummary:''),
+        eventProfileContext:familyScope?.context,
         sourceEvidence:buildPromptSourceEvidence(sample).text,
         eventCoverageEvidence:buildEventCoverageEvidence(sample,next,local).text,
       });
@@ -450,12 +457,12 @@ export default function ChatGPTAssist({draft,setDraft,sample,setSample,suite,
           </div>}
         <label>{namedLogTypes?'Combined original logs (local preview, read only)':'Original local logs'}
           <textarea aria-label="ChatGPT local sample logs" rows={6} spellCheck={false}
-            maxLength={MAX_SAMPLE} value={sample} readOnly={Boolean(namedLogTypes)}
+            maxLength={MAX_SAMPLE} value={sample} readOnly={Boolean(namedLogTypes)||Boolean(familyScope)}
             placeholder="Paste the logs you want to parse."
             onChange={e=>{if(!namedLogTypes)setSample(e.target.value);}}/>
         </label>
-        <ParserIdentityCard draft={draft} setDraft={setDraft} assisted
-          warnIfPlaceholder={Boolean(review?.ok)||Boolean(generated)}/>
+        {!familyScope&&<ParserIdentityCard draft={draft} setDraft={setDraft} assisted
+          warnIfPlaceholder={Boolean(review?.ok)||Boolean(generated)}/>}
         {namedLogTypes&&namedLogTypes.length>=2&&
           <section className="auto-parser-recipe" aria-label="Combined parser routing review">
             <ChatGPTConditionalDraft draft={draft} setDraft={setDraft} sample={sample}
@@ -465,11 +472,6 @@ export default function ChatGPTAssist({draft,setDraft,sample,setSample,suite,
               then return here with your combined logs preserved.</p>
             <button type="button" className="auto-parser-secondary" onClick={onAutoParser}>Review shared extraction format in Auto Parser</button>
           </section>}
-        {draft.eventProfiles&&<p role="note" className="auto-parser-warning">
-          A reviewed conditional parser is configured. Use the separate
-          Validate &amp; Generate One Multi-Type Parser control above.
-          ParserRecipe v0.2 does not represent type-specific mappings.
-        </p>}
         <label>What do you want Parser Studio to find? <HelpTip label="What should be extracted?"
           text="Describe the values you care about in plain language, for example: source IP, destination IP, username, action, URL, process name, or event ID. You do not need to know Stellar field names yet."/>
           <input aria-label="ChatGPT desired fields" maxLength={512} type="text"
@@ -595,10 +597,14 @@ export default function ChatGPTAssist({draft,setDraft,sample,setSample,suite,
             {generated.pair.files.map(file=><button type="button" className="auto-parser-secondary" key={file.name}
               onClick={()=>download(file.name,file.content)}>
               <FileText size={15}/> Download {file.name}</button>)}
-            <button type="button" className="auto-parser-secondary" onClick={()=>{
-              setDraft(generated.draft);
-              onAutoParser();
-            }}>Review Fields in Auto Parser</button>
+            {familyScope
+              ?<button type="button" className="auto-parser-primary"
+                onClick={()=>familyScope.onApply(generated.draft)}>
+                Apply to event type {familyScope.label}</button>
+              :<button type="button" className="auto-parser-secondary" onClick={()=>{
+                setDraft(generated.draft);
+                onAutoParser();
+              }}>Review Fields in Auto Parser</button>}
           </div>}
         </div>}
       </section>
@@ -610,4 +616,96 @@ export default function ChatGPTAssist({draft,setDraft,sample,setSample,suite,
       </button>
     </div>
   </main>;
+}
+
+const scopeLabel=(scope:FamilyScope)=>(scope.name===UNRECOGNIZED_SCOPE?'Not recognized by any event type':scope.name)+
+  ' - '+scope.records.length+(scope.records.length===1?' record':' records')+
+  (scope.state==='READ'?', read completely':scope.state==='PARTIAL'?', partly read':'');
+
+const MERGE_NOTICE:Record<string,string>={
+  SOURCE_FORMAT_CHANGED:'The result changes how the shared log format is read. Event types share one extraction, so it was not applied.',
+  SHARED_MAPPING_CHANGED:'The result changes or removes a field mapping that every event type uses. It was not applied.',
+  ENRICHMENT_CHANGED:'The result changes shared enrichment. It was not applied.',
+  CLASSIFICATION_CHANGED:'The result changes shared classification. It was not applied.',
+  NO_FAMILY_MAPPING:'The result adds no field mapping for this event type. Nothing was changed.',
+  DESTINATION_COLLISION:'The result maps a Stellar Cyber field that this parser already fills. It was not applied.',
+  NO_SINGLE_DISCRIMINATOR_VALUE:'The records that no event type recognizes do not share one event type value. Add them one type at a time.',
+  INVALID_FAMILY:'The merged event types did not pass validation. Nothing was changed.',
+  SOURCE_NOT_IN_FAMILY:'The result reads a field that no record of this event type contains. It was not applied.',
+  FAMILY_SOURCE_REMOVED:'The result leaves out a field this event type maps; its values would be lost. It was not applied.',
+  NO_FAMILY_CHANGE:'The result leaves this event type unchanged. Nothing was applied.',
+  UNKNOWN_FAMILY:'The selected event type is no longer part of this parser.',
+  NO_EVENT_PROFILES:'This parser no longer has event types.',
+};
+
+/** ChatGPT Assisted for a draft with event profiles: one event type at a time.
+ * The selected type is projected to an ordinary single-type draft (ParserRecipe v0.2), the existing
+ * prepare, review and compare steps run on that type's original lines only, and a reviewed result is
+ * merged back into that type. Other event types keep their parsing and mappings. */
+function FamilyScopedChatGPT(props:Props){
+  const {draft,setDraft,sample,suite,pending,runPreview,onAutoParser}=props;
+  const scopes=useMemo(()=>familyScopes(draft,suite)??[],[draft,suite]);
+  const [selected,setSelected]=useState('');
+  const [applied,setApplied]=useState({count:0,notice:''});
+  const active=scopes.find(scope=>scope.name===selected)
+    ??scopes.find(scope=>scope.state!=='READ')??scopes[0];
+  const scopedSample=active&&suite?familySource(suite,active):'';
+  const [scopedDraft,setScopedDraft]=useState<ParserDraft|null>(null);
+  const [scopedSuite,setScopedSuite]=useState<{draft:ParserDraft;source:string;suite:SuiteResult}|null>(null);
+  // The selected type follows the current parser, including identity edits made above.
+  useEffect(()=>{setScopedDraft(active?projectFamilyDraft(draft,active.name):null);},[draft,active?.name]);
+  // Every change of the projected draft or of its records is previewed again before it can be used.
+  useEffect(()=>{
+    if(!scopedDraft||!scopedSample.trim()){setScopedSuite(null);return;}
+    let live=true;
+    void runPreview(scopedDraft,scopedSample).then(result=>{
+      if(live)setScopedSuite({draft:scopedDraft,source:scopedSample,suite:result});
+    });
+    return ()=>{live=false;};
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[scopedDraft,scopedSample]);
+  const currentSuite=scopedSuite&&scopedSuite.draft===scopedDraft&&scopedSuite.source===scopedSample
+    ?scopedSuite.suite:undefined;
+  const context=active?familyPromptContext(draft,scopes,active.name):'';
+  function apply(candidate:ParserDraft){
+    if(!active||!suite)return;
+    const merged=mergeFamilyCandidate(draft,active.name,candidate,suite);
+    if(!merged.ok){
+      setApplied(old=>({count:old.count,notice:MERGE_NOTICE[merged.reason]??'The result was not applied.'}));
+      return;
+    }
+    setApplied(old=>({count:old.count+1,notice:'Applied to event type '+active.name+
+      '. Other event types are unchanged. Generate the multi-type parser below to check every event type together.'}));
+    setDraft(merged.draft);
+  }
+  return <>
+    <section className="auto-parser-recipe" aria-label="ChatGPT event type selection">
+      <h3>Event types in this parser</h3>
+      <p>This parser reads several event types. ChatGPT Assisted works on one event type at a time,
+        using only that type's original logs. Event types you do not select keep their parsing and mappings.</p>
+      <ParserIdentityCard draft={draft} setDraft={setDraft} assisted warnIfPlaceholder={applied.count>0}/>
+      {scopes.length>0
+        ?<label>Event type to improve
+          <select aria-label="ChatGPT event type scope" value={active?.name??''}
+            onChange={e=>{setSelected(e.target.value);setApplied(old=>({count:old.count,notice:''}));}}>
+            {scopes.map(scope=><option key={scope.name} value={scope.name}>{scopeLabel(scope)}</option>)}
+          </select>
+        </label>
+        :<p role="alert" className="auto-parser-warning">Run a local preview of the original logs first.</p>}
+      {applied.notice&&<p role="status" className="auto-parser-note">{applied.notice}</p>}
+      <ChatGPTConditionalDraft draft={draft} setDraft={setDraft} sample={sample}
+        suite={suite} pending={pending} runPreview={runPreview} onAutoParser={onAutoParser}/>
+    </section>
+    {active&&scopedDraft&&<ChatGPTAssistCore key={active.name+':'+applied.count} draft={scopedDraft}
+      setDraft={update=>setScopedDraft(old=>old&&(typeof update==='function'?update(old):update))}
+      sample={scopedSample} setSample={()=>{}} suite={currentSuite} pending={pending||!currentSuite}
+      runPreview={runPreview} onAutoParser={onAutoParser}
+      familyScope={{label:active.name,context,onApply:apply}}/>}
+  </>;
+}
+
+export default function ChatGPTAssist(props:Props){
+  return props.draft.eventProfiles&&!props.namedLogTypes
+    ?<FamilyScopedChatGPT {...props}/>
+    :<ChatGPTAssistCore {...props}/>;
 }

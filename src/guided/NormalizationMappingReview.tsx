@@ -1,8 +1,8 @@
 import {useEffect,useMemo,useState} from 'react';
-import type {Dispatch,SetStateAction} from 'react';
+import type {Dispatch,ReactNode,SetStateAction} from 'react';
 import {ArrowLeft,ArrowRight,CheckCircle2,CircleAlert,Search,ShieldCheck,WandSparkles,X} from 'lucide-react';
 import type {MappingRule,ParserDraft,SuiteResult} from '../model';
-import {listSafeLeafPaths,lookupFieldValue,countUnaddressableSourceValues} from '../fieldPaths';
+import {listSafeLeafPaths,lookupFieldValue,countUnaddressableSourceValues,safeLocalFieldPath,mappingWhenApplies} from '../fieldPaths';
 import {defaultGuidedOptions} from './contract';
 import {normalizationCandidateScanStatus,
   type NormalizationCandidate} from './normalizationCandidates';
@@ -11,7 +11,10 @@ import {isBlockingNormalizationFinding,reviewNormalizationMappings,
 import {HelpTip,StageGuide} from './BeginnerHelp';
 import JsonataMappingAssistant from './JsonataMappingAssistant';
 import {reconcileGeneratedMappings} from './generatedMappingReconciliation';
+import {isCarriedFamilyMapping} from './multiEventRouting';
 import {createCanonicalMappingPlan} from './canonicalMappingPlan';
+import {sourceTextForByteRange} from './sourceByteSelection';
+import {accountLosslessSource,type LosslessAccounting} from './losslessAccounting';
 import {
   findStellarMetadataField,searchStellarMetadataCatalog,STELLAR_METADATA_CATALOG,
   STELLAR_METADATA_CATALOG_PROVENANCE,
@@ -26,6 +29,15 @@ interface Props {
   pending:boolean;
   onBack:()=>void;
   onContinue:()=>void;
+  multipassResiduals?:Array<Array<{startByte:number;endByte:number}>>;
+  multipassRawEvents?:string[];
+  multipassSourceSample?:string;
+  originalRawSample?:string;
+  onReviewResiduals?:()=>void;
+  /** One event type of a multi-type parser (EventTypeMappingReview): its matches stay as they were built for that type. */
+  skipGeneratedReconcile?:boolean;
+  /** The whole parser for ChatGPT mapping, which chooses its event type itself. */
+  jsonataScope?:{draft:ParserDraft;setDraft:Dispatch<SetStateAction<ParserDraft>>;suite?:SuiteResult};
 }
 
 const TYPES:MappingRule['type'][]=['string','integer','number','boolean','ip','port','timestamp'];
@@ -41,9 +53,8 @@ function eventStatusLabel(status:string){
 
 function displayValue(value:unknown):string{
   if(value===undefined)return '—';
-  if(typeof value==='string')return value.length>80?value.slice(0,77)+'…':value;
-  const rendered=JSON.stringify(value);
-  return rendered?.length>80?rendered.slice(0,77)+'…':rendered??String(value);
+  if(typeof value==='string')return value;
+  return JSON.stringify(value)??String(value);
 }
 function sourceValues(suite:SuiteResult|undefined,source:string,kind?:MappingRule['sourcePathKind']):string[]{
   if(!suite)return [];
@@ -76,37 +87,98 @@ const FINDING_LABEL:Record<NormalizationFindingCode,string>={
 const VENDOR_LIST_COLLAPSE_AT=12;
 
 export default function NormalizationMappingReview({
-  draft,setDraft,suite,selected,setSelected,pending,onBack,onContinue,
+  draft,setDraft,suite,selected,setSelected,pending,onBack,onContinue,multipassResiduals,multipassRawEvents,multipassSourceSample,originalRawSample,onReviewResiduals,skipGeneratedReconcile=false,jsonataScope,
 }:Props){
+  const [losslessAccounting,setLosslessAccounting]=useState<LosslessAccounting|null>(null);
+  useEffect(()=>{
+    let aborted=false;
+    setLosslessAccounting(null);
+    if(originalRawSample===undefined||!suite)return ()=>{aborted=true;};
+    const inputs=suite.events.map((event,index)=>{
+      const rawMatches=multipassSourceSample===originalRawSample&&event.raw===multipassRawEvents?.[index]&&
+        multipassRawEvents?.length===suite.events.length&&multipassResiduals?.length===suite.events.length;
+      return {event,residuals:rawMatches?multipassResiduals?.[index]:undefined};
+    });
+    void accountLosslessSource(originalRawSample,inputs,draft).then(result=>{
+      if(!aborted)setLosslessAccounting(result);
+    }).catch(()=>{if(!aborted)setLosslessAccounting(null);});
+    return ()=>{aborted=true;};
+  },[originalRawSample,suite,draft,multipassSourceSample,multipassRawEvents,multipassResiduals]);
   const [vendorListOpen,setVendorListOpen]=useState<boolean|null>(null);
   const [search,setSearch]=useState('');
   const [catalogQuery,setCatalogQuery]=useState('');
   const [activeMappingId,setActiveMappingId]=useState<string|null>(null);
+  const [sourceView,setSourceView]=useState<'tree'|'json'>('tree');
+  const [sourceSearch,setSourceSearch]=useState('');
+  const [selectedSource,setSelectedSource]=useState<string|null>(null);
+  const [selectedSourceLeaf,setSelectedSourceLeaf]=useState<string|null>(null);
   // Every automatically generated mapping is reconsidered against the same
   // current dictionary/semantic evidence as a fresh Auto Parser draft.
   // Hand-edited destinations and source conflicts are never rewritten.
   useEffect(()=>{
-    if(reconcileGeneratedMappings(draft,suite)===draft)return;
+    if(skipGeneratedReconcile||reconcileGeneratedMappings(draft,suite)===draft)return;
     setDraft(current=>reconcileGeneratedMappings(current,suite));
-  },[draft.mappings,draft.guided?.groups,suite,setDraft]);
+  },[draft.mappings,draft.guided?.groups,suite,setDraft,skipGeneratedReconcile]);
   const groups=draft.guided?.groups??{};
+  // A parser for several event types maps each type with its own rules beside the shared ones (event profiles), and
+  // a parser that keeps unmapped fields writes a field without a rule under its original name. The summary and the
+  // per-event statements describe that output, not the shared rules alone (independent audit of e8d8d26, A-1).
+  const typeRules=useMemo(()=>(draft.eventProfiles?.variants??[]).map(variant=>({name:variant.name,
+    rules:variant.mappings.filter(rule=>!isCarriedFamilyMapping(rule))})).filter(item=>item.rules.length>0),[draft.eventProfiles]);
+  const rulesOfEvent=(event:SuiteResult['events'][number]|undefined):MappingRule[]=>[...draft.mappings,
+    ...(typeRules.find(item=>item.name===event?.eventFamily)?.rules??[])];
+  const outputRules=[...draft.mappings,...typeRules.flatMap(item=>item.rules)];
+  const keepsUnmapped=draft.preserveUnmapped===true;
   const canonicalPlan=useMemo(()=>createCanonicalMappingPlan(suite,draft),[suite,draft]);
-  const candidates=canonicalPlan.officialCandidates;
+  // A source one event type already matches is not offered again as a match for every type.
+  const typeSources=new Set(typeRules.flatMap(item=>item.rules.map(rule=>rule.source)));
+  const candidates=canonicalPlan.officialCandidates.filter(candidate=>!typeSources.has(candidate.source));
   const candidateScan=useMemo(()=>normalizationCandidateScanStatus(suite),[suite]);
   const mappingReview=useMemo(()=>reviewNormalizationMappings(suite,draft.mappings,groups),[suite,draft.mappings,groups]);
   const findings=mappingReview.findings;
   const chosen=suite?.events[selected]??suite?.events[0];
-  const sourceDisplay=(source:string)=>draft.format==='generic_structural'?'parserstudio_source.'+source:source;
+  const reviewEventIndex=chosen?suite?.events.indexOf(chosen)??-1:-1;
+  const reviewRaw=reviewEventIndex>=0?multipassRawEvents?.[reviewEventIndex]:undefined;
+  const exactResiduals=multipassSourceSample===originalRawSample&&reviewRaw===chosen?.raw&&multipassResiduals?.length===suite?.events.length&&multipassRawEvents?.length===suite?.events.length&&reviewEventIndex>=0&&multipassResiduals?.[reviewEventIndex]!==undefined
+    ?multipassResiduals[reviewEventIndex]!.map(span=>({span,text:sourceTextForByteRange(multipassRawEvents![reviewEventIndex]!,span.startByte,span.endByte)})).filter(item=>item.text!==null)
+    :null;
+  // Do not add an authoring-only prefix to the original path shown to users.
+  // Keep the complete path here; the source tree presents its leaf label.
+  const sourceDisplay=(source:string)=>source.startsWith('parserstudio_source.')
+    ?source.slice('parserstudio_source.'.length):source;
   const sourceFields=useMemo(()=>{
     const result=new Set<string>();
     for(const event of suite?.events??[])for(const path of listSafeLeafPaths(event.fields))result.add(path);
     return [...result];
   },[suite]);
+  useEffect(()=>{
+    if(selectedSource&&!sourceFields.includes(selectedSource)){
+      setSelectedSource(null);setSelectedSourceLeaf(null);
+    }
+  },[selectedSource,sourceFields]);
   const unaddressableCount=useMemo(()=>
     (suite?.events??[]).reduce((count,event)=>count+countUnaddressableSourceValues(event.fields),0),[suite]);
-  const mappedSources=new Set(draft.mappings.map(mapping=>mapping.source));
-  const officialCount=draft.mappings.filter(mapping=>catalogState(mapping,groups[mapping.id]??'vendor_fields').kind==='verified').length;
-  const vendorCount=draft.mappings.filter(mapping=>(groups[mapping.id]??'vendor_fields')==='vendor_fields').length;
+  const mappedSources=new Set(outputRules.map(mapping=>mapping.source));
+  const withoutRule=sourceFields.filter(field=>!mappedSources.has(field)).length;
+  const rawRetained=(suite?.events??[]).filter(event=>typeof event.raw==='string').length;
+  const statusCounts=(suite?.events??[]).reduce((counts,event)=>{
+    const status=event.parseStatus??'UNKNOWN';counts[status]=(counts[status]??0)+1;return counts;
+  },{} as Record<string,number>);
+  const outputPairs=(suite?.events??[]).flatMap((event,eventIndex)=>rulesOfEvent(event).flatMap(mapping=>{
+    if(!mappingWhenApplies(event.fields,mapping.when))return [];
+    const source=lookupFieldValue(event.fields,mapping.source,mapping.sourcePathKind);
+    if(!source.found)return [];
+    const group=groups[mapping.id]??'vendor_fields';
+    const root=group==='vendor_fields'?event.normalized[draft.vendor]:event.normalized;
+    const output=root&&typeof root==='object'&&!Array.isArray(root)
+      ?lookupFieldValue(root as Record<string,unknown>,mapping.target):{found:false as const};
+    const blocked=findings.some(finding=>finding.source===mapping.source&&
+      (finding.event===null||finding.event===eventIndex+1)&&isBlockingNormalizationFinding(finding.code));
+    return [{sourceFound:true,outputFound:output.found&&!blocked}];
+  }));
+  const outputPresent=outputPairs.filter(pair=>pair.outputFound).length;
+  const officialCount=outputRules.filter(mapping=>catalogState(mapping,groups[mapping.id]??'vendor_fields').kind==='verified').length;
+  const vendorCount=outputRules.filter(mapping=>(groups[mapping.id]??'vendor_fields')==='vendor_fields').length+(keepsUnmapped?withoutRule:0);
   const blocking=findings.filter(finding=>isBlockingNormalizationFinding(finding.code));
   const unplanned=canonicalPlan.entries.filter(entry=>entry.disposition==='REVIEW_REQUIRED');
   // Notes that do not block (a source path absent from every applicable event).
@@ -135,6 +207,7 @@ export default function NormalizationMappingReview({
             groups:{...options.groups,[id]:candidate.group}}};
       }
       const existing=old.mappings.find(mapping=>mapping.source===candidate.source);
+      if(existing&&existing.authoring?.origin!=='AUTO')return old;
       const id=existing?.id??candidate.replacesMappingId??
         'stellar-'+candidate.source.replace(/[^A-Za-z0-9_-]/g,'_')+'-'+String(old.mappings.length+1);
       const next:MappingRule={id,source:candidate.source,target:candidate.target,type:candidate.type,
@@ -167,6 +240,9 @@ export default function NormalizationMappingReview({
         }
         const index=mappings.findIndex(mapping=>mapping.source===candidate.source);
         const existing=index>=0?mappings[index]:undefined;
+        // Bulk suggestions may fill an empty slot or refresh untouched AUTO
+        // output. They never replace reviewed, legacy, or manually edited intent.
+        if(existing&&existing.authoring?.origin!=='AUTO')continue;
         const id=existing?.id??'stellar-'+candidate.source.replace(/[^A-Za-z0-9_-]/g,'_')+'-'+String(mappings.length+1);
         const next:MappingRule={id,source:candidate.source,target:candidate.target,type:candidate.type,
         authoring:{version:1,origin:'APPROVED'}};
@@ -221,6 +297,49 @@ export default function NormalizationMappingReview({
     setCatalogQuery('');setActiveMappingId(null);
   };
 
+  const addSelectedVendorMapping=()=>{
+    if(!selectedSource||!safeLocalFieldPath(selectedSource)||mappedSources.has(selectedSource))return;
+    const leaf=selectedSourceLeaf??selectedSource.split('.').at(-1)??selectedSource;
+    const id='manual-'+selectedSource.replace(/[^A-Za-z0-9_-]/g,'_');
+    const mapping:MappingRule={id,source:selectedSource,target:leaf,type:'string',
+      authoring:{version:1,origin:'USER_EDITED'}};
+    setDraft(old=>old.mappings.some(item=>item.source===selectedSource)?old:{...old,
+      mappings:[...old.mappings,mapping],guided:{...(old.guided??defaultGuidedOptions()),
+        groups:{...(old.guided?.groups??{}),[id]:'vendor_fields'}}});
+  };
+  const renderSourceNode=(value:unknown,path:string,label:string):ReactNode=>{
+    if(Array.isArray(value))return <div className="source-tree-node" key={path}>
+      <span>{label}</span><code>{displayValue(value)}</code><strong>NOT MAPPABLE · arrays need a supported native selector</strong></div>;
+    if(value!==null&&typeof value==='object')return <details className="source-tree-branch" key={path} open>
+      <summary>{label}</summary>{Object.entries(value as Record<string,unknown>).map(([key,child])=>
+        renderSourceNode(child,path?path+'.'+key:key,key))}</details>;
+    const safe=Boolean(path&&sourceFields.includes(path));
+    const needle=sourceSearch.trim().toLowerCase();
+    const sample=displayValue(value);
+    if(needle&&!path.toLowerCase().includes(needle)&&!sample.toLowerCase().includes(needle))return null;
+    const applicable=rulesOfEvent(chosen).filter(mapping=>mapping.source===path&&
+      mappingWhenApplies(chosen?.fields??{},mapping.when));
+    const disposition=value===null?'NOT MAPPABLE · null source value':!safe
+      ?'NOT MAPPABLE · retained in the original source'
+      :applicable.length===0?(mappedSources.has(path)?'NOT EMITTED · source value present; mapping condition does not apply':keepsUnmapped?'KEPT · original name and value in the vendor fields':'NO MAPPING RULE · source value present')
+      :applicable.some(mapping=>{
+        const group=groups[mapping.id]??'vendor_fields';
+        const root=group==='vendor_fields'?chosen?.normalized[draft.vendor]:chosen?.normalized;
+        const target=root&&typeof root==='object'&&!Array.isArray(root)
+          ?lookupFieldValue(root as Record<string,unknown>,mapping.target):{found:false as const};
+        const blocked=findings.some(finding=>finding.source===mapping.source&&
+          (finding.event===null||finding.event===reviewEventIndex+1)&&isBlockingNormalizationFinding(finding.code));
+        return target.found&&!blocked;
+      })?'EMITTED IN BROWSER PREVIEW · native output UNVERIFIED':'NOT EMITTED · source value present';
+    return <div className="source-tree-leaf" key={path}>
+      {safe?<button type="button" title={'Full source path: '+path}
+        aria-pressed={selectedSource===path} onClick={()=>{setSelectedSource(path);setSelectedSourceLeaf(label);}}>{label}</button>
+        :<span>{label}</span>}
+      <code>{sample}</code>
+      <small>{disposition}</small>
+    </div>;
+  };
+
   const findingCounts=new Map<NormalizationFindingCode,number>();
   for(const finding of findings)findingCounts.set(finding.code,(findingCounts.get(finding.code)??0)+1);
 
@@ -267,14 +386,42 @@ export default function NormalizationMappingReview({
           before trusting the mapping recommendations.</span>}
     </div>}
 
+    {typeRules.length>0&&<div className="normalization-runtime-note" role="note" aria-label="Field matches by event type">
+      <strong>This parser has {typeRules.length} event types with their own field matches</strong>
+      <span>Each event type is matched separately; the summary below counts these matches too. To change the matches
+        of one event type, use Improve with ChatGPT and choose that event type. The editable list further down holds
+        only the matches shared by every event type.</span>
+      {typeRules.map(item=><div key={item.name}><b>{item.name}</b>
+        <ul>{item.rules.map(rule=><li key={rule.id}>{sourceDisplay(rule.source)} {'\u2192'} {rule.target}
+          {' '}({(groups[rule.id]??'vendor_fields')==='vendor_fields'?'vendor field':'Stellar field'})</li>)}</ul>
+      </div>)}
+    </div>}
+
     <div className="normalization-kpis" aria-label="Field mapping summary">
       <div><span>Fields found</span><strong>{sourceFields.length}</strong></div>
       <div><span>Matched to Stellar</span><strong>{officialCount}</strong></div>
       <div><span>Vendor fields retained</span><strong>{vendorCount}</strong></div>
-      <div><span>Left out of output</span><strong>{sourceFields.filter(field=>!mappedSources.has(field)).length+unaddressableCount}</strong></div>
+      <div><span>Left out of output</span><strong>{(keepsUnmapped?0:withoutRule)+unaddressableCount}</strong></div>
       {unaddressableCount>0&&<div><span>Unmappable source values</span><strong>{unaddressableCount}</strong></div>}
       <div className={mappingReview.totalBlocking?'attention':''}><span>Must fix before continuing</span><strong>{mappingReview.totalBlocking}</strong></div>
     </div>
+
+    <section className="normalization-coverage" aria-label="Independent parsing and output coverage">
+      <div><strong>Raw events retained</strong><span>{rawRetained} / {suite?.events.length??0}</span></div>
+      <div><strong>Structurally extracted</strong><span>FULL {statusCounts.FULL??0} · PARTIAL {statusCounts.PARTIAL??0} · UNKNOWN {statusCounts.UNKNOWN??0} · ERROR {statusCounts.ERROR??0}</span></div>
+      <div><strong>Mapped output values present</strong><span>{outputPresent} / {outputPairs.length} applicable source values in this preview</span></div>
+      <p>Raw retention, extraction completeness, and mapped output are separate checks. A retained original line does not count as extracted or mapped data.</p>
+    </section>
+    {chosen&&<section className="normalization-runtime-note" aria-label="Unparsed source evidence" role={exactResiduals?.length?'alert':'note'}>
+      <strong>Unparsed source text</strong>
+      {exactResiduals===null?<span>Exact Multi-Pass residual evidence is unavailable for this event. Status: UNKNOWN / UNVERIFIED. Raw retention does not prove structural parsing. Browser output is a preview; native output remains unverified.</span>
+       :exactResiduals.length===0?<span>Multi-Pass review reports no residual byte spans for this event. Browser output is a preview; native output remains unverified.</span>
+       :<><span>{exactResiduals.length} unresolved byte range(s) in event {chosen.id}:</span>
+         {exactResiduals.map(({span,text},index)=><div key={index}><code>Bytes {span.startByte}–{span.endByte}</code> <code>{JSON.stringify(text)}</code></div>)}
+         {onReviewResiduals&&<button type="button" onClick={onReviewResiduals}>Review Fields and repair unparsed text</button>}
+         <span>Raw retention does not clear extraction issues. Browser output is a preview; native output remains unverified.</span>
+       </>}
+    </section>}
 
     {draft.mappings.some(mapping=>mapping.when)&&<div className="normalization-runtime-note"
       aria-label="Protocol-aware mapping explanation" role="note">
@@ -296,7 +443,9 @@ export default function NormalizationMappingReview({
           })}/>
         {' '}Copy the full original line into every record (parserstudio_source ... source_raw)
       </label>
-      <span>On (default): each output record also carries the whole original log line, so the output is about twice the size of the log. Turn it off to keep only the parsed fields. A field you mapped from source_raw still works, and your original log is not changed.</span>
+      {draft.omitSourceRaw===true
+        ?<strong role="alert">The original line will not be emitted in parser output. Only parsed and mapped fields remain; review this deliberate omission before continuing. Your source sample remains unchanged.</strong>
+        :<span>On (default): each output record also carries the whole original log line, so the output is about twice the size of the log. Turn it off to keep only the parsed fields. A field you mapped from source_raw still works, and your original log is not changed.</span>}
     </div>}
 
     <section className="normalization-suggestions" aria-label="Recommended field matches">
@@ -344,13 +493,44 @@ export default function NormalizationMappingReview({
         </div>}
     </section>
 
-    {suite&&<JsonataMappingAssistant draft={draft} setDraft={setDraft} suite={suite} pending={pending}/>}
+    {(jsonataScope?.suite??suite)&&<JsonataMappingAssistant draft={jsonataScope?.draft??draft}
+      setDraft={jsonataScope?.setDraft??setDraft} suite={(jsonataScope?.suite??suite)!} pending={pending}/>}
+
+    <div className="normalization-three-column" aria-label="Source to output mapping workspace">
+    <section className="normalization-source-fields" aria-label="Source fields">
+      <div className="normalization-section-head"><div><h3>Source fields</h3>
+        <p>Choose a safe extracted path to review its mapping. The leaf label is shown here; the full path identifies the exact source.</p></div>
+        <label>Review event <select aria-label="Source field event" value={chosen?.id??''}
+          onChange={event=>setSelected(Math.max(0,(suite?.events??[]).findIndex(item=>item.id===event.target.value)))}>
+          {(suite?.events??[]).map(entry=><option value={entry.id} key={entry.id}>Event {entry.line}</option>)}
+        </select></label>
+      </div>
+      <div className="source-tree-controls">
+        <div role="group" aria-label="Source field view">
+          <button type="button" aria-pressed={sourceView==='tree'} onClick={()=>setSourceView('tree')}>Tree</button>
+          <button type="button" aria-pressed={sourceView==='json'} onClick={()=>setSourceView('json')}>JSON</button>
+        </div>
+        <label><span className="sr-only">Search source fields</span><input aria-label="Search source fields"
+          value={sourceSearch} placeholder="Search source fields" onChange={event=>setSourceSearch(event.target.value)}/></label>
+      </div>
+      {chosen&&(sourceView==='json'
+        ?<pre className="source-fields-json">{JSON.stringify(chosen.fields,null,2)}</pre>
+        :<div className="source-fields-tree">{Object.entries(chosen.fields).map(([key,value])=>renderSourceNode(value,key,key))}</div>)}
+      {selectedSource&&<div className="normalization-selected-source" aria-live="polite">
+        <strong>{selectedSourceLeaf??selectedSource.split('.').at(-1)}</strong><code>{selectedSource}</code>
+        <span>{mappedSources.has(selectedSource)?'A mapping rule already exists for this path.':'This path is safe to map; original source values remain available.'}</span>
+        {!mappedSources.has(selectedSource)&&<button type="button" disabled={pending}
+          onClick={addSelectedVendorMapping}>Keep as vendor field</button>}
+      </div>}
+    </section>
 
     <section className="normalization-editor" aria-label="Field mapping editor">
       <div className="normalization-section-head">
         <div><h3>Review field matches <HelpTip label="Review field matches"
           text="Left is the field Parser Studio found in your log. Right is the field name that will be used in Stellar Cyber. Change the right side only when the suggested destination is wrong for your data."/></h3>
-          <p>You can change a Stellar field or value type, or remove a mapping. Removing a mapping means that field does not appear in the generated parser output. Your original log is not changed.</p></div>
+          <p>{keepsUnmapped
+            ?'You can change a Stellar field or value type, or remove a match. A field without a match is kept under its original name in the vendor fields. Your original log is not changed.'
+            :'You can change a Stellar field or value type, or remove a mapping. Removing a mapping means that field does not appear in the generated parser output. Your original log is not changed.'}</p></div>
       </div>
       <datalist id="stellar-metadata-field-list">
         {STELLAR_METADATA_CATALOG.filter(entry=>entry.mappable).map(entry=><option value={entry.name} key={entry.name}/>)}
@@ -359,8 +539,9 @@ export default function NormalizationMappingReview({
       const renderRow=(mapping:MappingRule,index:number)=>{
         const group=draft.guided?.groups[mapping.id]??'vendor_fields';
         const state=catalogState(mapping,group);
-        return <article className={'normalization-map-row '+state.kind} key={mapping.id}
-          aria-label={'Field mapping '+(index+1)}>
+        return <article className={'normalization-map-row '+state.kind+
+          (selectedSource===mapping.source?' selected-source':'')} key={mapping.id}
+          data-source-path={mapping.source} aria-label={'Field mapping '+(index+1)}>
           <div className="normalization-map-status">
             {state.kind==='verified'?<CheckCircle2 size={16}/>:state.kind==='review'?<CircleAlert size={16}/>:<ShieldCheck size={16}/>}
             <span>{state.label}</span>
@@ -409,8 +590,11 @@ export default function NormalizationMappingReview({
               Choose Stellar field
             </button>
             <button type="button" aria-label={'Remove normalization '+index}
-              title="Removes this mapping. The field will not appear in the generated parser output; your original log is not changed." onClick={()=>removeMapping(mapping.id)}>
-              <X size={14}/>Leave out of output
+              title={keepsUnmapped
+                ?'Removes this match. The field is then kept under its original name in the vendor fields; your original log is not changed.'
+                :'Removes this mapping. The field will not appear in the generated parser output; your original log is not changed.'}
+              onClick={()=>removeMapping(mapping.id)}>
+              <X size={14}/>{keepsUnmapped?'Remove match':'Leave out of output'}
             </button>
           </div>
         </article>;
@@ -432,6 +616,38 @@ export default function NormalizationMappingReview({
       </>;
       })()}
     </section>
+
+    <section className="normalization-final-event" aria-label="Final event preview">
+      <div className="normalization-section-head"><div><h3>Final event</h3>
+        <p>Preview the current normalized event and check values not represented by output mappings.</p></div></div>
+      {chosen&&<>
+        {originalRawSample!==undefined&&<section className="final-event-accounting" aria-label="Lossless source accounting" aria-live="polite">
+          <strong>Record accounting {losslessAccounting?.proof==='COMPLETE'?'complete':'UNKNOWN'}</strong>
+          {!losslessAccounting?<span>Calculating local source evidence…</span>:<>
+            <span>Total source: {losslessAccounting.sourceBytes} UTF-8 bytes · SHA-256 <code title={losslessAccounting.sourceSha256}>{losslessAccounting.sourceSha256.slice(0,12)}…</code>
+              <span className="sr-only"> Full SHA-256: {losslessAccounting.sourceSha256}</span></span>
+            <span>Events accounted: {losslessAccounting.events.length} / {losslessAccounting.eventCount}</span>
+            <span>Structural status: FULL {losslessAccounting.structuralCounts.FULL} · PARTIAL {losslessAccounting.structuralCounts.PARTIAL} · UNKNOWN {losslessAccounting.structuralCounts.UNKNOWN} · ERROR {losslessAccounting.structuralCounts.ERROR}</span>
+            <span>Leaves: {losslessAccounting.events.reduce((sum,event)=>sum+event.structuralLeafCount,0)} structured · {losslessAccounting.normalizedPathCount} browser output</span>
+            <span>Residual evidence: {losslessAccounting.events.every(event=>event.residuals!==null)?'available for every event':'incomplete; UNKNOWN'}</span>
+            <span>Original raw copy output: {draft.format==='generic_structural'&&draft.omitSourceRaw!==true?'retained in generated preview':'not guaranteed by this output mode'}</span>
+            <span>Browser preview only · NOT verified with native Ruby / DP.</span>
+            {losslessAccounting.proof==='COMPLETE'&&<span>All source records reconciled; this does not mean the records were fully parsed.</span>}
+          </>}
+          {losslessAccounting?.proof==='UNKNOWN'&&<div role="alert"><strong>Accounting is UNKNOWN.</strong> Missing or mismatched evidence means this summary cannot verify every source value. Structural PARTIAL is a separate parser status.</div>}
+          {losslessAccounting?.proof==='UNKNOWN'&&<label>Read-only original raw sample<textarea aria-label="Read-only raw sample" readOnly value={originalRawSample}/></label>}
+        </section>}
+        <div className="final-event-accounting">
+          <span>Raw source retained: {typeof chosen.raw==='string'?'Yes':'No'}</span>
+          <span>Structural status: {chosen.parseStatus??'UNKNOWN'}</span>
+          <span>Output values present: {outputPresent} / {outputPairs.length}</span>
+          {unaddressableCount>0&&<strong>{unaddressableCount} unaddressable source values remain visible in the source tree and original log.</strong>}
+          {sourceFields.filter(path=>!mappedSources.has(path)).length>0&&<strong>{sourceFields.filter(path=>!mappedSources.has(path)).length} safe source paths have no mapping rule.{keepsUnmapped?' They are kept under their original names in the vendor fields.':''}</strong>}
+        </div>
+        <pre>{JSON.stringify(chosen.normalized,null,2)}</pre>
+      </>}
+    </section>
+    </div>
 
     {activeMappingId&&<section className="normalization-catalog-search" aria-label="Stellar field chooser">
       <div className="normalization-section-head"><div><h3>Choose a Stellar field <HelpTip label="Stellar field list"

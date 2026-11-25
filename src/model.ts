@@ -45,6 +45,8 @@ export interface ParserDraft {
   genericStructuralProfile?: GenericStructuralProfile;
   /** Generic Structural only: leave the full raw line (source_raw) out of parserstudio_source. Absent keeps it. */
   omitSourceRaw?: true;
+  /** Owner decision Q3-1: keep every extracted field no mapping reads in the vendor namespace (src/unmappedFields.ts). */
+  preserveUnmapped?: true;
   /**
    * Generic Structural only (owner policy D-2). 'dedicated': a line that claims to be CEF or LEEF is read by the
    * CEF/LEEF grammar or declined, never as generic key=value. Set for every newly created Generic Structural
@@ -93,6 +95,10 @@ export interface EventResult {
   fields: Record<string, unknown>;
   normalized: Record<string, unknown>;
   eventFamily?: string;
+  /** The family the mixed router read the event with (src/grammar/extractEvent.ts); absent for other formats. */
+  readingFamily?: string;
+  /** The body grammar the reader reports for the event (json, kv, cef, leef, csv ...), when it reports one. */
+  bodyKind?: string;
   forwarderHops?: ForwarderHop[];
   unmapped: string[];
   matched: boolean;

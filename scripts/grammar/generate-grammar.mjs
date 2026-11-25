@@ -169,7 +169,8 @@ export function compileFragment(contract, fragmentName, dialect) {
 }
 
 const REQUIRED_FRAGMENT_CAPTURES = Object.freeze({
-  kv_pair: ['key', 'dq', 'sq', 'bare'], rfc5424_version_head: ['pri', 'version'], structured_family_claim: ['family'],
+  kv_pair: ['key', 'dq', 'sq', 'bare'], kv_list_pair: ['key', 'dq', 'sq', 'bare'], kv_list_separator: ['delimiter'],
+  rfc5424_version_head: ['pri', 'version'], structured_family_claim: ['family'],
   cef_pair: ['key', 'value'], leef_delimiter: ['literal', 'hex'], leef_attribute: ['key'],
 });
 

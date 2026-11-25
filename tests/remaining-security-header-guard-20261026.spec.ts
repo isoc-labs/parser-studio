@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
-const origin='https://app.parser.xdr.ooo';
+const origin='https://app.parser.isoc.ooo';
 test.skip(process.env.PARSER_STUDIO_PUBLIC_NOVICE_CROSS_E2E!=='1',
  'Explicit operator-only public Chromium check, never part of default CI.');
 const cases=[

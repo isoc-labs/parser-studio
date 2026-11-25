@@ -3,6 +3,7 @@ import {rubyE} from './ruby-argv.js';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
+import {diagnosticsOf} from './failure-record.js';
 import {compilePair} from '../src/compiler.js';
 import {sampleProject} from './fixture.js';
 import {validateProject} from '../src/validate.js';
@@ -83,7 +84,7 @@ for(const [target,type,invalid,valid] of [
       assert.equal(bad.parser_err_stage,'normalization');
       assert.equal(bad.parser_err_field,'value');
       assert.equal(bad.parser_err_msg,'MappedFieldError');
-      assert.ok(!JSON.stringify(bad).includes(String(invalid)));
+      assert.ok(!JSON.stringify(diagnosticsOf(bad)).includes(String(invalid)));
       const good=execute(target,type,valid);
       assert.ok(!('parser_err_stage' in good));
     });
