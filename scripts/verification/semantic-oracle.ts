@@ -384,7 +384,9 @@ const RUBY_GENERIC_MUTANTS: Mutant[] = [
 /** Applies a mutant to a compiled Fragment; a contract mutant swaps the injected grammar for the mutated contract's grammar. */
 // Grammar faults that lose a key=value pair without any error, and the one-line removal of the run-time guard.
 const RUNTIME_GUARD_REMOVED: Mutant = { id: 'runtime-guard-removed', file: 'fragment',
-  find: "  unless reading['status'] == 'FULL' || (reading['status'] == 'PARTIAL' && settings['format'] == 'generic_structural')\n",
+  // The guard hands over a FULL reading, a Generic Structural PARTIAL one, and a PARTIAL one whose Syslog message only
+  // claims CEF/LEEF and is kept whole as text (owner decision D-2, textKept).
+  find: "  unless reading['status'] == 'FULL' || (reading['status'] == 'PARTIAL' &&\n    (settings['format'] == 'generic_structural' || reading['textKept'] == true))\n",
   replace: "  unless reading['errors'].empty?\n" };
 // A defect that loses the first key=value pair of a body without any error: the generated key=value reader
 // is handed the body from its second token on.
@@ -671,7 +673,7 @@ const TS_FAMILY_MUTANTS: Mutant[] = [
   { id: 'ts-cef-duplicate-field-overwrites', file: 'src/structuredFamilies.ts', find: 'if(Object.prototype.hasOwnProperty.call(values,key))return failure(duplicateFieldMessage(key));', replace: '' },
   { id: 'ts-leef-duplicate-field-overwrites', file: 'src/structuredFamilies.ts', find: 'if (Object.prototype.hasOwnProperty.call(record, key)) return failure(duplicateFieldMessage(key));', replace: '' },
   { id: 'ts-cef-header-fields-shifted', file: 'src/structuredFamilies.ts', find: 'cef_device_product: parts[1], cef_device_version: parts[2],', replace: 'cef_device_product: parts[2], cef_device_version: parts[1],' },
-  { id: 'ts-cef-dot-excludes-line-separator', file: 'src/structuredFamilies.ts', find: "/^CEF:(\\d+)\\|(.*)$/su.exec(input)", replace: "/^CEF:(\\d+)\\|(.*)$/u.exec(input)" },
+  { id: 'ts-cef-dot-excludes-line-separator', file: 'src/structuredFamilies.ts', find: "/^CEF: ?(\\d+)\\|(.*)$/su.exec(input)", replace: "/^CEF: ?(\\d+)\\|(.*)$/u.exec(input)" },
   // Re-introduces F-11: header escapes decoded in the extension as well, so a value is decoded twice.
   { id: 'ts-family-extension-decoded-twice', file: 'src/structuredFamilies.ts', find: "if (output.length > splits) { output[output.length - 1] += char; continue; }", replace: '' },
 ];
@@ -1092,7 +1094,8 @@ const PYTHON_MUTANTS: Mutant[] = [
   { id: 'py-kv-repeated-key-keeps-first-only', file: 'source_kv.py', find: 'else:out.fields[key]=[previous,value]', replace: 'else:out.fields[key]=previous' },
   // LEEF attributes go through this one place. (For CEF two merged candidates each report the issue, so removing one is not observable.)
   { id: 'py-leef-repeated-field-reported-as-parsed', file: 'structured_source.py', find: '        issues.append("DUPLICATE_SOURCE_FIELD")', replace: '        pass' },
-  { id: 'py-kv-forbidden-key-accepted', file: 'source_kv.py', find: 'if key in UNSAFE:', replace: 'if False:' },
+  // G-5: a reserved source name is kept under its reversible field name; keeping it raw is the fault.
+  { id: 'py-kv-reserved-name-kept-raw', file: 'source_kv.py', find: "key=source_field_name(match['key'])", replace: "key=match['key']" },
   CEF_ESCAPE_CONTRACT_MUTANT, CEF_VERSION_CONTRACT_MUTANT, LEEF_VERSION_CONTRACT_MUTANT, ...FAMILY_CONTRACT_MUTANTS,
   contractMutant('contract-leef-broken-bar-delimiter-dropped', ['semantics', 'leefDelimiterExtraCodePoints'], []),
   // The header rule (only the pipe and the backslash are escapes) falls back to the extension-style decoder.
@@ -1103,7 +1106,7 @@ const PYTHON_MUTANTS: Mutant[] = [
   { id: 'py-csv-doubled-quote-kept', file: 'engine.py', find: "chars.append('\"');pos+=2", replace: "chars.append('\"\"');pos+=2" },
   // Re-introduces F-12: csv.reader alone accepts a double quote inside a bare field.
   { id: 'py-csv-quote-inside-bare-field-accepted', file: 'engine.py', find: "if '\"' in value:", replace: 'if False:' },
-  { id: 'py-json-repeated-name-accepted', file: 'engine.py', find: 'if not isinstance(key,str) or key in out or key in {"__proto__","constructor","prototype"}:', replace: 'if not isinstance(key,str) or key in {"__proto__","constructor","prototype"}:' },
+  { id: 'py-json-repeated-name-accepted', file: 'engine.py', find: '                    if key in out:\n                        raise ValueError("JSON_DUPLICATE_OR_UNSAFE_KEY")', replace: '                    if False:\n                        raise ValueError("JSON_DUPLICATE_OR_UNSAFE_KEY")' },
   { id: 'py-json-depth-limit-widened', file: 'engine.py', find: 'MAX_JSON_DEPTH = 8', replace: 'MAX_JSON_DEPTH = 40' },
   { id: 'py-json-text-after-object-accepted', file: 'engine.py', find: 'raise ValueError("JSON_TRAILING_DATA")', replace: 'pass' },
   // Re-audit of 2026-11-15: Python's decoder keeps an unpaired surrogate escape as a lone surrogate.

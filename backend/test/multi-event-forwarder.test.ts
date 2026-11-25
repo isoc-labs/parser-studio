@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {diagnosticsOf} from './failure-record.js';
 import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import type {AddressInfo} from 'node:net';
@@ -100,7 +101,7 @@ test('profile-free old projects remain accepted and unchanged in schema',()=>{
 });
 
 const rubyPresent=spawnSync('ruby',['-v'],{encoding:'utf8'}).status===0;
-test('actual generated Ruby branches threat/user/asset and rejects unknown family without source egress',
+test('actual generated Ruby branches threat/user/asset and keeps a rejected event only in parser_raw_msg',
   {skip:!rubyPresent},()=>{
   const p=project();
   const compiled=compilePair(p);
@@ -143,8 +144,12 @@ test('actual generated Ruby branches threat/user/asset and rejects unknown famil
   assert.equal(records[5]?.parser_err_stage,'extraction');
   assert.equal(records[6]?.parser_err_msg,'MappedFieldError');
   assert.equal(records[6]?.parser_err_stage,'normalization');
-  assert.equal(JSON.stringify(records).includes('DO_NOT_ECHO_PRIVATE'),false);
-  assert.equal(JSON.stringify(records).includes('unknown-relay fw:'),false);
+  assert.equal(records[5]?.parser_raw_msg,foreign);
+  assert.equal(records[6]?.parser_raw_msg,unknown);
+  assert.equal(records.filter(record=>'parser_raw_msg' in record).length,2);
+  const diagnostics=JSON.stringify(records.map(diagnosticsOf));
+  assert.equal(diagnostics.includes('DO_NOT_ECHO_PRIVATE'),false);
+  assert.equal(diagnostics.includes('unknown-relay fw:'),false);
 });
 
 test('offline HTTP accepts explicitly reviewed conditional parser and never enables sensor endpoints',async()=>{

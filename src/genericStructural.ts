@@ -102,7 +102,7 @@ function prefixedJson(raw:string):Record<string,unknown>|null{
   },'json',match[2]!);
 }
 
-const RX_SHORT_RFC5424_STRUCTURED=new RegExp(String.raw`^<(${T.PRI})>(${RFC5424_VERSION}) ([^ \t\n\r\f\v]{1,64}) (${T.RFC5424_HOSTNAME}) ((?:CEF:0\|.*|LEEF:(?:1\.0|2\.0)\|.*))$`,'su');
+const RX_SHORT_RFC5424_STRUCTURED=new RegExp(String.raw`^<(${T.PRI})>(${RFC5424_VERSION}) ([^ \t\n\r\f\v]{1,64}) (${T.RFC5424_HOSTNAME}) ((?:CEF: ?0\|.*|LEEF:(?:1\.0|2\.0)\|.*))$`,'su');
 function shortRfc5424Structured(raw:string):Record<string,unknown>|null{
   const match=raw.match(RX_SHORT_RFC5424_STRUCTURED);
   if(!match)return null;
@@ -117,6 +117,10 @@ function shortRfc5424Structured(raw:string):Record<string,unknown>|null{
   };
 }
 
+// Records keyed by names read from a log are created without a prototype (Object.create(null)), so a
+// source key such as toString, valueOf or hasOwnProperty is plain data: a lookup of a key that is not
+// there yet returns undefined instead of an inherited Object.prototype member. The generated Ruby
+// uses a Hash, which never had inherited members.
 const UNSAFE_SOURCE_KEYS=new Set(['__proto__','constructor','prototype']);
 
 function sourceKeySafe(key:string):boolean{
@@ -153,7 +157,7 @@ function bracketColonKv(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(inner).byteLength>8192)return null;
   const segments=splitEscaped(inner,';');
   if(!segments)return null;
-  const body:Record<string,unknown>={};
+  const body:Record<string,unknown>=Object.create(null);
   for(const rawSegment of segments){
     const segment=rawSegment.replace(ASCII_EDGE_SPACE,'');
     if(!segment)continue;
@@ -183,7 +187,7 @@ function junosRfc5424Sd(raw:string):Record<string,unknown>|null{
   const head=/^junos@[A-Za-z0-9.:-]{1,64}/u.exec(inner);
   if(!head)return null;
   let pos=head[0].length;
-  const fields:Record<string,unknown>={};
+  const fields:Record<string,unknown>=Object.create(null);
   while(pos<inner.length){
     if(inner[pos]!==' ')return null;
     pos++;
@@ -235,7 +239,7 @@ function commaKv(raw:string):Record<string,unknown>|null{
     value.length>1&&[':',','].includes(value[value.length-1]!)?value.slice(0,-1):value);
   if(tokens.length<8||tokens.length>64||
      tokens.some(value=>value.length<1||new TextEncoder().encode(value).byteLength>256))return null;
-  const fields:Record<string,unknown>={};
+  const fields:Record<string,unknown>=Object.create(null);
   for(const rawSegment of parts.slice(1)){
     const segment=rawSegment.replace(ASCII_EDGE_SPACE,'');
     if(!segment)continue;
@@ -291,8 +295,8 @@ function spaceKv(raw:string):Record<string,unknown>|null{
     value.length>1&&[':',','].includes(value[value.length-1]!)?value.slice(0,-1):value):[];
   if(prefix&&(tokens.length<2||tokens.length>16||
     tokens.some(value=>!value||new TextEncoder().encode(value).byteLength>256)))return null;
-  const fields:Record<string,unknown>={};
-  const atoms:Record<string,unknown>={};
+  const fields:Record<string,unknown>=Object.create(null);
+  const atoms:Record<string,unknown>=Object.create(null);
   for(let index=0;index<entries.length;index++){
     const entry=entries[index]!;
     if(!sourceKeySafe(entry.key)||Object.prototype.hasOwnProperty.call(fields,entry.key))return null;
@@ -348,7 +352,7 @@ function validBsdClock(month:string,dayText:string,time:string):boolean{
 
 function scanProfileTokens(raw:string,start:number):{tokens:string[];kv:Record<string,unknown>;groups:string[]}|null{
   if(start<0||start>raw.length||new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
-  const tokens:string[]=[],groups:string[]=[];const kv:Record<string,unknown>={};let pos=start,count=0;
+  const tokens:string[]=[],groups:string[]=[];const kv:Record<string,unknown>=Object.create(null);let pos=start,count=0;
   while(pos<raw.length){
     while(pos<raw.length&&/[ \t\n\r\f\v]/u.test(raw[pos]!))pos++;
     if(pos===raw.length)break;
@@ -516,6 +520,79 @@ function watchguardMessageProfile(raw:string):Record<string,unknown>|null{
   };
 }
 
+// WatchGuard Fireware traffic log message as Traffic Monitor and Log Manager show it (Fireware Help, "Read a Log
+// Message"): <date> <time> [<cluster member>] <disposition> <source IP> <destination IP> <service>/<protocol>
+// [<source port> <destination port>] <source interface> <destination interface> <connection action>
+// [<packet length> <TTL>] (<policy>), then key="value" details with the message ID. A FireCluster member writes
+// its member name after the time, an ICMP message has no ports, packet length and TTL may be missing. The
+// positions are named as the Fireware Log Catalog names the same values (disp, src_ip, dst_ip, src_port, dst_port,
+// src_intf, dst_intf, pckt_len, ttl, policy); the service/protocol position is kept as its two documented parts,
+// the connection action under the name the Help gives it. The layout has no host name: neither the member name
+// nor the disposition after the time is one (golden r2_watchguard_traffic read "Allow" and "Deny" as the host).
+const RX_WATCHGUARD_TRAFFIC_MONITOR=new RegExp(String.raw`^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (?:([A-Za-z0-9._-]{1,64}) )?(Allow|Deny|Drop) ([0-9A-Fa-f:.]{2,45}) ([0-9A-Fa-f:.]{2,45}) ([A-Za-z0-9._-]{1,64})\/([A-Za-z0-9-]{1,16}) (?:(\d{1,5}) (\d{1,5}) )?([A-Za-z0-9._-]{1,64}) ([A-Za-z0-9._-]{1,64}) ([A-Za-z]{1,32}) (?:(\d{1,5}) (\d{1,3}) )?\(([^()]{1,128})\) `,'u');
+function watchguardTrafficMonitorProfile(raw:string):Record<string,unknown>|null{
+  if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
+  const head=RX_WATCHGUARD_TRAFFIC_MONITOR.exec(raw);
+  if(!head||!isoTimestampOk(head[1]!+'T'+head[2]!)||!ipToken(head[5]!)||!ipToken(head[6]!))return null;
+  if(head[9]!==undefined&&(Number(head[9])>65535||Number(head[10])>65535))return null;
+  // The layout has port positions for TCP and UDP; two numbers after an ICMP or other protocol are not documented
+  // as ports, so the line is not read as this layout (independent audit 2026-11-23, F3).
+  if(head[9]!==undefined&&!/^(?:[Tt][Cc][Pp]|[Uu][Dd][Pp])$/u.test(head[8]!))return null;
+  if(head[15]!==undefined&&Number(head[15])>255)return null;
+  const details=scanProfileTokens(raw,head[0].length);
+  if(!details||details.tokens.length>0||details.groups.length>0)return null;
+  const msgId=details.kv.msg_id;
+  if(typeof msgId!=='string'||!/^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$/u.test(msgId))return null;
+  const record:Record<string,unknown>={disp:head[4],src_ip:head[5],dst_ip:head[6],service:head[7],protocol:head[8]};
+  if(head[9]!==undefined){record.src_port=head[9];record.dst_port=head[10];}
+  record.src_intf=head[11];record.dst_intf=head[12];record.connection_action=head[13];
+  if(head[14]!==undefined){record.pckt_len=head[14];record.ttl=head[15];}
+  record.policy=head[16];record.kv=details.kv;
+  const header:Record<string,unknown>={date:head[1],time:head[2]};
+  if(head[3]!==undefined)header.cluster=head[3];
+  return {watchguard_header:header,watchguard:record,generic:{mode:'watchguard_traffic_monitor',source_raw:raw}};
+}
+
+// Cisco Meraki syslog event (Meraki documentation, "Syslog Event Types and Log Samples"): <epoch seconds>.<fraction>
+// <device name> <record type> [<event type>] key=value ... A flows, firewall, URL or IDS record may end with a label
+// and its free text: `pattern: <matching firewall rule>`, `message: <signature description>`, `request: <method>
+// <URL>`. The value of a pair is one word, and the label starts text that runs to the end of the line, so the
+// rule `allow all` is no part of the value of dport (golden meraki_mx_flows_ids). Every record type is its own
+// reading mode, which keeps the mappings of flows and IDS records apart (event-family routing by generic.mode).
+const MERAKI_RECORD_MODES:Readonly<Record<string,string>>={
+  flows:'meraki_flows',firewall:'meraki_firewall',vpn_firewall:'meraki_vpn_firewall',
+  cellular_firewall:'meraki_cellular_firewall',bridge_anyconnect_client_vpn_firewall:'meraki_anyconnect_firewall',
+  urls:'meraki_urls','ids-alerts':'meraki_ids_alerts',security_event:'meraki_security_event',
+};
+const RX_MERAKI=new RegExp(String.raw`^(\d{9,10}\.\d{1,9}) ([A-Za-z0-9_.-]{1,64}) (flows|firewall|vpn_firewall|cellular_firewall|bridge_anyconnect_client_vpn_firewall|urls|ids-alerts|security_event)(?: ([a-z][a-z_]{0,31}))? `,'u');
+const RX_MERAKI_LABEL=/^(pattern|message|request): (.+)$/u;
+const RX_MERAKI_PAIR=/^([A-Za-z_][A-Za-z0-9_.-]{0,63})=([^ ]*)(?: |$)/u;
+function merakiProfile(raw:string):Record<string,unknown>|null{
+  if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
+  const head=RX_MERAKI.exec(raw);
+  if(!head)return null;
+  const kv:Record<string,unknown>=Object.create(null);
+  const generic:Record<string,unknown>={mode:MERAKI_RECORD_MODES[head[3]!],source_raw:raw,kv};
+  let pos=head[0].length,pairs=0;
+  while(pos<raw.length){
+    const rest=raw.slice(pos);
+    const label=RX_MERAKI_LABEL.exec(rest);
+    if(label){generic[label[1]!]=label[2];break;}
+    const pair=RX_MERAKI_PAIR.exec(rest);
+    if(!pair||!sourceKeySafe(pair[1]!)||Object.prototype.hasOwnProperty.call(kv,pair[1]!))return null;
+    pairs++;
+    if(pairs>100)return null;
+    kv[pair[1]!]=pair[2];
+    pos+=pair[0].length;
+  }
+  if(typeof kv.src!=='string'||typeof kv.dst!=='string')return null;
+  // The leading epoch time is not named `timestamp`: an IDS record has a `timestamp=` pair of its own with
+  // another value, and the two must not read as one field (golden meraki_mx_flows_ids, field linkage).
+  const header:Record<string,unknown>={epoch:head[1],device:head[2],record_type:head[3]};
+  if(head[4]!==undefined)header.event_type=head[4];
+  return {meraki_header:header,generic};
+}
+
 const RX_DUAL_TIMESTAMP_SESSION_PROFILE=new RegExp(String.raw`^(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255}) +1 +(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})) +([^ \t\n\r\f\v]{1,255}) +([A-Za-z0-9_.-]{1,64}): +- +- +- +(\d{4}-\d{2}-\d{2}) +(\d{2}:\d{2}:\d{2}) +- +([^ \t\n\r\f\v]{1,255}) +- +\[([^\]\r\n]{1,255})\] +(.+?) +- +(.+)$`,'su');
 function dualTimestampSessionProfile(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192||raw.includes('\0'))return null;
@@ -599,7 +676,7 @@ function delimitedCommaKv(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192)return null;
   const parts=splitEscaped(raw,',');
   if(!parts||parts.length<4)return null;
-  const fields:Record<string,unknown>={};let prefix='';let parsed=0;
+  const fields:Record<string,unknown>=Object.create(null);let prefix='';let parsed=0;
   const safe=/^[A-Za-z0-9][A-Za-z0-9 ._:/()#-]{0,127}$/u;
   for(let index=0;index<parts.length;index++){
     const segment=parts[index]!.replace(ASCII_EDGE_SPACE,'');
@@ -719,6 +796,75 @@ function panosTrafficFields(values:string[]):Record<string,string>|null{
   return fields;
 }
 
+// PAN-OS THREAT and SYSTEM records, named from the documented field order of the PAN-OS syslog field
+// descriptions (Threat Log Fields, System Log Fields). Only the prefix that is the same in every documented
+// release is named; a FUTURE_USE position and every cell after the prefix keep their position as the name.
+const PANOS_THREAT=[
+  'domain','receive_time','serial','type','subtype','config_version','time_generated',
+  'src','dst','natsrc','natdst','rule','srcuser','dstuser','app','vsys','from','to',
+  'inbound_if','outbound_if','logset','time_received','sessionid','repeatcnt','sport',
+  'dport','natsport','natdport','flags','protocol','action','misc','threatid','category',
+  'severity','direction','seqno','actionflags','srcloc','dstloc','column_40','contenttype',
+  'pcap_id','filedigest','cloud','url_idx','user_agent','filetype','xff','referer','sender',
+  'subject','recipient','reportid','dg_hier_level_1','dg_hier_level_2','dg_hier_level_3',
+  'dg_hier_level_4','vsys_name','device_name',
+] as const;
+const PANOS_SYSTEM=[
+  'domain','receive_time','serial','type','subtype','config_version','time_generated',
+  'vsys','eventid','object','column_10','column_11','module','severity','opaque','seqno',
+  'actionflags','dg_hier_level_1','dg_hier_level_2','dg_hier_level_3','dg_hier_level_4',
+  'vsys_name','device_name','column_23','column_24','high_res_timestamp',
+] as const;
+const PANOS_SEVERITY=/^(?:informational|low|medium|high|critical)$/u;
+
+function panosThreatFields(values:string[]):Record<string,string>|null{
+  if(values.length<42||values[3]!=='THREAT')return null;
+  const datetime=/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/u;
+  const ip=/^(?:\d{1,3}\.){3}\d{1,3}$/u;
+  const validIp=(value:string)=>ip.test(value)&&value.split('.').every(part=>Number(part)<=255);
+  if(!datetime.test(values[1]??'')||!datetime.test(values[6]??'')||!datetime.test(values[21]??'')||
+     !validIp(values[7]??'')||!validIp(values[8]??'')||
+     !validIp(values[9]??'')||!validIp(values[10]??''))return null;
+  for(const index of [24,25,26,27]){
+    const value=values[index]??'';
+    if(!/^\d{1,5}$/u.test(value)||Number(value)>65535)return null;
+  }
+  if(!/^[A-Za-z0-9_.-]{1,24}$/u.test(values[29]??'')||
+     !/^[A-Za-z0-9_. -]{1,64}$/u.test(values[30]??'')||
+     !PANOS_SEVERITY.test(values[34]??'')||
+     !/^(?:client-to-server|server-to-client|0|1)$/u.test(values[35]??''))return null;
+  const fields:Record<string,string>={};
+  values.forEach((value,index)=>{
+    fields[PANOS_THREAT[index]??('column_'+String(index))]=value;
+  });
+  return fields;
+}
+
+function panosSystemFields(values:string[]):Record<string,string>|null{
+  if(values.length<15||values[3]!=='SYSTEM')return null;
+  const datetime=/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/u;
+  if(!datetime.test(values[1]??'')||!datetime.test(values[6]??'')||
+     !/^[A-Za-z0-9_.-]{1,64}$/u.test(values[8]??'')||
+     !PANOS_SEVERITY.test(values[13]??''))return null;
+  const fields:Record<string,string>={};
+  values.forEach((value,index)=>{
+    fields[PANOS_SYSTEM[index]??('column_'+String(index))]=value;
+  });
+  return fields;
+}
+
+/** The generic mode of a PAN-OS record whose columns can be named, or null. */
+function panosNamedMode(values:string[]):string|null{
+  if(panosTrafficFields(values))return 'panos_traffic_csv';
+  if(panosThreatFields(values))return 'panos_threat_csv';
+  if(panosSystemFields(values))return 'panos_system_csv';
+  return null;
+}
+
+function panosNamedFields(values:string[]):Record<string,string>|null{
+  return panosTrafficFields(values)??panosThreatFields(values)??panosSystemFields(values);
+}
+
 const RX_RFC3164_POSITIONAL_CSV=new RegExp(String.raw`^(?:<(${T.PRI})>)?(${T.BSD_MONTH}) +(\d{1,2}) +(\d{2}:\d{2}:\d{2}) +([^ \t\n\r\f\v]{1,255}) +`,'u');
 function rfc3164PositionalCsv(raw:string):Record<string,unknown>|null{
   if(new TextEncoder().encode(raw).byteLength>8192)return null;
@@ -740,7 +886,8 @@ function rfc3164PositionalCsv(raw:string):Record<string,unknown>|null{
   const securityCategory=values.some(value=>
     /^(?:TRAFFIC|THREAT|SYSTEM|CONFIG|GLOBALPROTECT|USERID|CORRELATION|DECRYPTION|HIPMATCH|AUTHENTICATION)$/u.test(value));
   if(ips<2||!securityCategory)return null;
-  const panos=panosTrafficFields(values);
+  const panos=panosNamedFields(values);
+  const panosMode=panosNamedMode(values);
   const columns:Record<string,string>={};
   values.forEach((value,index)=>{columns['column_'+String(index)]=value;});
   const syslog:Record<string,unknown>={
@@ -750,7 +897,7 @@ function rfc3164PositionalCsv(raw:string):Record<string,unknown>|null{
   return withBodyText({
     syslog,
     generic:panos
-      ?{mode:'panos_traffic_csv',delimiter:',',source_raw:raw,fields:panos}
+      ?{mode:panosMode,delimiter:',',source_raw:raw,fields:panos}
       :{mode:'rfc3164_positional_csv',delimiter:',',source_raw:raw,columns},
   },'positional_csv',body);
 }
@@ -805,7 +952,7 @@ function bracketColonKvBody(text:string):Record<string,unknown>|null{
   const inner=text.slice(1,-1);
   const segments=splitEscaped(inner,';');
   if(!segments)return null;
-  const body:Record<string,unknown>={};
+  const body:Record<string,unknown>=Object.create(null);
   for(const rawSegment of segments){
     const segment=rawSegment.replace(ASCII_EDGE_SPACE,'');
     if(!segment)continue;
@@ -897,7 +1044,7 @@ function syslogEnvelopeStructuredFallback(raw:string):Record<string,unknown>|nul
   if(/\bfirewall(?:\[\d{1,8}\])?: +msg_id=/u.test(message))return null;
 
   if(message.startsWith('CEF:')){
-    if(!/^CEF:0\|/u.test(message))return null;
+    if(!/^CEF: ?0\|/u.test(message))return null;
     const parsed=extractStructuredFamily(message,'cef');
     if(parsed.errors.length)return null;
     return withBodyText({
@@ -932,11 +1079,12 @@ function syslogEnvelopeStructuredFallback(raw:string):Record<string,unknown>|nul
     /^[A-Z][A-Z0-9_]{2,31}$/u.test(panosValues[3]??'');
   const panos=panosPositionalCsvBody(message);
   if(panos){
-    const named=panosValues?panosTrafficFields(panosValues):null;
+    const named=panosValues?panosNamedFields(panosValues):null;
+    const namedMode=panosValues?panosNamedMode(panosValues):null;
     return withBodyText({
       syslog,
       generic:named
-        ?{mode:'panos_traffic_csv',profile:'panos',delimiter:',',source_raw:raw,message_raw:message,fields:named}
+        ?{mode:namedMode,profile:'panos',delimiter:',',source_raw:raw,message_raw:message,fields:named}
         :{mode:'syslog_envelope_positional_csv',profile:'panos',delimiter:',',source_raw:raw,message_raw:message,columns:panos},
     },'positional_csv',message);
   }
@@ -1034,7 +1182,7 @@ function syslogPrefixedKeyValues(raw:string):Record<string,unknown>|null{
      new TextEncoder().encode(prefix).byteLength>1024||
      /[="'{}\[\]|<>\/]/u.test(prefix)||
      /(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9A-Fa-f]{0,4}:){2}|->/u.test(prefix))return null;
-  const fields:Record<string,unknown>={};
+  const fields:Record<string,unknown>=Object.create(null);
   const token=/^([A-Za-z_][A-Za-z0-9_-]{0,63})=(?:"((?:\\["\\]|[^"\\\u0000-\u001f\u007f])*)"|'((?:\\['\\]|[^'\\\u0000-\u001f\u007f])*)'|([^ \t"'\\]+))(?=[ \t]|$)/u;
   while(cursor<message.length){
     const match=token.exec(message.slice(cursor));
@@ -1087,7 +1235,7 @@ export function envelopedJsonDeclined(raw:string):boolean{
   return boundedEnvelopeJson(message)===null;
 }
 /** Modes that read a CEF/LEEF event with the CEF/LEEF grammar. */
-export const GENERIC_FAMILY_MODES:readonly string[]=['structured_family_cef','structured_family_leef','syslog_envelope_cef','syslog_envelope_leef','leef2_implicit_tab'];
+export const GENERIC_FAMILY_MODES:readonly string[]=['structured_family_cef','structured_family_leef','syslog_envelope_cef','syslog_envelope_leef','syslog_envelope_leef2_implicit_tab','leef2_implicit_tab'];
 
 /**
  * familyGrammar (owner policy D-2): 'dedicated' is set for every newly created Generic Structural parser; a
@@ -1115,6 +1263,23 @@ export function extractGenericStructural(raw:string,profile?:GenericStructuralPr
     return fields?{fields,errors:[]}:
       {fields:{},errors:['Event does not match the bounded Generic Structural compiler grammar']};
   }
+  // LEEF 2.0 also permits the default TAB separator to be implicit. The
+  // standalone helper owns only that narrow body grammar; preserve the
+  // validated Syslog envelope separately and never reinterpret other LEEF
+  // versions or explicit delimiter slots through this route.
+  if(includesLeef&&familyGrammar==='dedicated'){
+    const envelope=parseSyslogEnvelope(raw);
+    if(envelope&&envelope.variant!=='colon_date'&&envelope.message.startsWith('LEEF:2.0|')){
+      const parsed=extractLeef2ImplicitTab(envelope.message);
+      if(parsed){
+        const body={leef_header:parsed.leef_header,leef_extension:parsed.leef_extension};
+        return {fields:{syslog:envelopeToSyslogFields(envelope),body,
+          generic:{mode:'syslog_envelope_leef2_implicit_tab',source_raw:raw,message_raw:envelope.message}},errors:[]};
+      }
+      // An explicit valid delimiter belongs to the existing LEEF grammar;
+      // malformed messages are refused by that same dedicated family route.
+    }
+  }
   const claim=familyGrammar==='dedicated'?structuredFamilyClaim(raw):null;
   if(claim){
     const parsed=extractStructuredFamily(raw,claim==='CEF'?'cef':'leef');
@@ -1136,7 +1301,7 @@ export function extractGenericStructural(raw:string,profile?:GenericStructuralPr
   // The JSON message of an envelope is held to its contract the same way (new parsers only, like the claims above).
   if(familyGrammar==='dedicated'&&envelopedJsonDeclined(raw))
     return {fields:{},errors:['The message claims to be a JSON object but the JSON body contract does not read it (not valid JSON, a repeated member name, a number that cannot be kept exactly, or the bounded size); it is not read as free text']};
-  const fields=shortRfc5424Structured(raw)??shortRfc5424Json(raw)??prefixedJson(raw)??isoPriMixed(raw)??isoPriPositional(raw)??asa(raw)??watchguardProfile(raw)??watchguardMessageProfile(raw)??dualTimestampSessionProfile(raw)??bsdBracketPidMessageProfile(raw)??
+  const fields=shortRfc5424Structured(raw)??shortRfc5424Json(raw)??prefixedJson(raw)??isoPriMixed(raw)??isoPriPositional(raw)??asa(raw)??watchguardProfile(raw)??watchguardMessageProfile(raw)??watchguardTrafficMonitorProfile(raw)??merakiProfile(raw)??dualTimestampSessionProfile(raw)??bsdBracketPidMessageProfile(raw)??
     juniperLegacyProfile(raw)??junosRfc5424Sd(raw)??bracketColonKv(raw)??
     rfc3164DelimitedCommaKv(raw)??rfc3164PositionalCsv(raw)??priSpaceKv(raw)??
     syslogEnvelopeStructuredFallback(raw)??commaKv(raw)??delimitedCommaKv(raw)??spaceKv(raw)??

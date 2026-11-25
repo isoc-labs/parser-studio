@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {rubyE} from './ruby-argv.js';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
+import {diagnosticsOf} from './failure-record.js';
 import {createHash} from 'node:crypto';
 import {compilePair} from '../src/compiler.js';
 import {validateProject} from '../src/validate.js';
@@ -116,8 +117,11 @@ test('H1 generated Ruby matches independent typed, stage and rollback truth',
      assert.ok(!('message' in result),'Failed or skipped enrichment must never emit later writes');
      assert.ok(!('srcip' in result),'Invalid official IP cannot escape the transaction');
    }
-   assert.ok(!JSON.stringify(result).includes('DO_NOT_ECHO_PRIVATE'));
-   assert.ok(!JSON.stringify(result).includes(raw),
-     'Original raw event must not leak through runtime diagnostics');
+   if(item.id==='success')assert.ok(!('parser_raw_msg' in result),'A parsed event carries no raw copy');
+   else assert.equal(result.parser_raw_msg,raw,'A failed event keeps its original text');
+   const diagnostics=JSON.stringify(diagnosticsOf(result));
+   assert.ok(!diagnostics.includes('DO_NOT_ECHO_PRIVATE'));
+   assert.ok(!diagnostics.includes(raw),
+     'Only parser_raw_msg may hold the original raw event');
  }
 });

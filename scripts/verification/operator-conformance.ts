@@ -47,13 +47,15 @@ for(const item of OPERATOR_GOLDENS){
   const rows=JSON.parse(result.stdout) as Record<string,unknown>[];
   assert.equal(rows.length,3,id);
   assert.equal(rows[1]!.parser_err_stage,'extraction',id+' invalid record');
+  assert.equal(rows[1]!.parser_raw_msg,'\r',id+' invalid record keeps its original text');
   for(const [key] of Object.entries(expected))
    assert.equal(Object.hasOwn(rows[1]!,key),false,id+' stale field leaked');
   for(const row of [rows[0]!,rows[2]!]){
    const stage=item.stage==='normalize'?'normalization':item.stage==='extract'?'extraction':item.stage;
    assert.equal(row.parser_err_stage,stage,id+' independent phase truth');
+   assert.equal(row.parser_raw_msg,stage===undefined?undefined:raw,id+' original text only on a failure record');
    const actual=Object.fromEntries(Object.entries(row).filter(([key])=>
-    !['stellar_log_index','msg_origin','parser_err_msg','parser_err_stage','parser_err_field'].includes(key)));
+    !['stellar_log_index','msg_origin','parser_err_msg','parser_err_stage','parser_err_field','parser_raw_msg'].includes(key)));
    assert.deepEqual(actual,expectedWireRecord(expected),id+' independent native truth');
    records++;
   }

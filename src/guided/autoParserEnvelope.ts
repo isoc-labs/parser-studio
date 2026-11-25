@@ -9,7 +9,7 @@ import {jsonSourceValueValid} from '../jsonSourceSafety';
 import {parseRfc5424Subset} from '../rfc5424Subset';
 import {matchRfc3164Header,matchesHeaderToken} from '../grammar/syslogHeader';
 import {parseStrictKeyValues} from '../grammar/kvBody';
-import {extractStructuredFamily} from '../structuredFamilies';
+import {extractStructuredFamily,extractStandaloneFamily,priOnlyPrefix} from '../structuredFamilies';
 import {parseJavaStacktrace} from '../javaStacktrace';
 import type {BackendCapabilities} from './backendCapabilities';
 import type {EventBoundary} from './contract';
@@ -70,9 +70,9 @@ function jsonValid(input:string):boolean{
         return leaves<=4096;
       }
       if(Array.isArray(node))return node.every(item=>descend(item,depth+1));
-      return Object.entries(node).every(([name,item])=>
-        name!=='__proto__'&&name!=='constructor'&&name!=='prototype'&&
-        descend(item,depth+1));
+      // A member name the JavaScript object model reserves is read under its reversible field name
+      // (src/grammar/sourceFieldNames.ts, G-5), so it no longer makes the JSON body malformed.
+      return Object.values(node).every(item=>descend(item,depth+1));
     };
     return descend(value,0);
   }catch{return false;}
@@ -160,7 +160,9 @@ function analyzeRecord(text:string,sequence:number,line:number,boundary:EventBou
   // token, and the form whose HOSTNAME is omitted) comes from
   // contracts/syslog-header-grammar.v1.json, like the extractor and the Ruby export.
   const bsd=matchRfc3164Header(raw);
-  if(bsd.ok&&bsd.rule!=='rfc3164_tagged'&&matchesHeaderToken('STRUCTURED_BODY',bsd.message)){
+  // A tagged record without a PRI belongs to the same bounded subset (matchRfc3164Header accepts it only
+  // before a structured body); with a PRI the tagged record is judged by the strict rule below.
+  if(bsd.ok&&(bsd.rule!=='rfc3164_tagged'||bsd.pri===undefined)&&matchesHeaderToken('STRUCTURED_BODY',bsd.message)){
     const classified=classifyBody(bsd.message);
     return {...base,envelope:'rfc3164',...classified,
       timePolicy:'YEAR_AND_ZONE_UNKNOWN',rfc3164Profile:'tagless_structured_security'};
@@ -178,6 +180,11 @@ function analyzeRecord(text:string,sequence:number,line:number,boundary:EventBou
       return {...base,envelope:'rfc5424',...classified,
         timePolicy:scanned.fields.syslog_timestamp==='-'?'NO_TIMESTAMP':'EXPLICIT_TIME'};
     }
+    // A bare PRI before a CEF or LEEF event (structuredFamilies.priOnlyPrefix) is read by the standalone CEF/LEEF
+    // reader, not by the RFC 3164 reader: there is no TIMESTAMP or HOSTNAME.
+    const pri=priOnlyPrefix(raw);
+    if(pri)return {...base,envelope:'none',body:pri.family,
+      status:extractStandaloneFamily(raw,pri.family).errors.length===0?'RECOGNIZED':'BODY_MALFORMED'};
     // RFC3164 has no year or zone. A browser hypothesis MUST NOT fabricate
     // time, a native export adapter, or a vendor-approved parsing status.
     const match=/^<(\d{1,3})>([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+([^\s]{1,255})\s+(.+)$/.exec(raw);

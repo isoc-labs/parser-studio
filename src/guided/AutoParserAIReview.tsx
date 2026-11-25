@@ -9,7 +9,10 @@ import {compareCandidate,compareMappingCorrectionCandidate,describeScopedTypeCha
 import {buildReviewableRecipe} from './parserRecipeV2';
 import {recoveryResponseContract,sourceMarkers} from './chatGptPromptBuilder';
 import {MAX_EVENTS,preview,splitEvents} from '../parser';
-import {runInWorker} from '../previewWorkerClient';
+import {runInWorker,runResidualAccountingInWorker} from '../previewWorkerClient';
+import {RESIDUAL_PROVENANCE_CONTRACT,locateResidualRegions,usesRegexExtraction,type ResidualAccounting,
+ type ResidualRegion} from './residualProvenance';
+import {scalarValues,sourceAlternatives} from './sourceValueForms';
 import {defaultGuidedOptions} from './contract';
 import {sha256Utf8Hex} from '../sha256';
 import {requestMultiPassBatchPreview,type MultiPassBatchPreview} from './multipassPreviewClient';
@@ -25,25 +28,10 @@ function reviewCandidatePreview(source:string,draft:ParserDraft):Promise<SuiteRe
 }
 
 type HoldoutEvidenceRequester=(source:string)=>Promise<MultiPassBatchPreview>;
-interface Props {raw:string;status:string;onChatGPT:()=>void;source?:string;draft?:ParserDraft;suite?:SuiteResult;initialByteRange?:{startByte:number;endByte:number}|null;selectionContext?:{kind:'field'|'residual';path?:string};onApplyCandidate?:(draft:ParserDraft)=>void;importOnly?:boolean;protectedSourceValuesByEvent?:string[][];protectedResidualTextByEvent?:string[][];holdoutEvidenceRequester?:HoldoutEvidenceRequester}
+interface Props {raw:string;status:string;onChatGPT:()=>void;source?:string;draft?:ParserDraft;suite?:SuiteResult;initialByteRange?:{startByte:number;endByte:number}|null;selectionContext?:{kind:'field'|'residual';path?:string};onApplyCandidate?:(draft:ParserDraft)=>void;importOnly?:boolean;protectedSourceValuesByEvent?:string[][];protectedResidualTextByEvent?:string[][];protectedResidualRegionsByEvent?:ResidualRegion[][];holdoutEvidenceRequester?:HoldoutEvidenceRequester}
 const completeSuite=(value:SuiteResult)=>value.counts.total>0&&value.counts.matched===value.counts.total&&
  value.counts.extracted===value.counts.total&&value.counts.normalized===value.counts.total&&value.counts.failures===0;
-function scalarValues(value:unknown):string[]{
- if(value===null)return ['null'];
- if(Array.isArray(value))return value.flatMap(scalarValues);
- if(typeof value==='object'&&value!==null)return Object.values(value as Record<string,unknown>).flatMap(scalarValues);
- return value===undefined?[]:[String(value)];
-}
-export function sourceAlternatives(value:string):string[]{
- const out=[value];
- if(value.length>=2&&value[0]==='\"'&&value.at(-1)==='\"'){
-  try{const parsed=JSON.parse(value);if(typeof parsed==='string')out.push(parsed);}catch{/* keep exact source */}
- }else if(value.length>=2&&value[0]==="'"&&value.at(-1)==="'")out.push(value.slice(1,-1));
- // The browser key=value reader decodes backslash escapes (`\=` -> `=`) while the backend span
- // evidence keeps the raw text, so a decoded form of the same value is also the same value.
- for(const item of [...out])if(item.includes('\\'))out.push(item.replace(/\\(.)/gs,'$1'));
- return [...new Set(out)];
-}
+export {sourceAlternatives};
 function containsExactSourceRaw(value:unknown,raw:string,depth=0):boolean{
  if(depth>8||value===null||value===undefined)return false;
  if(Array.isArray(value))return value.some(item=>containsExactSourceRaw(item,raw,depth+1));
@@ -101,8 +89,21 @@ export function protectedValueRegression(candidate:SuiteResult,protectedValues:s
  }
  return null;
 }
-function protectedResidualRegression(candidate:SuiteResult,protectedResiduals:string[][]|undefined):
- {event:number;missing:number;required:number}|null{
+// A previously unparsed region is a UTF-8 byte range of one event. When the candidate reads events with a regular
+// expression the region is accounted for character by character: every value-bearing character must lie inside a
+// capture whose text reaches the final output (src/guided/residualProvenance.ts, final re-audit H-2), so a lossless
+// recipe may read a multi-token region into several fields. Without that evidence the strict rule stays: the region
+// must be kept whole in one output value. Counting the region's words anywhere in the output let a recipe drop literal
+// digits and signs (verification of 3f363d2, D-1) and is not used.
+/**
+ * `accounting` is the character-level evidence of a regex candidate (null for any other candidate). A regex candidate
+ * must prove every residual region of an event with capture spans: when the evidence of an event is missing (exact
+ * ranges that do not fit the event, a worker failure or time-out, an expression that does not match), the event's
+ * regions count as unaccounted. The whole-value rule below is only used for candidates without such evidence; its
+ * substring test cannot tell an earlier parsed copy of the same text from the residual (re-audit F-1 of 4c04b0b).
+ */
+export function protectedResidualRegression(candidate:SuiteResult,protectedResiduals:string[][]|undefined,
+ accounting?:ResidualAccounting|null):{event:number;missing:number;required:number}|null{
  if(!protectedResiduals?.some(values=>values.length))return null;
  for(let index=0;index<protectedResiduals.length;index++){
   const required=(protectedResiduals[index]??[]).map(value=>value.trim()).filter(Boolean);
@@ -111,6 +112,12 @@ function protectedResidualRegression(candidate:SuiteResult,protectedResiduals:st
   // an intermediate extraction object that normalization can discard.
   const event=candidate.events[index];
   if(hasLosslessSourceProjection(event))continue;
+  const evidence=accounting?.events.find(item=>item.event===index);
+  if(evidence?.method==='capture_spans'&&evidence.required===required.length){
+   if(evidence.missing)return {event:index+1,missing:evidence.missing,required:evidence.required};
+   continue;
+  }
+  if(accounting)return {event:index+1,missing:required.length,required:required.length};
   const pool=scalarValues(event?.normalized);
   let missing=0;
   for(const residual of required){
@@ -120,9 +127,39 @@ function protectedResidualRegression(candidate:SuiteResult,protectedResiduals:st
  }
  return null;
 }
+function bytesText(raw:string,region:ResidualRegion):string|null{
+ try{return new TextDecoder('utf-8',{fatal:true}).decode(new TextEncoder().encode(raw).slice(region.startByte,region.endByte));}
+ catch{return null;}
+}
+/** Byte regions of each event's residual texts: the exact Multi-Pass ranges when they hold the same text. Texts are
+ * located left to right in the candidate's event only when no exact ranges exist; exact ranges that do not fit the
+ * candidate's event give no regions, so that event keeps the strict whole-value rule (independent audit S-1: a
+ * located text can land on an earlier, already parsed copy of the same text). */
+export function residualRegionsFor(suite:SuiteResult,texts:string[][],exact?:ResidualRegion[][]):ResidualRegion[][]{
+ return texts.map((values,index)=>{
+  const raw=suite.events[index]?.raw;
+  if(raw===undefined)return [];
+  if(!exact)return locateResidualRegions(raw,values)??[];
+  // Multi-Pass frames an event after a leading UTF-8 BOM and leading blanks, and its ranges are relative to that
+  // frame, while the candidate's event keeps them (re-audit F-1): shift the ranges by the bytes of that prefix.
+  const shift=new TextEncoder().encode(/^\uFEFF?[ \t\r\n]*/u.exec(raw)![0]).byteLength;
+  const regions=exact[index]?.map(region=>({startByte:region.startByte+shift,endByte:region.endByte+shift}));
+  if(regions&&regions.length===values.length&&regions.every((region,position)=>bytesText(raw,region)===values[position]))
+   return regions;
+  return [];
+ });
+}
+/** Character-level residual evidence for a regex candidate, computed in the preview worker; null for any other
+ * candidate. A regex candidate whose evidence cannot be computed gets an empty accounting, which refuses it. */
+async function residualAccounting(source:string,candidate:ParserDraft,suite:SuiteResult,texts:string[][]|undefined,
+ exact?:ResidualRegion[][]):Promise<ResidualAccounting|null>{
+ if(!texts?.some(values=>values.length)||!usesRegexExtraction(candidate))return null;
+ try{return await runResidualAccountingInWorker(source,candidate,residualRegionsFor(suite,texts,exact));}
+ catch{return {contract:RESIDUAL_PROVENANCE_CONTRACT,events:[]};}
+}
 
 function multiPassProtection(source:string,batch:MultiPassBatchPreview):{
- values:string[][];residuals:string[][];
+ values:string[][];residuals:string[][];regions:ResidualRegion[][];
 }{
  const bytes=new TextEncoder().encode(source);
  const decoder=new TextDecoder('utf-8',{fatal:true});
@@ -135,10 +172,14 @@ function multiPassProtection(source:string,batch:MultiPassBatchPreview):{
    .filter(region=>region.endByte>region.startByte)
    .map(region=>decode(event.startByte+region.startByte,event.startByte+region.endByte))
    .filter(text=>text.trim().length>0)),
+  regions:batch.events.map(event=>event.preview.residuals
+   .filter(region=>region.endByte>region.startByte&&
+    decode(event.startByte+region.startByte,event.startByte+region.endByte).trim().length>0)
+   .map(region=>({startByte:region.startByte,endByte:region.endByte}))),
  };
 }
 
-export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,suite,initialByteRange,selectionContext,onApplyCandidate,importOnly=false,protectedSourceValuesByEvent,protectedResidualTextByEvent,holdoutEvidenceRequester}:Props){
+export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,suite,initialByteRange,selectionContext,onApplyCandidate,importOnly=false,protectedSourceValuesByEvent,protectedResidualTextByEvent,protectedResidualRegionsByEvent,holdoutEvidenceRequester}:Props){
  const [mode,setMode]=useState<'entire'|'selection'>(status==='unsupported'?'entire':'selection');
  const [range,setRange]=useState<[number,number]>([0,0]);
  const [goal,setGoal]=useState('');
@@ -151,7 +192,7 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
  const [importBusy,setImportBusy]=useState(false);
  const [holdout,setHoldout]=useState('');
  const [holdoutAttested,setHoldoutAttested]=useState(false);
- const [approvedCandidate,setApprovedCandidate]=useState<{draft:ParserDraft;mode:'mapping'|'correction'|'enrichment'|'recovery';scope?:{oldTarget:string;newTarget:string};holdoutProtectedValues?:string[][];holdoutProtectedResiduals?:string[][]}|null>(null);
+ const [approvedCandidate,setApprovedCandidate]=useState<{draft:ParserDraft;mode:'mapping'|'correction'|'enrichment'|'recovery';scope?:{oldTarget:string;newTarget:string};holdoutProtectedValues?:string[][];holdoutProtectedResiduals?:string[][];holdoutProtectedRegions?:ResidualRegion[][]}|null>(null);
  const [approval,setApproval]=useState(false);
  const [validatedEvidence,setValidatedEvidence]=useState('');
  const evidenceFingerprint=()=>JSON.stringify([source??'',draft??null,holdout,recipeText]);
@@ -190,7 +231,7 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
      'IMPORTANT: only the manually reviewed excerpt, not the full original source, is included below. Its SHA/event metadata refers to the larger unchanged local source. Do not infer rules for unseen events; if the excerpt is insufficient to establish a complete source grammar, return REVIEW_REQUIRED: and ask for additional approved samples.',
      ...(suite?[]:['No local compiler-ready suite is available in this pane; the returned recipe must be independently validated with the complete original source in ChatGPT Assisted before use.']),
      'Supported recovery grammars are JSON, strict key/value, explicit-column CSV, CEF, LEEF, bounded RFC3164/RFC5424 bodies, allowlisted mixed families, bounded Java stack traces, and bounded named-capture Regex for otherwise unresolved one-line text.',
-     'If a Regex is required, use parse_regex with a pattern no longer than 256 visible characters, at least one named capture, and no backreferences/lookbehind/unsafe nested repetition. Grok, scripting, executable Ruby and guessed semantics remain unsupported.');
+     'If a Regex is required, use parse_regex with a pattern no longer than 256 visible characters, at least one named capture, and no backreferences/lookbehind/unsafe nested repetition. Every letter, digit, _ and non-ASCII character of the source, every +, every - before a digit or at the start of a word, every . next to a digit, every : between digits or in ::, every % next to a digit and operators such as != or <= must be inside a named capture (keep fixed message words by capturing the whole message and nesting the value captures inside it; split a token such as ASA-6-302013 or 10:00:00 by capturing it whole with nested part captures); only white space, separators such as / | , ; ( ) [ ] and a key name directly before = and a capture spelled exactly like it may stay literal. Grok, scripting, executable Ruby and guessed semantics remain unsupported.');
    }
   }
   const reviewedHash=await sha256Utf8Hex(reviewedExcerpt);
@@ -250,6 +291,7 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
    let candidateSuite:SuiteResult,candidateHoldout:SuiteResult;
    let holdoutProtectedValues:string[][]|undefined;
    let holdoutProtectedResiduals:string[][]|undefined;
+   let holdoutProtectedRegions:ResidualRegion[][]|undefined;
    try{
     candidateSuite=await reviewCandidatePreview(source,proposal.candidate);candidateHoldout=await reviewCandidatePreview(holdout,proposal.candidate);
     const protectedRegression=protectedValueRegression(candidateSuite,protectedSourceValuesByEvent,
@@ -259,7 +301,9 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
      setImportResult(`Fix not applied: event ${protectedRegression.event} would drop ${protectedRegression.missing} of ${protectedRegression.required} source value occurrences from the ${location}. No changes were made.`);return;
     }
     const residualRegression=candidateMode==='recovery'?
-     protectedResidualRegression(candidateSuite,protectedResidualTextByEvent):null;
+     protectedResidualRegression(candidateSuite,protectedResidualTextByEvent,
+      await residualAccounting(source,proposal.candidate,candidateSuite,protectedResidualTextByEvent,
+       protectedResidualRegionsByEvent)):null;
     if(residualRegression){
      setImportResult('Fix not applied: event '+residualRegression.event+' would leave '+residualRegression.missing+' of '+residualRegression.required+' previously unparsed source regions outside the final parser output. Preserve the remaining source text before applying the fix.');return;
     }
@@ -269,7 +313,7 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
      try{
       const batch=await (holdoutEvidenceRequester??requestMultiPassBatchPreview)(holdout);
       const evidence=multiPassProtection(holdout,batch);
-      holdoutProtectedValues=evidence.values;holdoutProtectedResiduals=evidence.residuals;
+      holdoutProtectedValues=evidence.values;holdoutProtectedResiduals=evidence.residuals;holdoutProtectedRegions=evidence.regions;
      }catch{
       setImportResult('Fix not applied: Parser Studio could not safely verify the additional test logs. No changes were made.');return;
      }
@@ -277,7 +321,8 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
      if(holdoutValueRegression){
       setImportResult('Fix not applied: additional test event '+holdoutValueRegression.event+' would lose '+holdoutValueRegression.missing+' of '+holdoutValueRegression.required+' source values that must be preserved. No changes were made.');return;
      }
-     const holdoutResidualRegression=protectedResidualRegression(candidateHoldout,holdoutProtectedResiduals);
+     const holdoutResidualRegression=protectedResidualRegression(candidateHoldout,holdoutProtectedResiduals,
+      await residualAccounting(holdout,proposal.candidate,candidateHoldout,holdoutProtectedResiduals,holdoutProtectedRegions));
      if(holdoutResidualRegression){
       setImportResult('Fix not applied: additional test event '+holdoutResidualRegression.event+' would leave '+holdoutResidualRegression.missing+' of '+holdoutResidualRegression.required+' original source regions unaccounted for. No changes were made.');return;
      }
@@ -308,7 +353,7 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
      `Fix not applied: the proposed fix would change the type of the corrected field (${typeChangeWording(typeChange)}), and a fix that only changes a type is not applied here. To change a field's type, use Map Fields. No parser rules were changed.`:
      'The proposed fix did not pass both the original logs and the additional test logs. No parser rules were changed.');return;
    }
-   setApprovedCandidate({draft:proposal.candidate,mode:candidateMode,scope:correctionScope,holdoutProtectedValues,holdoutProtectedResiduals});setValidatedEvidence(evidenceFingerprint());
+   setApprovedCandidate({draft:proposal.candidate,mode:candidateMode,scope:correctionScope,holdoutProtectedValues,holdoutProtectedResiduals,holdoutProtectedRegions});setValidatedEvidence(evidenceFingerprint());
    const description=candidateMode==='recovery'?'full parser recovery':candidateMode==='correction'?'one corrected mapping':candidateMode==='enrichment'?'one bounded split/merge rule':'one added mapping';
    setImportResult(`Fix passed: ${description}; ${report.holdout?.sourceCount??0} additional test log${(report.holdout?.sourceCount??0)===1?'':'s'} checked with no regressions. Ready to apply.`);
   }catch{setImportResult('Parser Studio could not test the ChatGPT result. No changes were made.');}
@@ -352,7 +397,9 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
        setImportResult(`The fix is no longer safe: event ${protectedRegression.event} would drop ${protectedRegression.missing} of ${protectedRegression.required} source value occurrences from the ${location}. No changes were made.`);return;
       }
       const residualRegression=approvedCandidate.mode==='recovery'?
-       protectedResidualRegression(candidateSuite,protectedResidualTextByEvent):null;
+       protectedResidualRegression(candidateSuite,protectedResidualTextByEvent,
+        await residualAccounting(source,approvedCandidate.draft,candidateSuite,protectedResidualTextByEvent,
+         protectedResidualRegionsByEvent)):null;
       if(residualRegression){
        setApprovedCandidate(null);setApproval(false);setValidatedEvidence('');
        setImportResult('The fix is no longer safe: event '+residualRegression.event+' would leave '+residualRegression.missing+' of '+residualRegression.required+' previously unparsed source regions outside the candidate fields. No changes were made.');return;
@@ -364,7 +411,9 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
        setImportResult('The fix is no longer safe: additional test event '+holdoutValueRegression.event+' would lose '+holdoutValueRegression.missing+' of '+holdoutValueRegression.required+' source values that must be preserved. No changes were made.');return;
       }
       const holdoutResidualRegression=approvedCandidate.mode==='recovery'?
-       protectedResidualRegression(candidateHoldout,approvedCandidate.holdoutProtectedResiduals):null;
+       protectedResidualRegression(candidateHoldout,approvedCandidate.holdoutProtectedResiduals,
+        await residualAccounting(holdout,approvedCandidate.draft,candidateHoldout,approvedCandidate.holdoutProtectedResiduals,
+         approvedCandidate.holdoutProtectedRegions)):null;
       if(holdoutResidualRegression){
        setApprovedCandidate(null);setApproval(false);setValidatedEvidence('');
        setImportResult('The fix is no longer safe: additional test event '+holdoutResidualRegression.event+' would leave '+holdoutResidualRegression.missing+' of '+holdoutResidualRegression.required+' original source regions unaccounted for. No changes were made.');return;

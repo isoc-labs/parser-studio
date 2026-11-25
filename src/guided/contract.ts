@@ -3,6 +3,7 @@ import type { FieldType, ParserDraft } from '../model';
 import {validatePreviewRegexPattern} from '../regexSafety';
 import {validCanonicalSourcePath} from '../../backend/src/canonical-operator-contract';
 import {validManufacturerNamespace} from '../../backend/src/vendor-namespace';
+import {UNMAPPED_COLLISION_ROOT,reservedForUnmapped} from '../unmappedFields';
 
 export type EventClass = 'Session' | 'Threat' | 'Syslog' | 'Winlogevent';
 export type FieldGroup = 'top_fields' | 'ns_fields' | 'vendor_fields';
@@ -210,9 +211,13 @@ export function compilerDraftContract(draft: ParserDraft): ContractResult {
     Boolean(draft.eventProfiles?.variants.some(variant =>
       variant.mappings.some(mapping =>
         (options.groups[mapping.id] ?? 'vendor_fields') === 'vendor_fields')));
-  if (vendorOutputs && RESERVED_OUTPUT_ROOTS.has(draft.vendor.trim()))
+  // Owner decision Q3-1: kept fields are written there too, also when no vendor field is mapped (audit of 2b6602c G-3).
+  const keepsUnmapped = draft.preserveUnmapped === true && draft.format !== 'generic_structural';
+  if ((vendorOutputs || keepsUnmapped) && RESERVED_OUTPUT_ROOTS.has(draft.vendor.trim()))
     errors.push('Manufacturer conflicts with a reserved parser output namespace.');
-  if (!draft.mappings.length) errors.push('Map at least one extracted field');
+  // Mirrors backend validation: with event profiles, the family-specific mappings may be the only ones.
+  if (!draft.mappings.length && !draft.eventProfiles?.variants.some((variant) => variant.mappings.length > 0))
+    errors.push('Map at least one extracted field');
   const targets = new Set<string>();
   const normalization: PairProjectContract['normalization'] = { top_fields: [], ns_fields: [], vendor_fields: [] };
   const supportedTypes: FieldType[] = ['string', 'integer', 'timestamp', 'ip', 'port', 'boolean'];
@@ -234,6 +239,12 @@ export function compilerDraftContract(draft: ParserDraft): ContractResult {
     }
     if (!supportedTypes.includes(mapping.type)) errors.push('Backend subset does not support type ' + mapping.type + ' for ' + mapping.source);
     const group = options.groups[mapping.id] ?? 'vendor_fields';
+    if (group === 'vendor_fields' && mapping.target.split('.')[0] === UNMAPPED_COLLISION_ROOT)
+      errors.push('Reserved destination: ' + mapping.target);
+    const vendorRoot = draft.vendor.trim() || 'vendor';
+    if (keepsUnmapped && group !== 'vendor_fields' &&
+        (mapping.target === vendorRoot || mapping.target.startsWith(vendorRoot + '.')))
+      errors.push('Reserved destination: ' + mapping.target);
     const data_type = mapping.type === 'timestamp' ? 'date' : mapping.type;
     if (supportedTypes.includes(mapping.type)) {
       normalization[group].push({
@@ -255,7 +266,8 @@ export function compilerDraftContract(draft: ParserDraft): ContractResult {
   const validDelimiter=(value:string|undefined)=>typeof value==='string'&&value.length>=1&&value.length<=8&&
     !/[\u0000-\u001f\u007f]/.test(value);
   const addEnrichmentTarget=(target:string,step:number,type='string')=>{
-    if (!safeUiPath(target) || RESERVED_OUTPUT_ROOTS.has(target.split('.')[0]))
+    if (!safeUiPath(target) || RESERVED_OUTPUT_ROOTS.has(target.split('.')[0]) ||
+        reservedForUnmapped(target, draft.vendor.trim() || 'vendor', keepsUnmapped))
       errors.push('Unsafe enrichment output at step ' + step);
     if (destinations.some((value) => value === target ||
         value.startsWith(target + '.') || target.startsWith(value + '.')))
