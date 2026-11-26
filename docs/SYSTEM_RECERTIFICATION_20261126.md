@@ -211,3 +211,19 @@ deployment remain separate gates.
   14/14 PASS under the stricter comparison. This is not a new browser run.
 - Latest CI aggregate, further non-endpoint semantic audit, exact requirement
   traceability, independent review and actual proprietary target remain open.
+
+## W0 — core functional requirement traceability
+
+- Read the product vision, UI specification, functional requirements,
+  architecture and two-path product scope. The original Workbench/Wizard
+  navigation, bilingual readiness wording, docs-only deployment statement
+  and historical P0 COMPLETE snapshots cannot govern present acceptance.
+  Added explicit precedence/historical notices to the existing documents;
+  the two-method scope and owner decisions are unchanged.
+- docs/verification/20261126-requirement-traceability.json accounts for all
+  27 F-series requirements, with implementation references, relevant
+  evidence/test references, scope disposition and remaining gaps. It is
+  not a new specification or a certificate. No requirement marked VERIFIED.
+  Automated coverage and reference existence check passed (27/27).
+- Full individual disposition of the baseline 148-file inventory and
+  independent proof of each active requirement are still open.

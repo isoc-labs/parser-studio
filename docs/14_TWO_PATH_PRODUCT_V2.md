@@ -5,6 +5,14 @@
 > **Owner UX override (2026-10-22):** ChatGPT Assisted Parser takes the exact user-entered log source into a manually copied prompt. The separate synthetic/redacted example editor, masking approval, and extra source-copy action are removed. Show one clear warning that the prompt contains potentially sensitive log values; do not automatically send source data to ChatGPT. An unavailable v0.1 project must not create contradictory null-project instructions: the v0.2 recovery proposal uses the local draft identity and remains REVIEW_ONLY, unverified, and separately validated. Auto Parser presents only the default Multi-Pass analysis and context-sensitive feedback; Tools & Diagnostics and standalone deeper analysis mode are removed. Old tests/documents about the superseded redaction and troubleshooting UX are historical, not acceptance criteria.
 
 
+**Recertification notice (2026-11-26):** The original P0 COMPLETE labels and
+dated snapshots below are historical internal acceptance evidence, not current
+certification. The active W0–W11 [roadmap](06_ROADMAP_AND_ACCEPTANCE.md) and
+[recertification register](SYSTEM_RECERTIFICATION_20261126.md) govern present
+qualification. The two-method scope and owner overrides remain authoritative.
+Do not reintroduce historical redaction/diagnostic UI or claim a proprietary
+target verification from an earlier Ruby 3.2 test.
+
 ## P0 beginner UX cleanup — 2026-10-23
 
 The public desktop multi-format audit found that the optional **Group similar

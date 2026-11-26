@@ -1,6 +1,10 @@
 # 04. Architecture, Version Independence and Security
 
-**Design status:** Approved boundaries; specific import/export file schemas and target runtimes remain evidence-driven until real artifacts are supplied.
+**Design status:** Original architectural boundaries remain the design intent.
+Module labels and initial-state descriptions are historical; current product
+navigation is [Two-path v2](14_TWO_PATH_PRODUCT_V2.md), and the active runtime
+and acceptance contracts are indexed in [the roadmap](06_ROADMAP_AND_ACCEPTANCE.md).
+Only exact-head evidence establishes current qualification.
 
 ## 1. Stable conceptual pipeline
 
@@ -71,7 +75,7 @@ A formal JSON Schema is an M1 deliverable after inspecting owner-provided real p
 - File upload handling must guard size, compressed bombs, path traversal, malformed encodings, multi-line exhaustion and injection.
 - Do not execute arbitrary untrusted enrichment scripts in the application process; use a locked-down runner and allowlisted operations.
 - Multi-user auth, persistent service storage, secrets and backups are **not** implemented now. Introduce formal contracts before enabling them.
-- No application is yet deployed; initial repository is docs only. Production release requires separate approval, runtime qualification, browser acceptance and Full User E2E.
+- The initial repository was docs only. Current preview/deployment state is established from actual deployment evidence, not this historical statement. Production release requires separate approval, runtime qualification, browser acceptance and Full User E2E.
 
 ## 8. Open design choices pending evidence
 

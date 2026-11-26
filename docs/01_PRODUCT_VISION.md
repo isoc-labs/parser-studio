@@ -1,6 +1,9 @@
 # 01. Parser Studio — Product Vision and Scope
 
-**Status:** Approved goal and initial product direction (2026-10-11); detailed output-format contracts pending owner's real samples.
+**Status:** Original product vision (2026-10-11). Current navigation, language,
+scope and acceptance follow [Two-path v2](14_TWO_PATH_PRODUCT_V2.md), AGENTS.md
+and the active [roadmap](06_ROADMAP_AND_ACCEPTANCE.md). Historical workflow
+examples below are not current navigation or release evidence.
 
 ## 1. Problem and outcome
 
@@ -43,7 +46,7 @@ Stellar Cyber Parser Studio does not provide an effective field-engineer workflo
 - Interflow mapping, typed normalization, enrichment/transforms and preview.
 - Reproducible diagnostics, regression coverage, templates and version history.
 - Compatibility-oriented import/export profiles with explicit verification status.
-- Desktop-first, responsive bilingual-ready Web UI.
+- Desktop-first, responsive English product UI; log values and source identifiers may be in any language.
 
 ## 6. Explicit non-goals / boundaries
 

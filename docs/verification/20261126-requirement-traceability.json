@@ -1,0 +1,381 @@
+{
+  "contract": "parser-studio.recertification-requirement-traceability.v1",
+  "purpose": "Evidence index only; never a replacement for functional requirements or a PASS certificate.",
+  "source": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
+  "scopeAuthority": [
+    "AGENTS.md",
+    "docs/14_TWO_PATH_PRODUCT_V2.md",
+    "docs/06_ROADMAP_AND_ACCEPTANCE.md"
+  ],
+  "statusMeaning": "PARTIAL = implementation and selected evidence identified, but exact-head complete acceptance remains open. UNVERIFIED = current acceptance not established. GATED and DEFERRED are scope dispositions, not passing tests. CONTEXTUAL does not reinstate retired navigation.",
+  "requirements": [
+    {
+      "id": "F01",
+      "scope": "CONTEXTUAL",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/App.tsx",
+        "src/guided/LocalVersionsPanel.tsx",
+        "src/guided/localWorkspaceHistory.ts"
+      ],
+      "evidence": [
+        "tests/browser-full-history-restore-20261020.spec.ts"
+      ],
+      "gap": "Browser-local versions; no shared persistence claim."
+    },
+    {
+      "id": "F02",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/AutoParser.tsx",
+        "src/parser.ts"
+      ],
+      "evidence": [
+        "tests/readable-events-gate-20261125.spec.ts",
+        "tests/explicit-multi-log-input.spec.ts"
+      ],
+      "gap": "Sample boundaries and preservation covered by scoped journeys."
+    },
+    {
+      "id": "F03",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/genericStructuralAutoDraft.ts",
+        "src/guided/EventTypeMappingReview.tsx"
+      ],
+      "evidence": [
+        "tests/map-fields-event-types-20261125.spec.ts",
+        "tests/map-fields-event-type-manual-20261125.spec.ts",
+        "scripts/verification/mapping-native-gate.py"
+      ],
+      "gap": "Per-event routing tested; full format coverage open."
+    },
+    {
+      "id": "F03A",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/App.tsx",
+        "src/guided/namedLogTypes.ts",
+        "src/guided/localWorkspaceHistory.ts"
+      ],
+      "evidence": [
+        "tests/explicit-multi-log-input.spec.ts",
+        "tests/browser-full-history-restore-20261020.spec.ts"
+      ],
+      "gap": "Named sources and history evidence; independent routing full census open."
+    },
+    {
+      "id": "F04",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/autoParserEnvelope.ts",
+        "src/guided/AutoParser.tsx"
+      ],
+      "evidence": [
+        "tests/d2-pri-cef-journey-20261125.spec.ts",
+        "tests/readable-events-gate-20261125.spec.ts"
+      ],
+      "gap": "Recognition and bounded candidate recovery; not universal detection."
+    },
+    {
+      "id": "F05",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/parser.ts",
+        "src/genericStructural.ts",
+        "backend/src/compiler.ts"
+      ],
+      "evidence": [
+        "tests/golden-vendor-execution-20261110.spec.ts",
+        "backend/test/r3-target-regex-export-gate.test.ts"
+      ],
+      "gap": "Exact bounded extraction only; unsupported formats remain explicit."
+    },
+    {
+      "id": "F06",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/parser.ts",
+        "src/guided/manualSourceBoundaries.ts"
+      ],
+      "evidence": [
+        "tests/novice-transport-framing-20261019.spec.ts",
+        "tests/manual-source-boundaries.spec.ts"
+      ],
+      "gap": "Framing-dependent; arbitrary unframed multiline not established."
+    },
+    {
+      "id": "F07",
+      "scope": "CONTEXTUAL",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/ManualSourceBoundaryReview.tsx",
+        "src/guided/sourceByteSelection.ts",
+        "src/guided/AutoParserAIReview.tsx"
+      ],
+      "evidence": [
+        "tests/manual-source-boundaries.spec.ts",
+        "tests/chatgpt-h2-residuals-20261125.spec.ts"
+      ],
+      "gap": "Current contextual source selection/recovery, not retired generic rule-editor UI."
+    },
+    {
+      "id": "F08",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "backend/src/local-native-project-verifier.ts",
+        "contracts/target-runtime-profiles.v1.json"
+      ],
+      "evidence": [
+        "scripts/verification/ruby24-fluentd-udp-gate.sh",
+        "scripts/verification/ruby-golden-container-gate.sh"
+      ],
+      "gap": "Pinned Ruby/Fluentd evidence exists for bounded cases; no target import/indexed evidence."
+    },
+    {
+      "id": "F09",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/parser.ts",
+        "backend/src/compiler.ts",
+        "src/stellar7ValueConstraints.ts"
+      ],
+      "evidence": [
+        "tests/golden-vendor-execution-20261110.spec.ts",
+        "backend/test/golden-event-comparison.test.ts"
+      ],
+      "gap": "Typed endpoints and original values; exhaustive transform evidence open."
+    },
+    {
+      "id": "F10",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/NormalizationMappingReview.tsx",
+        "src/guided/EventTypeMappingReview.tsx",
+        "src/guided/stellarMetadataCatalog.ts"
+      ],
+      "evidence": [
+        "tests/map-fields-event-type-manual-20261125.spec.ts",
+        "tests/chatgpt-jsonata-event-profile-20261123.spec.ts",
+        "scripts/verification/mapping-native-gate.py"
+      ],
+      "gap": "Stellar 7.0 dictionary, Auto/AI/manual scope; semantic coverage still open."
+    },
+    {
+      "id": "F11",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/AutoParser.tsx",
+        "src/guided/NormalizationMappingReview.tsx"
+      ],
+      "evidence": [
+        "tests/recertification-layout-20261126.spec.ts",
+        "tests/golden-vendor-execution-20261110.spec.ts"
+      ],
+      "gap": "Four desktop widths and selected per-event views; all surfaces not recertified."
+    },
+    {
+      "id": "F12",
+      "scope": "CONTEXTUAL",
+      "status": "UNVERIFIED",
+      "implementation": [
+        "src/guided/AutoParserResultTools.tsx",
+        "src/guided/TestLabEvidencePanel.tsx"
+      ],
+      "evidence": [
+        "tests/evidence-recovery.spec.ts"
+      ],
+      "gap": "Standalone Test Lab navigation superseded. Actual authorized target workflow separate; verify current context visibility."
+    },
+    {
+      "id": "F13",
+      "scope": "CONTEXTUAL",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/ArtifactRevisionHistoryPanel.tsx",
+        "src/guided/localWorkspaceHistory.ts"
+      ],
+      "evidence": [
+        "tests/browser-full-history-restore-20261020.spec.ts"
+      ],
+      "gap": "Local restoration and contextual revision evidence; not multi-user history certification."
+    },
+    {
+      "id": "F14",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "backend/src/compiler.ts",
+        "backend/src/target-runtime-export.ts",
+        "src/guided/backendClient.ts"
+      ],
+      "evidence": [
+        "tests/golden-vendor-execution-20261110.spec.ts",
+        "tests/chatgpt-h2-residuals-20261125.spec.ts",
+        "scripts/verification/ruby-golden-container-gate.sh"
+      ],
+      "gap": "Actual downloads exercised; full pair/ZIP journey census remains open."
+    },
+    {
+      "id": "F15",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/backendCapabilities.ts",
+        "backend/src/target-runtime-export.ts",
+        "backend/src/artifact-package.ts"
+      ],
+      "evidence": [
+        "backend/test/r3-target-regex-export-gate.test.ts",
+        "scripts/verification/executable-contract-gate.mjs"
+      ],
+      "gap": "Runtime verdict and artifact gates; no false target claim permitted."
+    },
+    {
+      "id": "F16",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/chatGptPromptBuilder.ts",
+        "src/previewWorkerClient.ts",
+        "backend/src/validate.ts"
+      ],
+      "evidence": [
+        "tests/chatgpt-prompt-source-evidence-20261023.spec.ts",
+        "tests/source-analysis-disclosure-20261024.spec.ts",
+        "tests/g5-reserved-names-journey-20261125.spec.ts"
+      ],
+      "gap": "Manual source copy and bounded parsing; full privacy/safety audit open."
+    },
+    {
+      "id": "F17",
+      "scope": "CONTEXTUAL",
+      "status": "UNVERIFIED",
+      "implementation": [
+        "src/guided/pairImportReview.ts",
+        "src/guided/pairProjectImport.ts"
+      ],
+      "evidence": [],
+      "gap": "Standalone existing-parser creation entry is retired. Library presence is not proof of a currently exposed import journey."
+    },
+    {
+      "id": "F18",
+      "scope": "GATED",
+      "status": "PARTIAL",
+      "implementation": [
+        "contracts/stellar-custom-parser-structure.v1.json",
+        "contracts/target-runtime-profiles.v1.json"
+      ],
+      "evidence": [
+        "scripts/verification/ruby24-fluentd-udp-gate.sh",
+        "scripts/verification/ruby-golden-container-gate.sh"
+      ],
+      "gap": "Observed target shape and native test profile; actual legacy/modular proprietary import not verified."
+    },
+    {
+      "id": "F19",
+      "scope": "CONTEXTUAL",
+      "status": "UNVERIFIED",
+      "implementation": [
+        "backend/src/parser-templates.ts"
+      ],
+      "evidence": [],
+      "gap": "Standalone library navigation retired. Current reusable template support requires separate acceptance."
+    },
+    {
+      "id": "F20",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/normalizationCandidates.ts",
+        "src/guided/JsonataMappingAssistant.tsx",
+        "backend/src/mapping-suggestions.ts"
+      ],
+      "evidence": [
+        "scripts/verification/independent-semantic-identity-oracle.ts",
+        "scripts/verification/mapping-native-gate.py"
+      ],
+      "gap": "Deterministic candidate confidence and user review; no live AI accuracy claim."
+    },
+    {
+      "id": "F21",
+      "scope": "CONTEXTUAL",
+      "status": "UNVERIFIED",
+      "implementation": [
+        "src/guided/AutoParserAIReview.tsx",
+        "src/guided/parserRecipeDraft.ts"
+      ],
+      "evidence": [],
+      "gap": "Separate expert/wizard surface superseded. Supported contextual recipe behavior is covered by F23; no general source-editor promise."
+    },
+    {
+      "id": "F22",
+      "scope": "DEFERRED",
+      "status": "UNVERIFIED",
+      "implementation": [],
+      "evidence": [],
+      "gap": "Optional multi-user roles require separately approved authentication/persistence scope."
+    },
+    {
+      "id": "F23",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/guided/ChatGPTAssist.tsx",
+        "src/guided/AutoParserAIReview.tsx",
+        "backend/src/parser-recipe-v02.ts"
+      ],
+      "evidence": [
+        "tests/chatgpt-h2-residuals-20261125.spec.ts",
+        "tests/chatgpt-q31-unmapped-20261124.spec.ts",
+        "scripts/verification/mapping-native-gate.py"
+      ],
+      "gap": "Manual copied prompt and pasted restricted recipe; test replies authored by test, not a live model benchmark."
+    },
+    {
+      "id": "F24",
+      "scope": "ACTIVE",
+      "status": "PARTIAL",
+      "implementation": [
+        "src/genericStructural.ts",
+        "backend/src/compiler.ts"
+      ],
+      "evidence": [
+        "tests/d2-pri-cef-journey-20261125.spec.ts",
+        "tests/golden-vendor-execution-20261110.spec.ts"
+      ],
+      "gap": "Only supported bounded extensions; arbitrary plugins unverified."
+    },
+    {
+      "id": "F25",
+      "scope": "GATED",
+      "status": "UNVERIFIED",
+      "implementation": [
+        "src/guided/AutoParserResultTools.tsx",
+        "backend/src/stellar-legacy-client.ts"
+      ],
+      "evidence": [],
+      "gap": "Real DP apply, Sensor replay and indexed evidence require separate approved lab."
+    },
+    {
+      "id": "F26",
+      "scope": "DEFERRED",
+      "status": "UNVERIFIED",
+      "implementation": [
+        "src/guided/ArtifactRevisionHistoryPanel.tsx"
+      ],
+      "evidence": [],
+      "gap": "Contextual local/revision tools do not establish multi-user approval workflow."
+    }
+  ]
+}
