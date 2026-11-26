@@ -4,8 +4,10 @@
   "source": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
   "scopeAuthority": [
     "AGENTS.md",
+    "docs/02_WEB_UI_SPEC.md",
+    "docs/03_FUNCTIONAL_REQUIREMENTS.md",
     "docs/14_TWO_PATH_PRODUCT_V2.md",
-    "docs/06_ROADMAP_AND_ACCEPTANCE.md"
+    ".engineering/specification.json"
   ],
   "statusMeaning": "PARTIAL = implementation and selected evidence identified, but exact-head complete acceptance remains open. UNVERIFIED = current acceptance not established. GATED and DEFERRED are scope dispositions, not passing tests. CONTEXTUAL does not reinstate retired navigation.",
   "requirements": [
@@ -187,28 +189,28 @@
     {
       "id": "F12",
       "scope": "CONTEXTUAL",
-      "status": "UNVERIFIED",
+      "status": "PARTIAL",
       "implementation": [
-        "src/guided/AutoParserResultTools.tsx",
-        "src/guided/TestLabEvidencePanel.tsx"
+        "src/guided/AutoParserLocalReplay.tsx",
+        "src/guided/AutoParser.tsx"
       ],
       "evidence": [
         "tests/evidence-recovery.spec.ts"
       ],
-      "gap": "Standalone Test Lab navigation superseded. Actual authorized target workflow separate; verify current context visibility."
+      "gap": "Browser-only replay and contextual evidence; standalone and server-operated Test Lab excluded."
     },
     {
       "id": "F13",
       "scope": "CONTEXTUAL",
       "status": "PARTIAL",
       "implementation": [
-        "src/guided/ArtifactRevisionHistoryPanel.tsx",
+        "src/guided/LocalVersionsPanel.tsx",
         "src/guided/localWorkspaceHistory.ts"
       ],
       "evidence": [
         "tests/browser-full-history-restore-20261020.spec.ts"
       ],
-      "gap": "Local restoration and contextual revision evidence; not multi-user history certification."
+      "gap": "Browser-local versions only."
     },
     {
       "id": "F14",
@@ -217,14 +219,17 @@
       "implementation": [
         "backend/src/compiler.ts",
         "backend/src/target-runtime-export.ts",
-        "src/guided/backendClient.ts"
+        "src/guided/backendClient.ts",
+        "src/guided/ReviewedPairPackage.tsx"
       ],
       "evidence": [
         "tests/golden-vendor-execution-20261110.spec.ts",
         "tests/chatgpt-h2-residuals-20261125.spec.ts",
-        "scripts/verification/ruby-golden-container-gate.sh"
+        "scripts/verification/ruby-golden-container-gate.sh",
+        "tests/chatgpt-event-profile-scope-20261123.spec.ts",
+        "tests/first-time-complete-auto-journey-20261023.spec.ts"
       ],
-      "gap": "Actual downloads exercised; full pair/ZIP journey census remains open."
+      "gap": "Actual individual and package downloads in four user journeys verified locally; full candidate CI and target verification remain open."
     },
     {
       "id": "F15",
@@ -259,14 +264,11 @@
     },
     {
       "id": "F17",
-      "scope": "CONTEXTUAL",
+      "scope": "DEFERRED",
       "status": "UNVERIFIED",
-      "implementation": [
-        "src/guided/pairImportReview.ts",
-        "src/guided/pairProjectImport.ts"
-      ],
+      "implementation": [],
       "evidence": [],
-      "gap": "Standalone existing-parser creation entry is retired. Library presence is not proof of a currently exposed import journey."
+      "gap": "Existing-parser import is excluded from the public workflow."
     },
     {
       "id": "F18",
@@ -285,12 +287,14 @@
     {
       "id": "F19",
       "scope": "CONTEXTUAL",
-      "status": "UNVERIFIED",
+      "status": "PARTIAL",
       "implementation": [
-        "backend/src/parser-templates.ts"
+        "src/guided/LocalVersionsPanel.tsx"
       ],
-      "evidence": [],
-      "gap": "Standalone library navigation retired. Current reusable template support requires separate acceptance."
+      "evidence": [
+        "tests/browser-full-history-restore-20261020.spec.ts"
+      ],
+      "gap": "Standalone library retired; browser-local versions retained."
     },
     {
       "id": "F20",
@@ -358,24 +362,20 @@
     },
     {
       "id": "F25",
-      "scope": "GATED",
+      "scope": "DEFERRED",
       "status": "UNVERIFIED",
-      "implementation": [
-        "src/guided/AutoParserResultTools.tsx",
-        "backend/src/stellar-legacy-client.ts"
-      ],
+      "implementation": [],
       "evidence": [],
-      "gap": "Real DP apply, Sensor replay and indexed evidence require separate approved lab."
+      "gap": "Server-operated DP upload, sensor replay and indexed lookup explicitly excluded; proprietary target qualification is separate from shipping product UI."
     },
     {
       "id": "F26",
       "scope": "DEFERRED",
       "status": "UNVERIFIED",
-      "implementation": [
-        "src/guided/ArtifactRevisionHistoryPanel.tsx"
-      ],
+      "implementation": [],
       "evidence": [],
-      "gap": "Contextual local/revision tools do not establish multi-user approval workflow."
+      "gap": "Multi-user approval workflow outside current scope."
     }
-  ]
+  ],
+  "sourceDisposition": "Current F-series legacy disposition table in 03; original requirements remain immutable at 14dcacd. Active PS requirements use .engineering/specification.json."
 }

@@ -246,3 +246,26 @@ deployment remain separate gates.
 - Remaining: current full CI, original corpus beyond these 14 registered
   examples, complete independent semantic truth across all fields,
   document-by-document disposition, and independent final acceptance.
+
+## W0/W3 — consolidated specification and package paths
+
+- Integrated the exact existing specification PR #6 head 9d572f6 into this
+  candidate, not main; resolved three overlapping historical notices in
+  favor of its current scope. No second competing normative document.
+- All 148 original document/contract bytes matched baseline SHA-256 and
+  18,559 lines were screened; 110 historical, 21 supporting, 3 active
+  specification documents, 14 executable/oracle assets. Historical evidence
+  is not current proof. The expanded canonical manifest covers all 137
+  current Markdown specifications/evidence and repository authority files.
+  Original 27 legacy dispositions and 12 current PS trace anchors are checked.
+  This is an authority census and full-text screening, not semantic
+  certification of all 18,559 lines or every historical golden expectation.
+- Actual Assisted, conditional Assisted, inline recovery, and normal Auto
+  downloads: four Chromium journeys PASS; all four ZIPs expanded to exact
+  verified Ruby/CONF pairs, eight total pairs, zero integrity failures.
+  One shared package component now consumes the verified pair in all three
+  surfaces. Mandatory browser census increased to 22.
+- Focused component/package 17/17, multilingual policy 15/15, web typecheck
+  PASS, prior exact-head native and six browser jobs PASS. Prior web-quality
+  failed solely on owner template approval, not bypassed. Latest exact-head
+  CI and independent semantic/native coverage remain separate.

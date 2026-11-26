@@ -12,7 +12,7 @@ class RequirementTraceability(unittest.TestCase):
         data = json.loads(INDEX.read_text())
         self.assertEqual(data["contract"], "parser-studio.recertification-requirement-traceability.v1")
         source = ROOT / data["source"]
-        ids = re.findall(r"^\| (F[0-9]+[A-Z]?) \|", source.read_text(), re.M)
+        ids = [ident for row in source.read_text().splitlines() if row.startswith("| F") for ident in re.findall(r"F[0-9]+[A-Z]?",row.split("|")[1])]
         rows = data["requirements"]
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(sorted(ids), sorted(r["id"] for r in rows))
