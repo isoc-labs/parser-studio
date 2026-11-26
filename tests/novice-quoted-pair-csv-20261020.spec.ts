@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {expect,test} from './support/downloadSink';
 
 const quoted='"allow","198.51.100.10"\n"deny","203.0.113.4"\n"allow","192.0.2.8"';
@@ -11,6 +12,7 @@ test('novice reviews strongly quoted two-column CSV without inventing column nam
   page.on('pageerror',e=>pageErrors.push(e.message));
   page.on('response',r=>{if(r.url().includes('/api/')&&r.status()>=500)httpFailures.push(r.status());});
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const source=page.getByLabel('Auto Parser raw logs');
   await source.fill(quoted);
   const census=page.getByLabel('Automatic event accounting');
@@ -61,6 +63,7 @@ test('neutral names for two quoted fields remain user-approved and reset on chan
   test.setTimeout(75_000);
   const sample='"허용","김민수"\n"차단","홍길동"';
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const source=page.getByLabel('Auto Parser raw logs');
   await source.fill(sample);
   await expect(page.getByLabel('Automatic event accounting')).toContainText('0 events unrecognized in the initial format scan');

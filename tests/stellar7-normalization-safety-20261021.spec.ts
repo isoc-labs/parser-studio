@@ -1,9 +1,11 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 
 async function goToMapFields(page:import('@playwright/test').Page,raw:string){
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(raw);
   await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
   await expect(page.getByLabel('Automatic event accounting'))

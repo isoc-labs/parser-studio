@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -23,6 +24,7 @@ test.skip(process.env.PARSER_STUDIO_SCOPED_AUTHORING_E2E!=='1',
 
 test('one security log → rejected first ChatGPT JSON → adaptive retry → source-only DRAFT native pair',async({page})=>{
   await page.goto('/?workspace=chatgpt');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('ChatGPT local sample logs').fill(source);
   await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();
   const prompt=page.getByLabel('ChatGPT copyable prompt');
@@ -66,6 +68,7 @@ test('one security log → rejected first ChatGPT JSON → adaptive retry → so
 });
 test('retry limit stops after third failed model response without changing parser',async({page})=>{
   await page.goto('/?workspace=chatgpt');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('ChatGPT local sample logs').fill(source);
   await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();
   for(const nextAttempt of [2,3]){

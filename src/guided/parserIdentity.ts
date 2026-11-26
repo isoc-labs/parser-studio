@@ -40,13 +40,5 @@ export function missingParserIdentityMessage(vendor:string,product:string):strin
   return null;
 }
 
-export const PLACEHOLDER_PARSER_VENDOR='Demo Local Draft';
-export const PLACEHOLDER_PARSER_PRODUCT='Untitled parser';
-
-/** Which of the two demo placeholders is still in place (blank counts as unset too). */
-export function placeholderParserIdentityParts(vendor:string,product:string):('manufacturer'|'product')[]{
-  const parts:('manufacturer'|'product')[]=[];
-  if(!vendor.trim()||vendor===PLACEHOLDER_PARSER_VENDOR)parts.push('manufacturer');
-  if(!product.trim()||product===PLACEHOLDER_PARSER_PRODUCT)parts.push('product');
-  return parts;
-}
+export {PLACEHOLDER_PARSER_VENDOR,PLACEHOLDER_PARSER_PRODUCT,placeholderParserIdentityParts,
+  parserExportIdentityIssue} from '../../backend/src/parser-export-identity';

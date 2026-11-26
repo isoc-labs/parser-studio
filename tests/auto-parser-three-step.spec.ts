@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page} from '@playwright/test';
 import {createHash} from 'node:crypto';
 
@@ -12,6 +13,7 @@ const files=[{name:'customized_demo_firewall.conf',content:conf,bytes:Buffer.byt
 {name:'customized_demo_firewall',content:ruby,bytes:Buffer.byteLength(ruby),sha256:sha(ruby)}];
 async function begin(page:Page){
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(input);
   await expect(page.getByLabel('Automatic event accounting')).toContainText('2/2 events analyzed locally');
   await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
@@ -81,6 +83,7 @@ test('partial source stays at Add Logs with its exact residual visible and creat
    if(req.method()==='POST'&&new URL(req.url()).pathname.endsWith('/generate'))generatedPosts++;
  });
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  const source=page.getByLabel('Auto Parser raw logs');
  await source.fill(raw);
  await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
@@ -103,6 +106,7 @@ test('FULL JSON extraction auto-retains a vendor field and permits a manual over
   '{"action":"deny","src_ip":"203.0.113.5","dst_port":22,"my_vendor_token":"customer-visible-note"}',
  ].join('\n');
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('Auto Parser raw logs').fill(raw);
  await expect(page.getByLabel('Automatic event accounting')).toContainText('2/2 events analyzed locally');
  await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
@@ -150,6 +154,7 @@ test('mixed families and unknown logs are not dropped or transmitted to validati
    if(req.method()==='POST'&&path.includes('/parser-pairs/')&&path.endsWith('/generate'))generated.push(path);
  });
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('Auto Parser raw logs').fill(input+'\naction=allow src_ip=192.0.2.10\nMALFORMED_SECRET');
  await expect(page.getByLabel('Automatic event accounting')).toContainText('4/4 events analyzed locally');
  await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
@@ -176,6 +181,7 @@ test('denied backend metadata cannot release parser files or leak the source',as
  await page.route('**/api/v1/parser-pairs/capabilities',route=>route.fulfill({status:403,
    contentType:'application/json',body:JSON.stringify({error:'CAPABILITY_DISABLED'})}));
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('Auto Parser raw logs').fill(input);
  await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
  const review=page.getByRole('button',{name:'Review Fields',exact:true});
@@ -191,6 +197,7 @@ test('denied backend metadata cannot release parser files or leak the source',as
 test('desktop keyboard controls keep source local and enter Reviewed Fields without extra mode',async({page})=>{
  await page.setViewportSize({width:1440,height:900});
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await expect(page.getByLabel('Auto Parser raw logs')).toBeVisible();
  await page.getByLabel('Auto Parser raw logs').fill(input);
  await expect(page.getByLabel('Automatic event accounting')).toContainText('2/2');

@@ -8,6 +8,9 @@ export interface BackendIssue {
 export interface BackendValidationResult {
   ok: boolean;
   issues: BackendIssue[];
+  targetExportSupported?: boolean;
+  targetExportIssues?: BackendIssue[];
+  targetRuntimeProfile?: string;
 }
 export interface GeneratedPairFile {
   name: string;
@@ -73,7 +76,35 @@ export async function validateBackendProject(
   }
   if (status !== 200 && status !== 422) throw new Error('Parser backend validation failed (HTTP ' + status + ').');
   if ((status === 422 && check.ok) || (status === 200 && !check.ok)) throw new Error('Backend HTTP status conflicts with its reported validation status.');
-  return { ok: check.ok, issues: check.issues };
+  if(check.targetExportSupported!==undefined&&
+     (typeof check.targetExportSupported!=='boolean'||(!check.ok&&check.targetExportSupported)))
+    throw new Error('Backend target export verdict conflicts with schema validation.');
+  if(check.targetExportIssues!==undefined&&!isIssueList(check.targetExportIssues))
+    throw new Error('Invalid backend target export issues.');
+  if(check.targetRuntimeProfile!==undefined&&typeof check.targetRuntimeProfile!=='string')
+    throw new Error('Invalid backend target runtime profile.');
+  if(check.targetExportSupported===true&&check.targetExportIssues?.length)
+    throw new Error('Backend target export verdict conflicts with reported issues.');
+  return { ok: check.ok, issues: check.issues,
+    ...(check.targetExportSupported===undefined?{}:{targetExportSupported:check.targetExportSupported}),
+    ...(check.targetExportIssues===undefined?{}:{targetExportIssues:check.targetExportIssues}),
+    ...(check.targetRuntimeProfile===undefined?{}:{targetRuntimeProfile:check.targetRuntimeProfile})};
+}
+
+/** The server's candidate-specific decision is authoritative before export.
+ * An old schema-only response cannot authorize a Regex export.
+ */
+export function assertBackendValidationAllowsExport(result:BackendValidationResult,project:BackendParserProject):void{
+  if(!result.ok)throw Object.assign(new Error(result.issues.map(i=>i.code+': '+i.message).join(' · ')||
+    'Backend schema rejected the parser.'),{code:'BACKEND_SCHEMA_REJECTED'});
+  const extraction=project.extraction;
+  const regex=extraction.format==='regex'||('syslogBodyFormat' in extraction&&extraction.syslogBodyFormat==='regex');
+  if(result.targetExportSupported===false||(regex&&
+    (result.targetExportSupported!==true||result.targetRuntimeProfile!=='stellar70-observed-ruby24'))){
+    const issue=result.targetExportIssues?.[0];
+    throw Object.assign(new Error(issue?issue.code+': '+issue.message:
+      'The backend has not approved this parser for the target runtime.'),{code:issue?.code??'TARGET_RUNTIME_REGEX_UNSUPPORTED'});
+  }
 }
 
 async function digestSHA256(content: string): Promise<string> {

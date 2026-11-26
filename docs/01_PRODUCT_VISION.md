@@ -1,19 +1,19 @@
 # 01. Parser Studio — Product Vision and Scope
 
-**Status:** Approved goal and initial product direction (2026-10-11); detailed output-format contracts pending owner's real samples.
+**Status:** Product purpose and boundaries. Current UI, functional requirements and runtime evidence are defined in 02, 03 and 14; this is not a separate feature specification.
 
 ## 1. Problem and outcome
 
 Stellar Cyber Parser Studio does not provide an effective field-engineer workflow for repeatedly developing and correcting custom log parsers. Our product will be a **separate Web application**, not a modification of the vendor's UI.
 
-**Desired outcome:** A field SE or partner can turn representative raw logs into a validated, maintainable, Fluentd-compatible parser and Stellar Cyber-normalized event preview without writing parsing rules from scratch. Advanced users can edit expressions and intermediate representations directly.
+**Desired outcome:** A field SE or partner can turn representative raw logs into a validated, maintainable, Fluentd-compatible parser and Stellar Cyber-normalized event preview without writing parsing rules from scratch. Users may review fields, correct mappings and submit constrained parsing proposals in the two supported creation methods.
 
 ## 2. Personas
 
 | Persona | Key tasks | Required experience |
 | --- | --- | --- |
 | Field SE / Partner | Onboard an unknown product's logs, test and export | Guided, visual, fast correction |
-| Parser engineer | Complex conditional routing, nested extraction, transforms | Explicit rules, source editor, trace |
+| Parser engineer | Complex conditional routing, nested extraction, transforms | Reviewed rules, source accounting and diagnostic trace |
 | Reviewer / Customer | Validate samples, mappings and coverage | Readable errors, repeatable evidence |
 | Product maintainer | Manage templates, regression fixtures, import/export adapters | Diff, history, reproducibility |
 
@@ -23,18 +23,20 @@ Stellar Cyber Parser Studio does not provide an effective field-engineer workflo
 2. **Samples-first.** Work on a meaningful collection of variants, not a single hand-picked matching line.
 3. **Explain every failure.** Show whether a record was split, routed, parsed, normalized, validated and exported.
 4. **No false green.** An in-browser Regex match is not equal to Fluentd runtime success or Stellar import compatibility.
-5. **GUI by default, source when needed.** Visual controls for routine tasks; advanced editor with safe round-trip only where semantics can be preserved.
+5. **GUI by default, source when needed.** Visual controls and reviewed proposals within the two supported workflows.
 6. **Privacy by default.** Customer-origin logs stay private, redacted where feasible; external AI is opt-in only.
 7. **Reproducibility.** Parsers, schema mappings, test fixtures, test environment and export manifests are separately versioned.
 8. **Original UI and implementation.** Use competitor interactions as research, not proprietary source/assets.
 
 ## 4. End-to-end user journey
 
-**New parser:** New project → paste/upload logs → group by event family → choose/confirm format → select fields on raw log → create parse rules → map to Interflow → run full sample suite → inspect errors/diffs → save version → export a supported target bundle.
-
-**Fix existing parser:** Import original file(s) → round-trip inspection and explicit unsupported elements → load baseline test suite → edit minimal stage → compare previous/current sample output → record regression report → export without overwriting the original.
-
-**Review:** Open saved version → see exactly which sample datasets were tested, results and runtime profile → examine failures and semantic mapping → approve internal ready-for-export state. This does not grant production release authority.
+Use the current two creation methods, Auto Parser and ChatGPT Assisted Parser,
+with browser-local working versions and in-flow mapping review. The authoritative
+public navigation and exact stage order are in [02 — Current Web UI / UX
+Specification](02_WEB_UI_SPEC.md); the current scope and excluded capabilities
+are in [14 — Current product scope](14_TWO_PATH_PRODUCT_V2.md). Historical
+import/workbench/review journeys are not current acceptance criteria; see
+[immutable Git history](https://github.com/isoc-labs/parser-studio/blob/14dcacddff48365001bfca2653c4466037d023b0/docs/01_PRODUCT_VISION.md).
 
 ## 5. In scope
 
@@ -42,8 +44,8 @@ Stellar Cyber Parser Studio does not provide an effective field-engineer workflo
 - Fluentd parser configuration support and native runtime validation for supported features.
 - Interflow mapping, typed normalization, enrichment/transforms and preview.
 - Reproducible diagnostics, regression coverage, templates and version history.
-- Compatibility-oriented import/export profiles with explicit verification status.
-- Desktop-first, responsive bilingual-ready Web UI.
+- Ruby/CONF draft export with explicit runtime and proprietary target verification status.
+- Desktop-first Web UI. Authored product UI is English; original log values may contain any language (see AGENTS.md).
 
 ## 6. Explicit non-goals / boundaries
 
@@ -56,4 +58,4 @@ Stellar Cyber Parser Studio does not provide an effective field-engineer workflo
 
 ## 7. Unresolved evidence—not blockers for spec work
 
-The owner will provide real **sample logs and sample parser artifact(s)** later. They will establish supported runtime features, vendor-specific file layouts, naming/metadata constraints, Interflow fields and import/export acceptance tests. Until then, mark those adapters as PENDING EVIDENCE, not completed.
+Source-backed samples, the fixed Stellar 7.0 field catalog and pinned native runtime contracts are maintained in the current product repository. The exact candidate's real DP import, listener and indexing behavior remains separately unverified until independently exercised under the applicable approval. Do not infer that evidence from synthetic or browser tests.

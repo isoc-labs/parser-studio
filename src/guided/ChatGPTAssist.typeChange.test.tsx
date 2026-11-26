@@ -7,7 +7,7 @@ import ChatGPTAssist from './ChatGPTAssist';
 
 describe('Assisted: a mapping correction that only changes the JSON type',()=>{
   afterEach(()=>vi.unstubAllGlobals());
-  it('explains that a type-only fix is not applied instead of a generic failure',async()=>{
+  it.each([false,true])('does not apply a type-only fix (response changed during review: %s)',async(stale)=>{
     vi.stubGlobal('crypto',webcrypto);
     const source=[
       '{"action":"allow","src_ip":"198.51.100.10","dst_port":443,"code":"200"}',
@@ -40,9 +40,12 @@ describe('Assisted: a mapping correction that only changes the JSON type',()=>{
         ]},{op:'fallback_unparsed',mode:'retain_unparsed'},
       ],nativeVerified:false,targetVerified:false,
     };
+    let pause=false;
+    let resume:()=>void=()=>{};
+    const wait=new Promise<void>(resolve=>{resume=resolve;});
     await act(async()=>{render(<ChatGPTAssist draft={draft} setDraft={vi.fn()}
       sample={source} setSample={vi.fn()} suite={preview(source,draft)} pending={false}
-      runPreview={async(candidate,text)=>preview(text??source,candidate)}
+      runPreview={async(candidate,text)=>{if(pause)await wait;return preview(text??source,candidate);}}
       onAutoParser={vi.fn()} namedLogTypes={null}
       onEnableNamedLogTypes={vi.fn()} onChangeNamedLogTypes={vi.fn()}
       onExitNamedLogTypes={vi.fn()}/>);});
@@ -53,6 +56,17 @@ describe('Assisted: a mapping correction that only changes the JSON type',()=>{
     const holdoutBox=await screen.findByLabelText('Additional ChatGPT test logs');
     fireEvent.change(holdoutBox,{target:{value:holdout}});
     fireEvent.click(screen.getByLabelText('Confirm test examples are different'));
+    if(stale){
+      pause=true;
+      fireEvent.click(screen.getByRole('button',{name:'Test Proposed Fix'}));
+      fireEvent.change(screen.getByLabelText('ChatGPT result JSON'),{target:{value:'new response, not yet reviewed'}});
+      pause=false;
+      await act(async()=>{resume();});
+      expect(screen.queryByLabelText('ChatGPT fix test result')).toBeNull();
+      expect(screen.queryByText(/would change the type of the corrected field/)).toBeNull();
+      expect(screen.queryByLabelText('ChatGPT created parser files')).toBeNull();
+      return;
+    }
     await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Test Proposed Fix'}));});
     const message=await screen.findByText(/would change the type of the corrected field \(text → number\)/);
     expect(message.textContent).toMatch(/Map Fields/);

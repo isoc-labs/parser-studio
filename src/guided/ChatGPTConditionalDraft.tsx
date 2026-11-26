@@ -1,11 +1,13 @@
-import {useEffect,useMemo,useState} from 'react';
+import {parserExportIdentityIssue} from './parserIdentity';
+import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import type {Dispatch,SetStateAction} from 'react';
 import type {ParserDraft,SuiteResult} from '../model';
 import type {BackendCapabilities} from './backendCapabilities';
 import {fetchBackendCapabilities,assertBackendProjectSupported} from './backendCapabilities';
 import {toBackendProject} from './backendAdapter';
-import {validateBackendProject,generateBackendPair,type GeneratedPair} from './backendClient';
+import {validateBackendProject,assertBackendValidationAllowsExport,generateBackendPair,type GeneratedPair} from './backendClient';
 import {verifyGeneratedPair} from './artifactPackageClient';
+import ReviewedPairPackage from './ReviewedPairPackage';
 import ReviewedEventProfilesPanel from './ReviewedEventProfilesPanel';
 import {validateNamedLogs,type NamedLogType} from './namedLogTypes';
 import {checkNamedParserCoverage} from './chatGptSourceContext';
@@ -32,7 +34,7 @@ export default function ChatGPTConditionalDraft({
   const [availability,setAvailability]=useState<'CHECKING'|'READY'|'UNAVAILABLE'>('CHECKING');
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState('');
-  const [generated,setGenerated]=useState<{identity:string;pair:GeneratedPair}|null>(null);
+  const [generated,setGenerated]=useState<{identity:string;pair:GeneratedPair;port:number}|null>(null);
   const identity=useMemo(()=>JSON.stringify([sample,draft,namedLogTypes]),
     [sample,draft,namedLogTypes]);
   useEffect(()=>{
@@ -51,7 +53,11 @@ export default function ChatGPTConditionalDraft({
     }).catch(()=>{if(!cancelled)setAvailability('UNAVAILABLE');});
     return ()=>{cancelled=true;};
   },[sample,suite?.counts.total,pending]);
-  useEffect(()=>{setNotice('');setGenerated(null);},[identity]);
+  const epoch=useRef(0);
+  useLayoutEffect(()=>{
+    setBusy(false);setNotice('');setGenerated(null);
+    return ()=>{epoch.current++;};
+  },[identity]);
 
   const supported=availability==='READY'&&capability?.source===sample;
   const complete=(result:SuiteResult)=>result.counts.total>1&&
@@ -61,16 +67,19 @@ export default function ChatGPTConditionalDraft({
     result.events.length===result.counts.total&&
     result.events.every(event=>event.extracted&&event.normalizedOk);
   const generate=async()=>{
-    if(busy||pending||!supported||!draft.eventProfiles||!sample.trim())return;
+    if(busy||pending||!supported||!draft.eventProfiles||!sample.trim()||parserExportIdentityIssue(draft.vendor,draft.name))return;
+    const token=++epoch.current;
     setBusy(true);setGenerated(null);setNotice('');
     try{
       const local=await runPreview(draft,sample);
+      if(token!==epoch.current)return;
       if(!complete(local))throw new Error('Every log must pass before one conditional parser can be generated.');
       if(namedLogTypes){
         if(!validateNamedLogs(namedLogTypes).ok)
           throw new Error('Complete each named log type before generating a combined parser.');
         const perType=await Promise.all(namedLogTypes.map(group=>
           runPreview(draft,group.sample)));
+        if(token!==epoch.current)return;
         const coverage=checkNamedParserCoverage(draft,namedLogTypes,perType);
         if(!coverage.ok)throw new Error('Log type review required: '+coverage.reason);
       }
@@ -83,14 +92,17 @@ export default function ChatGPTConditionalDraft({
         throw new Error('Conditional routing is not representable by the backend.');
       assertBackendProjectSupported(adapted.project,capability!.value);
       const checked=await validateBackendProject(adapted.project);
-      if(!checked.ok)throw new Error('The backend rejected the conditional parser draft.');
+      if(token!==epoch.current)return;
+      assertBackendValidationAllowsExport(checked,adapted.project);
       const pair=await generateBackendPair(adapted.project);
+      if(token!==epoch.current)return;
       await verifyGeneratedPair(pair);
-      setGenerated({identity,pair});
+      if(token!==epoch.current)return;
+      setGenerated({identity,pair,port:adapted.project.receiver.port});
       setNotice('One reviewed conditional parser DRAFT is ready. No target installation or log transmission occurred.');
     }catch(error){
-      setNotice(error instanceof Error?error.message:'The conditional parser was not generated.');
-    }finally{setBusy(false);}
+      if(token===epoch.current)setNotice(error instanceof Error?error.message:'The conditional parser was not generated.');
+    }finally{if(token===epoch.current)setBusy(false);}
   };
   const download=(filename:string,content:string)=>{
     const url=URL.createObjectURL(new Blob([content],{type:'application/octet-stream'}));
@@ -121,8 +133,9 @@ export default function ChatGPTConditionalDraft({
       <p>Unknown event types are rejected. Generate with the validated backend,
         not the single-profile ChatGPT Recipe v0.2 importer, which cannot represent
         event-specific routing rules.</p>
+      {parserExportIdentityIssue(draft.vendor,draft.name)&&<p role="note">{parserExportIdentityIssue(draft.vendor,draft.name)?.message}</p>}
       <button type="button" className="auto-parser-primary"
-        disabled={busy||pending||!supported}
+        disabled={busy||pending||!supported||!!parserExportIdentityIssue(draft.vendor,draft.name)}
         onClick={()=>{void generate();}}>
         {busy?'Validating all log types…':'Validate & Generate One Multi-Type Parser'}
       </button>
@@ -131,6 +144,7 @@ export default function ChatGPTConditionalDraft({
           and sensor ingestion remain unverified.</p>
         {generated.pair.files.map(file=><button type="button" key={file.name}
           onClick={()=>download(file.name,file.content)}>Download {file.name}</button>)}
+        {capability&&<ReviewedPairPackage key={identity} pair={generated.pair} capabilities={capability.value} port={generated.port}/>}
       </div>}
     </div>}
     {notice&&<p role="status">{notice}</p>}

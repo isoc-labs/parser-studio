@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type BrowserContext,type Page,attachDownloadSink} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 
@@ -55,6 +56,7 @@ async function downloadText(page:Page,name:RegExp){
 }
 
 async function namedUserJourney(page:Page){
+  await enterSyntheticParserIdentity(page);
   await page.getByRole('button',{name:'Add Another Log Type'}).click();
   await page.getByLabel('Log type name 1').fill('Threat');
   await page.getByLabel('Log type sample 1').fill(threat);
@@ -111,6 +113,7 @@ async function namedUserJourney(page:Page){
 }
 
 async function assistedUserJourney(page:Page){
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('ChatGPT local sample logs').fill(assistedSource);
   await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();
   await expect(page.getByLabel('ChatGPT copyable prompt')).toContainText('FULL_RECOVERY');

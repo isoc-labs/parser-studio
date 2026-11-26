@@ -18,7 +18,7 @@
 .auto-parser-steps button.active{border-color:#14a4a4;background:#e9f7f4;color:#126b70;}
 .auto-parser-steps button span{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:#e3eff1;color:#477784;font-size:12px;flex-shrink:0;}
 .auto-parser-steps button.active span{background:#0f9494;color:#fff;}
-.auto-parser-body{border:1px solid #d6e4eb;border-radius:13px;background:#fff;box-shadow:0 5px 22px rgba(18,54,68,.05);padding:clamp(16px,1.8vw,22px);}
+.auto-parser-body{container:parser-body / inline-size;min-width:0;border:1px solid #d6e4eb;border-radius:13px;background:#fff;box-shadow:0 5px 22px rgba(18,54,68,.05);padding:clamp(16px,1.8vw,22px);}
 .auto-parser-body h2{font-size:23px;color:#173e51;letter-spacing:-.6px;margin:0 0 6px;}
 .chatgpt-source-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:0 16px;}
 .chatgpt-source-grid label{min-width:0;}
@@ -181,7 +181,7 @@
 @media(max-width:540px){.auto-parser-steps{grid-template-columns:1fr}.auto-parser-steps button{justify-content:flex-start}}
 
 /* Parser identity follows the source entry, before review and output generation. */
-.parser-identity-card{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(420px,1.7fr) minmax(230px,1fr);gap:14px;align-items:end;margin:0 0 18px;padding:14px 16px;border:1px solid #d7e3e7;border-radius:10px;background:#fbfcfd}
+.parser-identity-card{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.7fr) minmax(0,1fr);gap:14px;align-items:end;margin:0 0 18px;padding:14px 16px;border:1px solid #d7e3e7;border-radius:10px;background:#fbfcfd}
 .parser-identity-copy{display:grid;gap:5px;align-self:center}
 .parser-identity-copy strong{font-size:13px;color:#2b5666}
 .parser-identity-copy span{font-size:10px;line-height:1.5;color:#6d8089}
@@ -193,8 +193,8 @@
 .parser-identity-filename>span{font-size:10px;font-weight:800;color:#53707a}
 .parser-identity-filename code{display:block;font:10px/1.4 var(--mono);color:#255f71;overflow-wrap:anywhere}
 .parser-identity-filename small{font-size:9px;line-height:1.45;color:#72868e}
-@media(max-width:1000px){.parser-identity-card{grid-template-columns:1fr}.parser-identity-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:650px){.parser-identity-fields{grid-template-columns:1fr}}
+@container parser-body (max-width:980px){.parser-identity-card{grid-template-columns:1fr}.parser-identity-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container parser-body (max-width:650px){.parser-identity-fields{grid-template-columns:1fr}}
 
 /* Optional, read-only field coverage for mixed security event samples. */
 .sample-union-review{margin-block:16px;}
@@ -294,3 +294,11 @@
 .normalization-vendor-list>summary{cursor:pointer;padding:12px 14px;font-size:12px;font-weight:800;color:#2b6272}
 .normalization-vendor-list>.normalization-vendor-note{margin:0 14px 10px;font-size:11px;color:#67818a;line-height:1.5}
 .normalization-vendor-list>article{margin-left:12px;margin-right:12px}
+
+/* Recovery actions follow the content, rather than competing for its width. */
+div.auto-parser-warning{display:grid;grid-template-columns:minmax(0,1fr);align-items:start}
+div.auto-parser-warning>p{margin:0}
+div.auto-parser-warning>button{justify-self:start;max-width:100%;white-space:normal}
+.auto-parser-warning>*,.parser-identity-card>*,.parser-identity-fields>*{min-width:0;overflow-wrap:anywhere}
+div.auto-parser-warning:has(>svg:first-child){grid-template-columns:16px minmax(0,1fr)}
+.auto-parser-warning pre,.auto-parser-recipe pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto}

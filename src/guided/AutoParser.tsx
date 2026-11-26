@@ -1,19 +1,20 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import type {Dispatch,SetStateAction} from 'react';
-import {ArrowLeft,ArrowRight,CheckCircle2,Download,FileArchive,FileText,
+import {ArrowLeft,ArrowRight,CheckCircle2,Download,FileText,
   LockKeyhole,ShieldAlert} from 'lucide-react';
 import {createDraft,type ParserDraft,type SuiteResult} from '../model';
 import {toBackendProject} from './backendAdapter';
 import {describeAdapterIssues} from './adapterIssueMessage';
-import {missingParserIdentityMessage,placeholderParserIdentityParts} from './parserIdentity';
+import {missingParserIdentityMessage,placeholderParserIdentityParts,parserExportIdentityIssue} from './parserIdentity';
 import {describeCsvColumnNameProblem} from './csvColumnNames';
 import {fetchBackendCapabilities,assertBackendProjectSupported,
   type BackendCapabilities} from './backendCapabilities';
 import {fetchBackendSchemaGuide} from './backendSchemaGuide';
-import {validateBackendProject,generateBackendPair,type GeneratedPair} from './backendClient';
-import {verifyGeneratedPair,packageGeneratedPair} from './artifactPackageClient';
+import {validateBackendProject,assertBackendValidationAllowsExport,generateBackendPair,type GeneratedPair} from './backendClient';
+import {verifyGeneratedPair} from './artifactPackageClient';
+import ReviewedPairPackage from './ReviewedPairPackage';
 import {analyzeLogEnvelopes,assessEnvelopeCompilation} from './autoParserEnvelope';
-import {describeExcluded,readableEvents,type ExcludedEvents} from './readableEvents';
+import {describeExcluded,readableEvents,readableEventsWithBoundedCandidate,type ExcludedEvents} from './readableEvents';
 import {prepareAutoParserDraft} from './autoParserDraft';
 import {selectDraftFormat} from './draftFormatTransition';
 import {buildReviewableRecipe} from './parserRecipeV2';
@@ -78,7 +79,6 @@ const STEP_HELP=[
 ] as const;
 type Evidence={key:string;status:'PASS'|'FAILED';total:number;issues:string[]};
 type Pair={key:string;value:GeneratedPair};
-type Zip={key:string;filename:string;sha256:string};
 type ParserSetOrigin={
  source:string;datasetName:string;sourceCount:number;draft:ParserDraft;
  fingerprint:string;groupCount:number;groupSource:string;
@@ -164,7 +164,6 @@ export default function AutoParser({
  },[sample,draft.csvColumns,draft.csvDelimiter]);
  const [evidence,setEvidence]=useState<Evidence|null>(null);
  const [pair,setPair]=useState<Pair|null>(null);
- const [zip,setZip]=useState<Zip|null>(null);
  const [structural,setStructural]=useState<{key:string;value:StructuralMiningReport}|null>(null);
  const [parserSetOrigin,setParserSetOrigin]=useState<ParserSetOrigin|null>(null);
  const parserSetOriginRef=useRef<ParserSetOrigin|null>(null);
@@ -179,7 +178,7 @@ export default function AutoParser({
    draft.guided?.receiver.messageLimit,draft.guided?.receiver.framing),
    [sample,draft.guided?.eventBoundary,draft.forwarder,draft.guided?.receiver.messageLimit,draft.guided?.receiver.framing]);
  useEffect(()=>{
-   epoch.current++;setEvidence(null);setPair(null);setZip(null);
+   epoch.current++;setEvidence(null);setPair(null);
    setStructural(null);
    setLogicalReview(null);
    setBusy(false);setMessage('');setReviewBlock(null);
@@ -392,7 +391,6 @@ export default function AutoParser({
  }
  const currentPair=pair?.key===identity?pair.value:null;
  const currentEvidence=evidence?.key===identity?evidence:null;
- const currentZip=zip?.key===identity?zip:null;
  const currentStructural=structural?.key===identity?structural.value:null;
  const parserSetCandidates=currentStructural?.status==='CANDIDATES'?
    currentStructural.groups.filter(group=>group.count>=3):[];
@@ -425,9 +423,8 @@ export default function AutoParser({
    if(advanced||parserSetOrigin||report.boundary!=='single-line')return null;
    if(draft.format!=='auto')return readableEvents(sample,suite,report.events);
    if(multiPass?.raw!==sample)return null;
-   return readableEvents(sample,suite,report.events,
-     multiPass.events.map(event=>event.preview.status==='SOURCE_PARSED'));
- },[advanced,parserSetOrigin,report,sample,suite,draft.format,multiPass]);
+   return readableEventsWithBoundedCandidate(sample,draft,suite,report.events,multiPass);
+ },[advanced,parserSetOrigin,report,sample,suite,draft,multiPass]);
  const analyzeReadableEvents=useRef(false);
  useEffect(()=>{
    if(!analyzeReadableEvents.current||!parserSetOrigin?.excluded||sample!==parserSetOrigin.groupSource)return;
@@ -444,7 +441,7 @@ export default function AutoParser({
  const canReview=Boolean(sample.trim())&&!pending&&!!suite&&
    report.complete&&report.sourceCount>0&&!busy&&!currentReviewBlock&&
    csvApproved&&(advanced||beginnerResolved)&&namedLogReady;
- const canGenerate=step===3&&!originalContainerGate&&namedLogReady&&
+ const canGenerate=!parserExportIdentityIssue(draft.vendor,draft.name)&&step===3&&!originalContainerGate&&namedLogReady&&
    !!currentReview&&!currentReviewBlock&&!!suite&&!pending&&
    !busy&&(assessment.status==='DRAFT_COMPILABLE'||explicitDraftCompilable);
  const confirmed=()=>{
@@ -510,7 +507,7 @@ export default function AutoParser({
  async function generate(){
    if(!canGenerate||!confirmed()||!suite)return;
    const token=++epoch.current, expected=identity;
-   setBusy(true);setMessage('');setPair(null);setZip(null);
+   setBusy(true);setMessage('');setPair(null);
    try{
      const local=await runPreview(draft,sample);
      if(token!==epoch.current||currentRef.current!==expected)return;
@@ -543,6 +540,7 @@ export default function AutoParser({
          issues:validated.issues.map(i=>i.code).slice(0,8)});
        return;
      }
+     assertBackendValidationAllowsExport(validated,translated.project);
      const generated=await generateBackendPair(translated.project);
      await verifyGeneratedPair(generated);
      if(token!==epoch.current||currentRef.current!==expected)return;
@@ -627,23 +625,11 @@ export default function AutoParser({
      fingerprint:'readable-events',groupCount:readable.count,groupSource:readable.source,excluded:readable.excluded};
    parserSetOriginRef.current=origin;setParserSetOrigin(origin);
    setSample(readable.source);
+   if(readable.candidate)setDraft(readable.candidate);
    setDatasetName((datasetName||'Logs')+' \u00b7 Readable events');
    setStep(0);setSelected(0);setMultiPass(null);setMultiPassEvent(0);
    setSelectedMultiPass(null);setMultiPassNotice('');setMessage('');
    analyzeReadableEvents.current=true;
- }
- async function zipPair(){
-   if(!currentPair||!capability||!draft.guided||busy)return;
-   const token=++epoch.current,expected=identity;
-   setBusy(true);setMessage('');
-   try{
-     const archive=await packageGeneratedPair(currentPair,'1.0.0',
-       capability.value,draft.guided.receiver.port);
-     if(token!==epoch.current||currentRef.current!==expected)return;
-     download(archive.filename,archive.bytes,true);
-     setZip({key:expected,filename:archive.filename,sha256:archive.sha256});
-   }catch{if(token===epoch.current)setMessage('ZIP verification failed; the two original DRAFT files remain available.');}
-   finally{if(token===epoch.current)setBusy(false);}
  }
  async function upload(file:File|undefined){
    if(!file)return;
@@ -765,9 +751,9 @@ export default function AutoParser({
      <p>{parserSetOrigin.sourceCount-parserSetOrigin.groupCount} event
        {parserSetOrigin.sourceCount-parserSetOrigin.groupCount===1?'':'s'} could not be read and
        {parserSetOrigin.sourceCount-parserSetOrigin.groupCount===1?' is':' are'} not parsed by this parser:
-       {' '}{describeExcluded(parserSetOrigin.excluded)}. They are not shown as parsed. When the generated parser
-       receives such an event it extracts nothing and invents nothing: it marks the event as not parsed
-       (parser_err_msg) and keeps its complete original text in parser_raw_msg, so the event is not dropped.
+       {' '}{describeExcluded(parserSetOrigin.excluded)}. They are not shown as parsed. If a generated parser
+       cannot parse an event, it may return an error record (parser_err_msg and parser_raw_msg).
+       Delivery or retention by the receiving system is not verified; these events may be lost at the target.
        For a parser that reads these events, use ChatGPT Assisted Parser.</p>
      <button type="button" onClick={restoreParserSetSource}>
        Return to all {parserSetOrigin.sourceCount} logs
@@ -1351,11 +1337,8 @@ export default function AutoParser({
            </span>
            <Download size={15}/>
          </button>)}
-         <button type="button" disabled={busy}
-           onClick={()=>{void zipPair();}}><FileArchive size={16}/> Download Parser Package</button>
-         {advanced&&currentZip&&<details className="beginner-technical-details">
-           <summary>Package checksum</summary><small>ZIP SHA-256: {currentZip.sha256} · {currentZip.filename}</small>
-         </details>}
+         {capability?.source===sample&&draft.guided&&<ReviewedPairPackage key={identity} pair={currentPair}
+           capabilities={capability.value} port={draft.guided.receiver.port} disabled={busy} showChecksum={advanced}/>}
        </div>}
        {currentPair&&<AutoParserLocalReplay sample={sample} draft={draft}/>}
        {currentPair&&<PythonTestSenderPanel source={sample} draft={draft}/>}

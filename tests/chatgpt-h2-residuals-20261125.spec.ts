@@ -1,3 +1,5 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
+import {expandZipDownload} from '../backend/src/downloaded-artifact-validation';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {mkdirSync,writeFileSync} from 'node:fs';
@@ -40,6 +42,7 @@ test.skip(
 test('Auto Parser applies a lossless ChatGPT recovery across multi-token residual regions and refuses lossy ones (H-2)',async({page})=>{
   test.setTimeout(240_000);
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(SAMPLE);
   await page.getByRole('button',{name:'Analyze Logs'}).click();
   const problem=page.getByLabel('Parse problem inspector');
@@ -53,6 +56,10 @@ test('Auto Parser applies a lossless ChatGPT recovery across multi-token residua
     if(!await attest.isChecked())await attest.check();
     await ai.getByRole('button',{name:'Test Proposed Fix'}).click();
   }
+  await test_('^(?<field>(a+)+)$');
+  await expect(status.filter({hasText:'ChatGPT result rejected'})).toContainText('REGEX_PREVIEW_UNSUPPORTED');
+  await expect(status.filter({hasText:'ChatGPT result rejected'})).toContainText(/unsupported or potentially expensive|nested repetition/i);
+  await expect(ai.getByRole('button',{name:'Apply Verified Fix'})).toHaveCount(0);
   // Lossy replies: the HIER_ prefix, the TCP_ prefix and the decimal point of the time read as literal pattern text
   // (independent audit A-1: a decimal point is part of the value unless an enclosing capture keeps it).
   for(const lossy of [PATTERN.replace(' (?<hierarchy>[A-Z_]+)/',' HIER_(?<hierarchy>[A-Z_]+)/'),
@@ -77,9 +84,63 @@ test('Auto Parser applies a lossless ChatGPT recovery across multi-token residua
   const [file]=await Promise.all([page.waitForEvent('download'),download.click()]);
   const ruby=await readFile(await file.path(),'utf8');
   expect(ruby.length).toBeGreaterThan(1000);
+  const [conf]=await Promise.all([page.waitForEvent('download'),page.getByText(/Download listener configuration/).first().click()]);
+  const confText=await readFile(await conf.path(),'utf8');
+  const [archive]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download Parser Package'}).click()]);
+  const expanded=expandZipDownload(await readFile(await archive.path()));
+  expect(expanded.problems).toEqual([]);
+  expect(expanded.entries.find(e=>e.name===file.suggestedFilename())?.content).toBe(ruby);
+  expect(expanded.entries.find(e=>e.name===conf.suggestedFilename())?.content).toBe(confText);
+
   if(process.env.H2_CHATGPT_OUT){
     mkdirSync(process.env.H2_CHATGPT_OUT,{recursive:true});
     writeFileSync(process.env.H2_CHATGPT_OUT+'/parser.rb',ruby);
     writeFileSync(process.env.H2_CHATGPT_OUT+'/runtime.lines',[SAMPLE,HOLDOUT,...RUNTIME].join('\n')+'\n');
+  }
+});
+
+
+test('independent ChatGPT Assisted journey exports a statically accepted Regex with real backend',async({page})=>{
+  test.setTimeout(120_000);
+  await page.goto('/?workspace=chatgpt');
+  await enterSyntheticParserIdentity(page);
+  await page.getByLabel('ChatGPT local sample logs').fill(SAMPLE);
+  await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();
+  await expect(page.getByLabel('ChatGPT copyable prompt')).toBeVisible();
+  await page.getByLabel('ChatGPT result JSON').fill(reply('^(?<field>(a+)+)$'));
+  await page.getByRole('button',{name:'Check ChatGPT Result'}).click();
+  await expect(page.getByRole('status').filter({hasText:'ChatGPT result rejected'})).toContainText('REGEX_PREVIEW_UNSUPPORTED');
+  await expect(page.getByLabel('ChatGPT created parser files')).toHaveCount(0);
+  await page.getByLabel('ChatGPT result JSON').fill(reply(PATTERN));
+  await page.getByRole('button',{name:'Check ChatGPT Result'}).click();
+  await expect(page.getByLabel('ChatGPT result ready for testing')).toContainText('accepted for testing');
+  await page.getByLabel('Additional ChatGPT test logs').fill(HOLDOUT);
+  await page.getByLabel('Confirm test examples are different').check();
+  await page.getByRole('button',{name:'Test Proposed Fix'}).click();
+  await expect(page.getByLabel('ChatGPT fix test result')).toContainText('Overall test: PASS');
+  await page.getByLabel('Approve tested ChatGPT fix').check();
+  const apply=page.getByRole('button',{name:'Apply Fix & Create Parser Files'});
+  await expect(apply).toBeEnabled();
+  await apply.click();
+  const generated=page.getByLabel('ChatGPT created parser files');
+  await expect(generated).toContainText('Parser files created successfully',{timeout:60_000});
+  const [file]=await Promise.all([page.waitForEvent('download'),
+    generated.getByRole('button',{name:'Download customized_demo_firewall',exact:true}).click()]);
+  const ruby=await readFile(await file.path(),'utf8');
+  expect(ruby).toContain('def parserstudio_regex_cost_proven?');
+  const [conf]=await Promise.all([page.waitForEvent('download'),
+    generated.getByRole('button',{name:'Download customized_demo_firewall.conf'}).click()]);
+  const confText=await readFile(await conf.path(),'utf8');
+  expect(confText).toMatch(/^\s+port 6801$/m);
+  const [archive]=await Promise.all([page.waitForEvent('download'),
+    generated.getByRole('button',{name:'Download Parser Package'}).click()]);
+  const expanded=expandZipDownload(await readFile(await archive.path()));
+  expect(expanded.problems).toEqual([]);
+  expect(expanded.entries.find(e=>e.name===file.suggestedFilename())?.content).toBe(ruby);
+  expect(expanded.entries.find(e=>e.name===conf.suggestedFilename())?.content).toBe(confText);
+  if(process.env.H2_ASSISTED_OUT){
+    mkdirSync(process.env.H2_ASSISTED_OUT,{recursive:true});
+    writeFileSync(process.env.H2_ASSISTED_OUT+'/parser.rb',ruby);
+    writeFileSync(process.env.H2_ASSISTED_OUT+'/runtime.lines',[SAMPLE,HOLDOUT,...RUNTIME].join('\n')+'\n');
   }
 });

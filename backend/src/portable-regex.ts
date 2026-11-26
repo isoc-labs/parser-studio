@@ -28,6 +28,29 @@ export type PortableRegexNode=
   |{kind:'group';captureName:string|null;body:PortableRegexNode}
   |{kind:'repeat';min:number;max:number|null;lazy:boolean;atom:PortableRegexNode}
   |{kind:'literal'|'escape'|'class'|'wildcard'|'anchor';text:string};
+/**
+ * A repeated group with an inner repeat or alternation has syntactic
+ * backtracking choices that a position automaton can collapse. Keep this
+ * conservative shared rejection rule before cost classification or execution.
+ * An outer optional (at most one traversal) does not introduce this hazard.
+ */
+export function hasRepeatedChoice(node:PortableRegexNode):boolean {
+  const visit=(n:PortableRegexNode,insideRepeated:boolean):boolean=>{
+    switch(n.kind){
+      case 'repeat':
+        return insideRepeated || visit(n.atom,n.max===null||n.max>1);
+      case 'alternation':
+        return insideRepeated || n.branches.some(b=>visit(b,insideRepeated));
+      case 'sequence':
+        return n.nodes.some(child=>visit(child,insideRepeated));
+      case 'group':
+        return visit(n.body,insideRepeated);
+      default:return false;
+    }
+  };
+  return visit(node,false);
+}
+
 export type PortableRegexAstResult=
   |{ok:true;contract:typeof PORTABLE_REGEX_AST_CONTRACT;
     ast:PortableRegexNode;captureNames:string[]}

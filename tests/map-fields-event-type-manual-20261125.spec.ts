@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page} from './support/downloadSink';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
@@ -41,6 +42,7 @@ async function choose(page:Page,type:string){
 test('the field matches of one event type are added, changed and removed by hand; the parser follows',async({page})=>{
   test.setTimeout(240_000);
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(SAMPLE.join('\n'));
   await page.getByRole('button',{name:'Analyze Logs'}).click();
   await expect(page.getByLabel('Beginner analysis summary')).toContainText('3 of 3 log events structurally parsed',{timeout:30_000});

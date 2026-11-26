@@ -1171,10 +1171,10 @@
           "syslog.procid": "123",
           "syslog.msgid": "ID47",
           "asa.message_id": "302013",
-          "asa.src_ip": "10.1.1.1",
-          "asa.src_port": "80",
-          "asa.dst_ip": "10.2.2.2",
-          "asa.dst_port": "1234"
+          "asa.src_ip": "10.2.2.2",
+          "asa.src_port": "1234",
+          "asa.dst_ip": "10.1.1.1",
+          "asa.dst_port": "80"
         }
       }
     },

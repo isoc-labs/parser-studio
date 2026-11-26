@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page} from './support/downloadSink';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
@@ -22,6 +23,7 @@ test.skip(
 
 async function journey(page:Page,name:keyof typeof CASES){
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(CASES[name].sample.join('\n'));
   await page.getByRole('button',{name:'Analyze Logs'}).click();
   await expect(page.getByLabel('Beginner analysis summary')).toContainText('2 of 2 log events structurally parsed',{timeout:30_000});

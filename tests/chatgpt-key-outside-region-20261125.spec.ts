@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {mkdirSync,writeFileSync} from 'node:fs';
@@ -44,6 +45,7 @@ test.skip(
 test('ChatGPT Assisted reads a pipe-separated key=value log: the prompt names what failed, lossy replies are refused, the lossless reply is applied',async({page})=>{
   test.setTimeout(240_000);
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(SAMPLE);
   await page.getByRole('button',{name:'Analyze Logs'}).click();
   await expect(page.getByLabel('Beginner analysis summary')).toContainText('0 of 2 log events structurally parsed',{timeout:30_000});

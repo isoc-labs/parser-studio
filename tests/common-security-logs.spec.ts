@@ -98,8 +98,8 @@ test('year-bearing Cisco ASA wrapper is parsed before the ASA body',async({page}
   const inspector=page.getByLabel('Browser-only event inspector');
   await expect(inspector).toContainText('"year": "2026"');
   await expect(inspector).toContainText('"connection_id": "18745213"');
-  await expect(inspector).toContainText('"src_ip": "203.0.113.50"');
-  await expect(inspector).toContainText('"dst_ip": "10.1.15.27"');
+  await expect(inspector).toContainText('"src_ip": "10.1.15.27"');
+  await expect(inspector).toContainText('"dst_ip": "203.0.113.50"');
 });
 
 test('BIG-IP ASM KV maps network fields but keeps HTTPS application label vendor-local',async({page})=>{

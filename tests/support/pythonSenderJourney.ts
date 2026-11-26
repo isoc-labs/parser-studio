@@ -1,9 +1,11 @@
+import {enterSyntheticParserIdentity} from './parserIdentity';
 import {expect,type Page} from '@playwright/test';
 
 // The sender belongs to the generated parser, not the initial log editor.
 // Keep all offline Python sender tests on the same real authoring journey.
 export async function generatePythonSenderForSample(page:Page,source:string,csvColumns?:string):Promise<void>{
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await expect(page.getByLabel('Python test sender',{exact:true})).toHaveCount(0);
   await page.getByLabel('Auto Parser raw logs').fill(source);
   await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();

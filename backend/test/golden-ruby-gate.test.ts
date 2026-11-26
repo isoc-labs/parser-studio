@@ -6,6 +6,7 @@
 // with the code that names that thing. It needs no Ruby and no browser: the gate's
 // job is the bookkeeping between corpus, bundles, recorded downloads and executed
 // events, and that is what is attacked here.
+import {loadGoldenDestinationExpectations} from '../src/golden-destination-expectations.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -30,6 +31,8 @@ const cases: Case[] = registry.files
   .flatMap(file => (JSON.parse(readFileSync(resolve(root, file), 'utf8')) as { cases: Case[] }).cases)
   .filter(item => item.sampleClass.startsWith('VENDOR_DOCUMENTED'));
 
+const endpointGoldens = loadGoldenDestinationExpectations(root);
+
 const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 function perfect(): Fixture {
@@ -45,7 +48,7 @@ function perfect(): Fixture {
       source: golden.sourcePath, target: 'f' + index, vendorNamespace: false }));
     bundles.set(item.id, { contract: 'parser-studio.golden-bundle.v1', id: item.id, raw: item.rawSample,
       ruby, rubySha256: sha(ruby), rows, required });
-    const record: Record<string, string> = {};
+    const record: Record<string, string | number> = {...endpointGoldens[item.id]};
     item.goldenSourceValues.forEach((golden, index) => { record['f' + index] = String(golden.sourceValue); });
     results[item.id] = { calls: [[null, record]] };
   }
@@ -132,3 +135,24 @@ attack('a mapping row pointing at the wrong destination', f => {
 'compare', 'GOLDEN_REQUIRED_FIELD_MISSING_IN_EVENT ' + first);
 attack('two events for one raw log', f => {
   const call = f.results[first]!.calls[0]!; f.results[first] = { calls: [call, call] }; }, 'compare', 'GOLDEN_EVENT_COUNT ' + first);
+
+attack('mapping and emitted endpoint roles agree with each other but are reversed', f => {
+  const b = f.bundles.get(first)!;
+  const call = f.results[first]!.calls[0]!;
+  const record = { ...(call[1] as Record<string, unknown>) };
+  const src = b.rows.find(row => row.source === 'srcip')!;
+  const dst = b.rows.find(row => row.source === 'dstip')!;
+  // Both the UI mapping row and runtime value move together.
+  const a = src.target, z = dst.target;
+  src.target = z; dst.target = a;
+  [record[a], record[z]] = [record[z], record[a]];
+  [record.srcip, record.dstip] = [record.dstip, record.srcip];
+  f.results[first] = {calls: [[call[0], record]]};
+}, 'compare', 'GOLDEN_CANONICAL_DESTINATION_MISMATCH ' + first);
+
+attack('a correct source value but incorrect official protocol type', f => {
+  const call=f.results[first]!.calls[0]!;
+  const record={...(call[1] as Record<string,unknown>)};
+  record.proto='6'; // exact official wire type must be integer
+  f.results[first]={calls:[[call[0],record]]};
+}, 'compare', 'GOLDEN_CANONICAL_DESTINATION_MISMATCH '+first);

@@ -63,7 +63,7 @@ test('common year-bearing ASA 302013 wrapper is auto-adopted as a complete event
   const raw='<166>Oct 15 2026 00:05:03 ASA-EDGE01 : %ASA-6-302013: Built outbound TCP connection 18745213 for outside:203.0.113.50/443 (203.0.113.50/443) to inside:10.1.15.27/51822 (198.51.100.15/51822)';
   await routeLocalAnalysis(page,raw,'CISCO_ASA_FTD_MESSAGE_ID_FULL',{
     syslog:{pri:'166',month:'Oct',day:'15',year:'2026',time:'00:05:03',hostname:'ASA-EDGE01'},
-    asa:{action:'Built',protocol:'TCP',src_ip:'203.0.113.50',dst_ip:'10.1.15.27'},
+    asa:{action:'Built',protocol:'TCP',src_ip:'10.1.15.27',dst_ip:'203.0.113.50'},
   });
   await page.goto('/');
   await page.getByLabel('Auto Parser raw logs').fill(raw);

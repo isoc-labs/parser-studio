@@ -1,3 +1,5 @@
+import {expandZipDownload} from '../backend/src/downloaded-artifact-validation';
+import {readFile} from 'node:fs/promises';
 import {test,expect} from './support/downloadSink';
 
 // ChatGPT Assisted on a parser with event profiles (PAN-OS TRAFFIC + CEF in one stream). The user improves
@@ -64,6 +66,16 @@ test('ChatGPT Assisted improves one event type of a multi-type parser and genera
   await ruby.click();
   const chunks:Buffer[]=[];
   for await(const part of await (await pending).createReadStream())chunks.push(Buffer.from(part));
+  const confButton=downloads.getByRole('button',{name:/^Download .*\.conf$/});
+  const [conf]=await Promise.all([page.waitForEvent('download'),confButton.click()]);
+  const confText=await readFile(await conf.path(),'utf8');
+  expect(confText).toMatch(/^\s+port 6801$/m);
+  const [archive]=await Promise.all([page.waitForEvent('download'),downloads.getByRole('button',{name:'Download Parser Package'}).click()]);
+  const expanded=expandZipDownload(await readFile(await archive.path()));
+  expect(expanded.problems).toEqual([]);
+  const rubyText=Buffer.concat(chunks).toString('utf8');
+  expect(expanded.entries.find(e=>e.name===conf.suggestedFilename().replace(/\.conf$/,''))?.content).toBe(rubyText);
+  expect(expanded.entries.find(e=>e.name===conf.suggestedFilename())?.content).toBe(confText);
   const b64=/Base64.strict_decode64\('([^']+)'\)/.exec(Buffer.concat(chunks).toString('utf8'))?.[1];
   expect(b64).toBeTruthy();
   type Fields=Record<string,{normalized_name:string}>;

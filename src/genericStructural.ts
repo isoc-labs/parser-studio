@@ -1128,6 +1128,18 @@ function asa(raw:string):Record<string,unknown>|null{
   const full=built??deny??denyAccess;
   if(!full)return null;
   const fields:Record<string,unknown>={source_raw:raw,product:id[1],severity:id[2],message_id:id[3],...namedGroups(full)};
+  // Cisco 302013/302015 reports the outside/foreign endpoint first.
+  // The initiator of an outbound connection is the second endpoint.
+  // Swap the entire endpoint tuple, including its translated socket.
+  // Deny messages explicitly label src/dst and are not reordered.
+  if(built&&fields.direction==='outbound'){
+    Object.assign(fields,{
+      src_interface:fields.dst_interface,src_ip:fields.dst_ip,src_port:fields.dst_port,
+      mapped_src_ip:fields.mapped_dst_ip,mapped_src_port:fields.mapped_dst_port,
+      dst_interface:fields.src_interface,dst_ip:fields.src_ip,dst_port:fields.src_port,
+      mapped_dst_ip:fields.mapped_src_ip,mapped_dst_port:fields.mapped_src_port,
+    });
+  }
   for(const name of ['src_port','dst_port','mapped_src_port','mapped_dst_port']){
     const value=fields[name];
     if(value===undefined)continue;

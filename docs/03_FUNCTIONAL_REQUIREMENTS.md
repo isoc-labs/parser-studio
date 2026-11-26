@@ -1,72 +1,62 @@
-# 03. Functional Requirements and Priority
+# 03. Current functional requirements and legacy disposition
 
-Each feature below needs deterministic tests and a visible user flow. **P0** is the first usable product; **P1/P2** extend it after validated MVP behavior.
+**Status:** Current source parsing, mapping and export requirements. UI navigation
+belongs to 02 and product scope to 14. The initial F01–F26 table is preserved in
+[immutable Git history](https://github.com/isoc-labs/parser-studio/blob/14dcacddff48365001bfca2653c4466037d023b0/docs/03_FUNCTIONAL_REQUIREMENTS.md).
+This document does not declare current test or release PASS.
 
-| ID | Priority | Capability | Observable definition of done |
-| --- | --- | --- | --- |
-| F01 | P0 | Parser projects and drafts | Create, rename, save and reopen without losing ordered rules |
-| F02 | P0 | Sample collection | Paste/upload many events, inspect line/event boundaries and preserve fixture identities |
-| F03 | P0 | Event family / routing | Same sample set supports conditional variants with visible per-event selected branch |
-| F03A | P0 | User-named log-type inputs | A novice can add individually named, editable and uploadable source log types from one product, inspect per-type parsing and field coverage, save/restore them in browser-local versions, and qualify an optional single parser only with independent source-backed routing evidence; preserve existing physical record separators and validate legacy local-version checksum snapshots without changing original type samples |
-| F04 | P0 | Format recognition | User sees candidate format and confidence, can override and retest |
-| F05 | P0 | Extractors | JSON, KV, CSV, Syslog header and regex extraction run against sample set |
-| F06 | P0 | Multi-line event breaking | Physical line grouping generates stable logical events with error trace |
-| F07 | P0 | Visual field selection | Selected source value creates editable extraction rule; all matches highlighted |
-| F08 | P0 | Fluentd engine validation | Supported config executes in actual Fluentd sandbox; browser preview is labeled approximate where relevant |
-| F09 | P0 | Typed transforms | Timestamp, IP, integer, boolean, string, rename and conditional transforms have positive/negative tests |
-| F10 | P0 | Interflow mapping | Searchable destination field catalog, collision/type warnings and explicit unmapped handling |
-| F11 | P0 | Live triple preview | Raw, extracted and normalized per-event views plus before/after diff |
-| F12 | P0 | Test Lab | Aggregate counts, filtering by error class, per-stage trace and exact failing records |
-| F13 | P0 | Revision/regression | Baseline and candidate compare using identical fixtures; reproducible suite output |
-| F14 | P0 | Fluentd export | Generate only supported syntax and prove with native-engine roundtrip test |
-| F15 | P0 | Export safety | Capability check, warnings, manifest, checksums and no unverified compatibility badges |
-| F16 | P0 | Security/privacy | Upload limits, safe parsing execution, sensitive field controls and no default external transfer |
-| F17 | P1 | Import existing parser | Read supported vendor/Fluentd artifacts; report unknown constructs rather than dropping them |
-| F18 | P1 | Stellar parser export adapters | Validated legacy/modular artifact profiles after real samples and target import tests |
-| F19 | P1 | Parser library/templates | Named vendor families, tags, clone, browse and revision history |
-| F20 | P1 | Smart mapping/field suggestion | Explain confidence; user can override and evidence supports recommendation |
-| F21 | P1 | Advanced editor | Source-level expressions and supported GUI↔source equivalence checks |
-| F22 | P1 | Multitenant workspace roles | Optional viewer/editor/admin after authentication/security design |
-| F23 | P1 | Optional AI assist | Explicit user opt-in; protect raw logs; AI output always passes deterministic runner |
-| F24 | P2 | Extended transforms/plugins | Capability-gated Grok, LEEF/CEF edge cases, lookups and custom enrichment |
-| F25 | P2 | Lab/test-system integration | Optional connector to an isolated Stellar Cyber instance, never production by default |
-| F26 | P2 | Team review workflow | Approval evidence, revision comments, immutable test reports |
+## Parsing and mapping
 
-## Functional notes
+<!-- requirement: PS-006 -->
+Accept multiple named log types from one product and preserve their original records and labels. Qualify a combined parser only when source-backed routing and per-type evidence establish compatibility. Empty, duplicate or invalid groups must fail clearly. Browser-local versions restore their names and source without silently changing record separators.
 
-### Parsing semantics
-- Avoid reducing format support to one universal regex. Auto-detection proposes a parser, but actual routing/selection and errors remain inspectable.
-- Distinguish **match** (expression matched) from **extraction** (fields emitted), **normalization** (typed output valid), and **export compatibility** (runtime/import validated).
-- Support multiple candidate variants without a global catch-all that masks failures.
-- An empty dataset, missing required field or disabled runner cannot yield Verified.
-- Keep original raw event accessible in project-local storage according to privacy configuration, without exposing it through redacted report exports.
+<!-- requirement: PS-007 -->
+The default parser listener port is 6801; a reviewed user override must reach the generated CONF and the matching sensor destination. Check port availability before deployment; authoring does not itself send sensor traffic.
 
-### Timestamp and field correctness
-- Preserve timezone, timestamp input unit, event time vs ingest time, and invalid/missing time policies.
-- Ports must be numeric within valid range; IP addresses must parse properly. Avoid implicit coercion to success.
-- Record mapping precedence and behavior when multiple raw fields target one normalized field.
-- The exact Stellar dictionary and mandatory metadata contract must be grounded by official documentation and supplied parser samples; do not assume unchanged across deployments.
+<!-- requirement: PS-008 -->
+Use the Stellar Cyber 7.0 dictionary only; never infer official fields from another release or unsupported semantics. Preserve type, timestamp unit and timezone, IP validity, port range and protocol evidence; reject invalid or conflicting official destinations.
 
-### Engine and compatibility
-- Fluentd-compatible means a declared version/profile is exercised by an actual Fluentd process with pinned plugins, isolated from the host and with no unrestricted network/filesystem access.
-- Vendor runtime behavior may differ. A passing Fluentd test is necessary for Fluentd export but insufficient to mark proprietary Stellar imports Verified.
-- The common parser project file must survive editing/import/export even when target-specific output is not available.
+<!-- requirement: PS-009 -->
+Parsed fields without an approved official mapping stay in the actual manufacturer namespace with their original names and values. Demo placeholders must never be exported; actual manufacturer and product are required before generating files. Do not fabricate official field meanings or silently discard a value simply because no official mapping was found. Explicitly unsupported/non-emittable values and residuals remain visible as such; distinguish reviewed omission from loss.
 
-### Reporting
-Test report contains:
-- project/revision, fixture set and hash;
-- runner and plugins/capability profile;
-- selected rules and mapping catalog revision;
-- total records, matched, extracted, normalized, failed, skipped;
-- per-event failure class and stage;
-- target export compatibility classification;
-- execution time and result checksum.
+<!-- requirement: PS-010 -->
+Offer evidence-backed automatic mapping, optional reviewed ChatGPT mapping, and manual correction as fallback; manual or approved mapping is never overwritten by automatic suggestions. Manual edits in a multi-type parser affect the selected event type unless the rule is shared; collisions are blocked and other types remain intact.
 
-## Non-functional requirements
+<!-- requirement: PS-011 -->
+Parsing correctness and source-value accounting precede mapping success. Preserve original UTF-8 source, exact event boundaries and unresolved spans; do not report FULL or verified output from a partial match or absent evidence. Independent byte/value accounting must distinguish missing evidence from actual loss. When a format cannot be parsed safely, expose the recovery route or return the complete raw event as an error record where supported (target delivery and retention are unverified); never invent a parser rule or force automatic mapping merely to reach 100 percent.
 
-- Deterministic fixtures/test runner; reproducible results from the same inputs and dependency versions.
-- Backpressure, input-size/rate limits, timeouts, regex DoS protections and isolated parser execution.
-- Do not put customer raw logs in telemetry, browser console, public bug report or GitHub.
-- Original UI, accessibility and responsive behavior as specified in 02.
-- Operational health, backup/migrations and tenant isolation contracts are defined before persistent/multi-user deployment.
-- Deployment/release requires separate owner approval and applicable Engineering System gates.
+<!-- requirement: PS-012 -->
+The pinned Stellar 7.0 native target profile is Ruby 2.4.9 with Fluentd 1.7.4; browser preview, native synthetic execution and actual proprietary DP import/indexing are distinct verification levels. Do not claim target import or live listener proof from a browser or synthetic test. Ruby/CONF generation is subject to the executable capability and regex safety contract.
+
+## Additional retained invariants
+
+- Extract supported structured and unstructured log formats; keep source record counts, unresolved text and meaningful errors visible. No universal catch-all that hides failures.
+- For reviewed CSV and explicit multiline framing use the rules in 14; unsupported boundaries remain unverified.
+- The portable draft and saved browser-local versions retain original sources and reviewed mappings. Use the native output and exact artifact hash checks described in 14.
+- Retain deterministic fixtures, source/dictionary provenance and independent oracle evidence. Unit, browser, backend and native results must be tied to their actual exact candidate.
+- Bound input sizes, parsing cost and execution; do not send private raw logs to third parties automatically or publish them in telemetry, GitHub or evidence. Release and production require separate approval.
+- Authored UI and engineering explanations are English; preserve all original multilingual log values and identifiers unchanged (AGENTS.md).
+
+## Initial requirement disposition
+
+The prior table listed MVP and exploratory P1/P2 proposals. The following is a
+scope disposition, not an implementation-completion ledger. It preserves every
+initial ID rather than allowing retired features to re-enter through old prose.
+
+| Original IDs | Current disposition / authority |
+| --- | --- |
+| F01, F13 | Browser-local draft and versions in 14, not a server project library. |
+| F02, F03, F03A | Current sample/event routing and named log types, PS-006 and PS-011. |
+| F04, F05, F06 | Auto format recognition, supported extractors and bounded framing, 14 and PS-011; no general format-selection wizard. |
+| F07 | Contextual source/span and field review in 02/14; unrestricted visual rule authoring is not current scope. |
+| F08, F14, F15, F18 | Supported Ruby/CONF export and exact runtime/evidence boundaries, 14 and PS-007/PS-012; real proprietary compatibility remains a separate gate. |
+| F09, F10, F20 | Typed official field mapping, safe suggestions, preservation and review, PS-008–PS-010. |
+| F11, F12 | In-flow raw/parsed/mapped evidence and diagnostics, 02/14; standalone Test Lab is retired. |
+| F16 | Current privacy, bounded execution and manual AI boundary, 14. |
+| F17 | Existing-parser import is not a current public workflow (02/14). |
+| F19 | Standalone Library creation navigation retired; browser-local versions retained (14). |
+| F21 | General source editor/GUI round-trip was an initial proposal, not current public acceptance. Constrained reviewed recipes remain in 14. |
+| F22, F26 | Initial multi-user/team collaboration proposals, outside current scope. Reopening requires an accepted product decision. |
+| F23 | Current optional manual ChatGPT assistance, 14 and PS-010. |
+| F24 | Capability-gated operators only; no promise of all Fluentd plugins. |
+| F25 | Server-operated lab/target integration excluded from current product scope (14). |

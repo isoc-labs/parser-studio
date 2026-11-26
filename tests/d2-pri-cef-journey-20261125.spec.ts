@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page} from './support/downloadSink';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
@@ -45,6 +46,7 @@ async function createAndDownload(page:Page,name:keyof typeof CASES){
 test('D-2: RFC 5424 messages that only claim CEF are not completely parsed, so nothing is generated from them alone',async({page})=>{
   test.setTimeout(120_000);
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill([H5+'CEF : 3 alerts today',H5+'CEF :0|A|B|1|2|n|3|x'].join('\n'));
   await page.getByRole('button',{name:'Analyze Logs'}).click();
   const summary=page.getByLabel('Beginner analysis summary');
@@ -58,6 +60,7 @@ test('D-2: RFC 5424 messages that only claim CEF are not completely parsed, so n
 test('D-2: with a plain message in the sample, the parser keeps such messages whole with their envelope',async({page})=>{
   test.setTimeout(180_000);
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(CASES.d2.sample.join('\n'));
   await page.getByRole('button',{name:'Analyze Logs'}).click();
   await expect(page.getByLabel('Beginner analysis summary')).toContainText('1 of 2 log events structurally parsed',{timeout:30_000});
@@ -69,6 +72,7 @@ test('D-2: with a plain message in the sample, the parser keeps such messages wh
 test('a bare PRI before CEF (<189>CEF:0| and <189>CEF: 0|) is read as CEF with the PRI',async({page})=>{
   test.setTimeout(180_000);
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(CASES.pri_cef.sample.join('\n'));
   await page.getByRole('button',{name:'Analyze Logs'}).click();
   await expect(page.getByLabel('Beginner analysis summary')).toContainText('2 of 2 log events structurally parsed',{timeout:30_000});

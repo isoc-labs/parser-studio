@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page,type TestInfo} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -220,6 +221,7 @@ test('Syslog then implicit-TAB LEEF completes review and both actual parser down
   const observed=watchBrowser(page,info);
   const ordered=[fixture.syslog,fixture.leef];
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await analyzeComplete(page,ordered.join('\n'));
   const result=await createAndDownload(page,info,ordered);
   expect(observed.downloads).toEqual(['customized_demo_firewall','customized_demo_firewall.conf']);
@@ -238,6 +240,7 @@ test('LEEF then Syslog survives local save, reload and restore before both actua
   const raw=ordered.join('\n');
   const label='Mixed profile reverse order with padded UTF-8 values';
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await analyzeComplete(page,raw);
   await page.getByRole('button',{name:'Local Versions',exact:true}).click();
   const history=page.getByLabel('Local Versions workspace');
@@ -284,6 +287,7 @@ test('duplicate-key LEEF remains partial with valid Syslog and cannot reach a fa
   const observed=watchBrowser(page,info);
   const raw=fixture.syslog+'\n'+fixture.malformedLeef;
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(raw);
   await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
   const summary=page.getByLabel('Beginner analysis summary');

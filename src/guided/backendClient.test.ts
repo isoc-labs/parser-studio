@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash, webcrypto } from 'node:crypto';
 import { createDraft, DEMO_SAMPLES } from '../model';
 import { toBackendProject } from './backendAdapter';
-import { generateBackendPair, validateBackendProject } from './backendClient';
+import { generateBackendPair, validateBackendProject, assertBackendValidationAllowsExport } from './backendClient';
 
 function project() {
   const draft = createDraft();
@@ -67,6 +67,18 @@ describe('same-origin, no-raw-data backend validate/generate client', () => {
   it('rejects malformed and contradictory validation responses', async () => {
     await expect(validateBackendProject(project(), vi.fn(async () => fake(200, {})) as unknown as typeof fetch)).rejects.toThrow('required properties');
     await expect(validateBackendProject(project(), vi.fn(async () => fake(422, { ok: true, issues: [] })) as unknown as typeof fetch)).rejects.toThrow('conflicts');
+  });
+
+  it('preserves target export verdict and exact reason; schema PASS is not export PASS', async()=>{
+    const p=project();
+    p.extraction={format:'regex',pattern:'^(?<field>ALLOW)$'};
+    const issues=[{code:'REGEX_NONDETERMINISTIC_CHOICE',path:'/extraction/pattern',message:'Ambiguous choice'}];
+    const payload={ok:true,issues:[],targetExportSupported:false,targetExportIssues:issues,targetRuntimeProfile:'stellar70-observed-ruby24'};
+    const result=await validateBackendProject(p,vi.fn(async()=>fake(200,payload)) as unknown as typeof fetch);
+    expect(result).toEqual(payload);
+    expect(()=>assertBackendValidationAllowsExport(result,p)).toThrow('REGEX_NONDETERMINISTIC_CHOICE');
+    expect(()=>assertBackendValidationAllowsExport({ok:true,issues:[]},p)).toThrow('not approved');
+    expect(()=>assertBackendValidationAllowsExport({...result,targetExportSupported:true,targetExportIssues:[]},p)).not.toThrow();
   });
 
   it('only accepts exact matching conf/extensionless files with SHA-256 and DRAFT evidence', async () => {

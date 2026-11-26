@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -197,6 +198,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       }
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(sample);
     await expect(page.getByLabel('Automatic event accounting'))
       .toContainText('2/2 events analyzed locally');
@@ -280,6 +282,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       await route.fulfill({response:original,contentType:'application/json',body:JSON.stringify(pair)});
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(sample);
  await analyzeAndReview(page);
     await enterCreateParser(page);
@@ -307,6 +310,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       }
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await expect(page.getByRole('main',{name:'Auto Parser v2'})).toBeVisible();
     await page.getByLabel('Auto Parser raw logs').fill(sample);
     await expect(page.getByLabel('Automatic event accounting')).toContainText('2/2 events analyzed locally');
@@ -368,6 +372,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       }
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(sample);
     await expect(page.getByLabel('Automatic event accounting'))
       .toContainText('3/3 events analyzed locally');
@@ -406,6 +411,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       }
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(source);
     await expect(page.getByLabel('Automatic event accounting'))
       .toContainText('3/3 events analyzed locally');
@@ -446,6 +452,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       }
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(source);
     await expect(page.getByLabel('Automatic event accounting'))
       .toContainText('4/4 events analyzed locally');
@@ -485,6 +492,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       }
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(source);
     await expect(page.getByLabel('Automatic event accounting'))
       .toContainText('4/4 events analyzed locally');
@@ -537,6 +545,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     expect(server.authoring.javaStackTraceGrammar).toBe('EXCEPTION_HEADER_FRAMES_CAUSED_BY_V1');
     expect(server.authoring.multiline).toBe(false);
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(sample);
     await expect(page.getByLabel('Explicit Java TCP framing confirmation')).toBeVisible();
     await page.getByRole('button',{name:'I Confirm TCP Java Events Are Separated by LF LF'}).click();
@@ -589,6 +598,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       }
     });
     await page.goto('/?workspace=chatgpt');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('ChatGPT local sample logs').fill(source);
     await expect(page.getByLabel('ChatGPT redacted examples')).toHaveCount(0);
     await expect(page.getByRole('alert')
@@ -622,7 +632,16 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     await expect(created).toContainText('Parser files created successfully');
     await expect(created.locator('details'))
       .toContainText('Two parser files passed integrity checks before download.');
-    await expect(created.getByRole('button',{name:/Download/})).toHaveCount(2);
+    await expect(created.getByRole('button',{name:/Download/})).toHaveCount(3);
+    const packageResponse=page.waitForResponse(r=>
+      r.url().endsWith('/parser-pairs/package')&&r.request().method()==='POST');
+    const packageDownload=page.waitForEvent('download');
+    await created.getByRole('button',{name:'Download Parser Package',exact:true}).click();
+    const zip=await packageResponse;
+    expect(zip.status()).toBe(200);
+    const bytes=await readFile(await (await packageDownload).path());
+    expect(bytes.subarray(0,4).toString('hex')).toBe('504b0304');
+    expect(sha(bytes)).toBe(zip.headers()['x-parser-zip-sha256']);
     expect(posts.filter(path=>path.endsWith('/generate')).length).toBeGreaterThanOrEqual(2);
   });
 
@@ -636,6 +655,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       if(req.method()==='POST')writes.push(new URL(req.url()).pathname);
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await expect(page.getByLabel('Authorized test and Interflow verification')).toHaveCount(0);
     await page.getByLabel('Auto Parser raw logs').fill(source);
  await analyzeAndReview(page);
@@ -676,6 +696,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       }
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(source);
     await expect(page.getByLabel('Automatic event accounting'))
       .toContainText('4/4 events analyzed locally');
@@ -737,6 +758,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     const downloaded:string[]=[];
     page.on('download',entry=>downloaded.push(entry.suggestedFilename()));
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(sample);
  await analyzeAndReview(page);
     await enterCreateParser(page);
@@ -784,6 +806,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
         body:JSON.stringify(capabilities)});
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(sample);
  await analyzeAndReview(page);
     await enterCreateParser(page);
@@ -805,6 +828,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
         operations.push(new URL(req.url()).pathname);
     });
     await page.goto('/?workspace=guided');
+    await enterSyntheticParserIdentity(page);
     await expect(page.getByRole('main',{name:'Auto Parser v2'})).toBeVisible();
     await expect(page.getByRole('main',{name:'No-code Parser Guided Builder'})).toHaveCount(0);
     await page.getByLabel('Auto Parser raw logs').fill(sample);
@@ -840,6 +864,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
   test('Map Fields source tree supports an explicit Stellar selection and a same-head Ruby/CONF DRAFT',async({page})=>{
     const source='{"src_ip":"192.0.2.10","dst_ip":"198.51.100.20","action":"deny"}';
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(source);
     await analyzeAndReview(page);
     await page.getByLabel('Review Fields stage').getByRole('button',{name:'Map Fields'}).click();
@@ -876,6 +901,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       }
     });
     await page.goto('/?workspace=expert');
+    await enterSyntheticParserIdentity(page);
     await expect(page.getByRole('main',{name:'Auto Parser v2'})).toBeVisible();
     await page.getByLabel('Auto Parser raw logs').fill(sample);
  await analyzeAndReview(page);
@@ -919,6 +945,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
         unsafe.push(path);
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(sample);
  await analyzeAndReview(page);
     await enterCreateParser(page);
@@ -991,6 +1018,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       throw Error('No other Test Lab operations are allowed in the recovery test');
     });
     await page.goto('/?workspace=chatgpt');
+    await enterSyntheticParserIdentity(page);
     await page.reload();
     await expect(page.getByRole('main',{name:'ChatGPT Assisted Parser',exact:true})).toBeVisible();
     await expect(page.getByLabel('Active Test Lab session indicator')).toHaveCount(0);
@@ -1061,6 +1089,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
         body:JSON.stringify({...valid,runId:'test_run_'+'f'.repeat(32)})});
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByRole('button',{name:'Tools & Diagnostics'}).click();
     const panel=page.getByLabel('Authorized Test Lab session recovery');
     await panel.locator('summary').click();
@@ -1104,6 +1133,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
         })});
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByRole('button',{name:'Tools & Diagnostics'}).click();
     const panel=page.getByLabel('Authorized Test Lab session recovery');
     await panel.locator('summary').click();
@@ -1138,6 +1168,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
         })});
     });
     await page.goto('/?workspace=chatgpt');
+    await enterSyntheticParserIdentity(page);
     await page.getByRole('button',{name:'Tools & Diagnostics'}).click();
     const panel=page.getByLabel('Authorized Test Lab session recovery');
     await panel.locator('summary').click();
@@ -1180,6 +1211,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     let syntheticStarts=0,reads=0,stopDenials=0,rateRequests=0,renewRequests=0;
     let responseKind:'denied'|'forged'|'safe'='denied';
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(sample);
  await analyzeAndReview(page);
     await enterCreateParser(page);
@@ -1389,6 +1421,7 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
       if(path.startsWith('/api/v1/')&&request.method()==='POST')calls.push(path);
     });
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     await page.getByLabel('Auto Parser raw logs').fill(replaySource);
     await analyzeAndReview(page);
     await expect(page.getByLabel('Review Fields stage')).toBeVisible();

@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 
@@ -39,6 +40,7 @@ test('novice keeps one source event through suggestions, blocked manual AI propo
   })});
  });
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('Auto Parser raw logs').fill(source);
  await expect(page.getByLabel('Automatic event accounting')).toContainText('1/1 events analyzed locally');
  await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();

@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
 
@@ -36,6 +37,7 @@ test('beginner uses the bounded local Cisco FTD rule before unnecessary ChatGPT 
  await page.route('**/api/v1/multipass/preview-batch',route=>
   route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(batch(source))}));
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('Auto Parser raw logs').fill(source);
  await page.getByRole('button',{name:'Analyze Logs'}).click();
  const summary=page.getByLabel('Beginner analysis summary');

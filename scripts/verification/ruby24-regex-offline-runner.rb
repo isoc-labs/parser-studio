@@ -14,10 +14,30 @@ expected_version = profile == 'ruby24' ? '2.4.9' : '3.2.11'
 abort 'WRONG_NATIVE_RUBY_VERSION' unless RUBY_VERSION == expected_version
 input = JSON.parse(Zlib::Inflate.inflate(Base64.strict_decode64(STDIN.read.strip)))
 abort 'INVALID_FIXED_SYNTHETIC_INPUT' unless
-  input.keys.sort == %w[contract records] &&
+  input.keys.sort == %w[contract costInputs costPatterns records] &&
   input['contract'] == 'parser-studio.synthetic-ruby24-regex.v1' &&
   input['records'].is_a?(Array) &&
   input['records'].map{|r|r['id']} == %w[regex regex-cisco-asa syslog-regex-body regex-unbounded generic-positional-csv csv]
+# Exercise every accepted classifier fixture directly on the target engine.
+# These inputs are fixed synthetic data, bounded by the outer process deadline.
+patterns = input.fetch('costPatterns')
+probes = input.fetch('costInputs')
+abort 'INVALID_COST_CORPUS' unless patterns.is_a?(Array) && patterns.length >= 5 &&
+  patterns.all? { |p| p.is_a?(String) && p.bytesize.between?(1,256) } &&
+  probes.is_a?(Array) && probes.length >= 10 &&
+  probes.all? { |v| v.is_a?(String) && v.bytesize.between?(1,4096) && !v.include?("\n") }
+cost_count = 0
+patterns.each do |pattern|
+  re = Regexp.new(pattern)
+  probes.each do |value|
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    re.match(value)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
+    abort 'REGEX_COST_CORPUS_TOO_SLOW' unless elapsed < 1.0
+    cost_count += 1
+  end
+end
+puts "REGEX_COST_CORPUS_PASS ruby=#{RUBY_VERSION} probes=#{cost_count}"
 result_count = 0
 input['records'].each do |item|
   abort 'INVALID_SYNTHETIC_RECORD' unless

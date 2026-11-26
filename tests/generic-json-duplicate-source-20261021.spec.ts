@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from '@playwright/test';
 
 // Authored protocol fixtures. These are not manufacturer originals and
@@ -16,6 +17,7 @@ test('duplicate JSON fields inside a recognized generic wrapper never become a g
   page.on('pageerror',error=>errors.push(error.message));
   for(const raw of rejected){
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     const source=page.getByLabel('Auto Parser raw logs');
     await source.fill(raw);
     await expect(source).toHaveValue(raw);
@@ -37,6 +39,7 @@ test('separate JSON objects with the same member names remain reviewable without
   test.setTimeout(60_000);
   const raw='vendor_test {"left":{"k":"one"},"right":{"k":"two"}}';
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const source=page.getByLabel('Auto Parser raw logs');
   await source.fill(raw);
   await expect(source).toHaveValue(raw);

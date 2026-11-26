@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page} from '@playwright/test';
 import {createHash} from 'node:crypto';
 
@@ -63,6 +64,7 @@ test.skip(
 );
 test('current Auto Parser reviews bounded AI split and merge with independent holdouts before generating DRAFT files',async({page})=>{
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('Auto Parser raw logs').fill(source);
  await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
  const review=page.getByRole('button',{name:'Review Fields',exact:true});

@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -33,6 +34,7 @@ test('novice reviews three Stellar 7.0 event families and downloads one scoped D
       expect(request.postData()??'').not.toContain(privateValue);
   });
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const input=page.getByLabel('Auto Parser raw logs');
   await input.fill(raw);
   await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();

@@ -370,7 +370,7 @@ export function assertBackendProjectSupported(project: BackendParserProject, cap
       throw Object.assign(new Error(
         'This Regex can be reviewed in the browser but cannot be exported for Stellar Cyber 7.0 (Ruby 2.4.9 has no Regexp timeout, so only anchored patterns with statically bounded backtracking are allowed): '+
         RUBY24_REGEX_REJECTION_TEXT[cost.reason]+'.'),
-        {code:'TARGET_RUNTIME_REGEX_UNSUPPORTED'});
+        {code:'TARGET_RUNTIME_REGEX_UNSUPPORTED',reason:cost.reason});
   }
   if(regexPattern!==undefined&&(
     cap.authoring.boundedRegexNamedCaptureSubset!==true||

@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from '@playwright/test';
 
 // These are authored, non-sensitive vendor-style examples, not original device captures.
@@ -24,6 +25,7 @@ for(const item of cases){
   const errors:string[]=[];
   page.on('pageerror',e=>errors.push(String(e.message)));
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await expect(page.getByRole('heading',{name:/Paste security logs/})).toBeVisible();
   await page.getByLabel('Auto Parser raw logs').fill(item.raw);
   await page.getByRole('button',{name:'Analyze Logs'}).click();
@@ -47,6 +49,7 @@ for(const item of cases){
 }
 test('beginner follows AWS WAF fields into mapping review',async({page})=>{
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('Auto Parser raw logs').fill(cases[0].raw);
  await page.getByRole('button',{name:'Analyze Logs'}).click();
  await expect(page.getByLabel('Beginner analysis summary')).toContainText('structurally parsed',{timeout:20000});
@@ -61,6 +64,7 @@ test('beginner follows AWS WAF fields into mapping review',async({page})=>{
 test('novice prepares Zeek field schema, confirms source boundaries and reverses them',async({page})=>{
  const source=cases.find(item=>item.id==='Zeek TSV with schema header')!.raw;
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('Auto Parser raw logs').fill(source);
  const offer=page.getByLabel('Zeek schema preparation');
  await expect(offer).toContainText('2 data events');

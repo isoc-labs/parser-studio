@@ -41,7 +41,7 @@ import { fetchBackendSchemaGuide, type BackendSchemaGuide } from './backendSchem
 import { starterTemplateIds, starterTemplateInfo, loadStarterTemplate, type StarterTemplateId } from './sampleTemplates';
 import { suggestUnmappedFieldPlan } from './fieldMappingSuggestions';
 import {vendorFieldNames} from './vendorFieldNames';
-import { validateBackendProject, generateBackendPair, type BackendValidationResult, type GeneratedPair } from './backendClient';
+import { validateBackendProject, assertBackendValidationAllowsExport, generateBackendPair, type BackendValidationResult, type GeneratedPair } from './backendClient';
 import { highlightPreview, matchContext } from './fieldHighlights';
 import { summarizeFamilyCoverage } from './familyCoverage';
 import { recommendLocalFormat, type LocalFormatAdvice } from './localFormatAdvisor';
@@ -1048,6 +1048,7 @@ export default function GuidedBuilder(props: GuidedBuilderProps) {
       const capabilities = await fetchBackendCapabilities();
       assertBackendProjectSupported(backendProject.project, capabilities);
       const result = await validateBackendProject(backendProject.project);
+      if(result.ok)assertBackendValidationAllowsExport(result,backendProject.project);
       setBackendAttempt({ key: draftKey, project: backendProject.project, result });
       if (result.ok) notify('Backend input schema validation passed. Native execution still requires independent verification.');
     } catch (error) {
@@ -1355,12 +1356,10 @@ export default function GuidedBuilder(props: GuidedBuilderProps) {
               (['syslog_rfc3164','syslog_rfc5424'].includes(draft.format)&&
                draft.syslogBodyFormat==='regex'))&&
               <div className="guided-hint" role="alert">
-                <AlertTriangle size={16} /> Regex may be reviewed locally, but generated
-                Regex parser files are blocked for the current Stellar Cyber 7.0
-                target (Ruby 2.4.9). Choose an independently supported non-Regex
-                grammar to create a downloadable parser.
+                <AlertTriangle size={16} /> Regex preview is local. The backend evaluates the pattern against the
+                Ruby 2.4.9 static cost classification before file creation.
               </div>}
-            <div className="guided-hint"><AlertCircle size={16} /> Browser extraction is a preview. DRAFT output is limited to capability-verified JSON, KV, CSV, bounded RFC3164/RFC5424, standalone CEF/LEEF, and explicit mixed JSON/KV/CEF/LEEF, RFC5424 CEF/LEEF or RFC3164 TAG KV. Generic Syslog, regex and unframed multiline remain unsupported.</div>
+            <div className="guided-hint"><AlertCircle size={16} /> Browser extraction is a preview. DRAFT output is limited to capability-verified JSON, KV, CSV, bounded RFC3164/RFC5424, standalone CEF/LEEF, and explicit mixed JSON/KV/CEF/LEEF, RFC5424 CEF/LEEF or RFC3164 TAG KV. Regex requires the target cost classification; unsupported generic Syslog and unframed multiline remain restricted.</div>
             <div className={'guided-family-coverage ' + (familyCoverage.incompatible ? 'attention' : '')}
               aria-label="Sample format distribution">
               <strong>Format Distribution · Browser Estimate</strong>

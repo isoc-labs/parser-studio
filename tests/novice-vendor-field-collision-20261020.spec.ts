@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 
 // Purely authored generic CSV; no vendor originals or privileged target access.
@@ -32,6 +33,8 @@ test('all 23 reviewed quoted CSV values survive vendor-local severity validation
   });
 
   await page.goto('/');
+
+  await enterSyntheticParserIdentity(page);
   const source=page.getByLabel('Auto Parser raw logs');
   await source.fill(raw);
   await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();

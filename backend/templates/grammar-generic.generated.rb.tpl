@@ -87,6 +87,9 @@ def psg_asa(raw)
     return :psg_null
   end
   fields = {'source_raw' => raw, 'product' => id[1], 'severity' => id[2], 'message_id' => id[3]}.merge!(psg_named_groups(full))
+  if (psg_t(built) && (fields['direction'] == 'outbound'))
+    psg_assign(fields, {'src_interface' => fields['dst_interface'], 'src_ip' => fields['dst_ip'], 'src_port' => fields['dst_port'], 'mapped_src_ip' => fields['mapped_dst_ip'], 'mapped_src_port' => fields['mapped_dst_port'], 'dst_interface' => fields['src_interface'], 'dst_ip' => fields['src_ip'], 'dst_port' => fields['src_port'], 'mapped_dst_ip' => fields['mapped_src_ip'], 'mapped_dst_port' => fields['mapped_src_port']})
+  end
   ['src_port', 'dst_port', 'mapped_src_port', 'mapped_dst_port'].each do |name|
     value = fields[name]
     if value.nil?

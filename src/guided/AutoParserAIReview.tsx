@@ -261,7 +261,7 @@ export default function AutoParserAIReview({raw,status,onChatGPT,source,draft,su
    let result=await importReviewOnlyAIRecipe(recipeJson,source,draft,suite);
    if(!result.ok&&result.reason==='CURRENT_RECIPE_UNAVAILABLE')
     result=await importRecoveryAIRecipe(recipeJson,source,draft,suite);
-   if(!result.ok){setImportResult(`ChatGPT result rejected: ${describeRejectedReason(result.reason)}. No changes were made.`);return;}
+   if(!result.ok){setImportResult(`ChatGPT result rejected: ${describeRejectedReason(result.reason,result.detail)}. No changes were made.`);return;}
    let proposal:{ok:true;candidate:ParserDraft}|{ok:false;reason:string;field?:string};
    let candidateMode:'mapping'|'correction'|'enrichment'|'recovery';
    let correctionScope:{oldTarget:string;newTarget:string}|undefined;

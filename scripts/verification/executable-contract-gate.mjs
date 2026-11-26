@@ -66,6 +66,8 @@ assert.equal(shipping.contract,'parser-studio.shipping-surface.v1');
 assert.equal(shipping.legacyOnlyHttp.mainlineReachable,false);
 assert.ok(existsSync('scripts/verification/shipping-entrypoint-reachability.mjs'));
 assert.equal(matrix.contract,'parser-studio.executable-capability-matrix.v1');
+assert.equal(matrix.targetRuntimeProfiles,'contracts/target-runtime-profiles.v1.json');
+assert.equal(matrix.unsupportedTargetRuntime,undefined,'do not duplicate the runtime feature policy');
 assert.equal(matrix.independentSemanticCaseCount,26);
 assert.ok(existsSync(matrix.independentSemanticOracle));
 assert.ok(existsSync(matrix.independentSemanticOracleTruth));

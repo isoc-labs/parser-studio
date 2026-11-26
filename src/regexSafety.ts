@@ -1,61 +1,10 @@
 import {createPortableRegex,parsePortableRegexAst,portableRegexIssue,
-  portableRegexBytes,PORTABLE_REGEX_MAX_BYTES} from '../backend/src/portable-regex';
+  portableRegexBytes,PORTABLE_REGEX_MAX_BYTES,hasRepeatedChoice} from '../backend/src/portable-regex';
 /**
  * Conservative preview-only regular-expression linter. The separate Web Worker
  * still enforces an execution timeout, and this check is NOT a proof that all
  * accepted JS regexes have linear complexity or match native Ruby/Fluentd.
  */
-/** Fail closed on quantified groups containing another repetition.
- * Length limits alone do not bound backtracking (for example (a{1,3})+).
- * The browser worker independently imposes a wall-clock deadline.
- */
-function hasNestedQuantifiers(pattern:string):boolean {
-  const stack:{repeated:boolean;alternative:boolean}[]=[];
-  let characterClass=false;
-  for(let i=0;i<pattern.length;i++){
-    const char=pattern[i];
-    if(char==='\\'){i++;continue;}
-    if(char==='['&&!characterClass){characterClass=true;continue;}
-    if(char===']'&&characterClass){characterClass=false;continue;}
-    if(characterClass)continue;
-    if(char==='('){
-      stack.push({repeated:false,alternative:false});
-      if(pattern.startsWith('(?:',i)){i+=2;continue;}
-      if(pattern.startsWith('(?<',i)){
-        const end=pattern.indexOf('>',i+3);
-        if(end>=0){i=end;continue;}
-      }
-      continue;
-    }
-    if(char===')'){
-      const frame=stack.pop();
-      if(!frame)continue;
-      const suffix=pattern.slice(i+1);
-      const bound=/^\{(\d{1,8})(?:,(\d{0,8}))?\}/.exec(suffix);
-      const repeats=suffix.startsWith('+')||suffix.startsWith('*')||
-        Boolean(bound&&(bound[2]===''||Number(bound[2]??bound[1])>1));
-      // Alternation hidden inside an enclosing repeated group is also
-      // exponential (e.g. (?<field>((a|aa))+)). Propagate the fact that
-      // any child has alternatives through otherwise harmless wrappers.
-      if(repeats&&(frame.repeated||frame.alternative))return true;
-      if(stack.length){
-        if(frame.repeated||repeats)stack[stack.length-1]!.repeated=true;
-        if(frame.alternative)stack[stack.length-1]!.alternative=true;
-      }
-      continue;
-    }
-    if(!stack.length)continue;
-    if(char==='|')stack[stack.length-1]!.alternative=true;
-    if(char==='*'||char==='+'||char==='?'){
-      stack[stack.length-1]!.repeated=true;
-    }else if(char==='{'){
-      const bound=/^\{\d{1,8}(?:,\d{0,8})?\}/.exec(pattern.slice(i));
-      if(bound){stack[stack.length-1]!.repeated=true;i+=bound[0].length-1;}
-    }
-  }
-  return false;
-}
-
 /** Adjacent unbounded captures can overlap with polynomial backtracking
  * despite having no nested groups or identical literal atoms. Conservatively
  * require an explicit separator between consecutive quantified captures. */
@@ -91,13 +40,13 @@ export function validatePreviewRegexPattern(pattern: string): string | null {
   // These forms can yield exponential backtracking even with short input:
   // repeated groups containing quantifiers, optional terms or alternatives.
   if (/\((?:[^()]|\\.)*[+*?](?:[^()]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/.test(pattern)) {
-    return unsupported;
+    return unsupported+': nested repetition';
   }
   if (/\((?:\?:)?[^()]*\|[^()]*\)(?:[+*]|\{\d+(?:,\d*)?\})/.test(pattern)) {
-    return unsupported;
+    return unsupported+': repeated alternation';
   }
-  if (hasNestedQuantifiers(pattern)) return unsupported;
-  if (hasAdjacentQuantifiedCaptures(pattern)) return unsupported;
+  if (hasRepeatedChoice(ast.ast)) return unsupported+': repeated group contains a choice or repetition';
+  if (hasAdjacentQuantifiedCaptures(pattern)) return unsupported+': adjacent quantified captures require a separator';
 
   // Adjacent repetitions of the identical literal character are ambiguous.
   if (/([A-Za-z0-9])(?:[*+])\1(?:[*+])/.test(pattern)) return unsupported;
@@ -107,7 +56,7 @@ export function validatePreviewRegexPattern(pattern: string): string | null {
   for (const match of pattern.matchAll(/\{(\d{1,8})(?:,(\d{0,8}))?\}/g)) {
     const low = Number(match[1]);
     const high = match[2] === undefined || match[2] === '' ? low : Number(match[2]);
-    if (low > 128 || high > 128) return unsupported;
+    if (low > 128 || high > 128) return unsupported+': repetition exceeds the supported bound of 128';
   }
   return null;
 }

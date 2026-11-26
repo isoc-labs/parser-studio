@@ -82,8 +82,10 @@ test("Generic Structural common firewall wrappers cover year-bearing ASA and RFC
     time:"00:05:03",hostname:"ASA-EDGE01",
   });
   assert.equal(parsedAsa.asa.connection_id,"18745213");
-  assert.equal(parsedAsa.asa.src_ip,"203.0.113.50");
-  assert.equal(parsedAsa.asa.dst_ip,"10.1.15.27");
+  assert.equal(parsedAsa.asa.src_ip,"10.1.15.27");
+  assert.equal(parsedAsa.asa.mapped_src_ip,"198.51.100.15");
+  assert.equal(parsedAsa.asa.dst_ip,"203.0.113.50");
+  assert.equal(parsedAsa.asa.mapped_dst_ip,"203.0.113.50");
 
   const pan='<14>Oct 15 00:03:21 PA-FW01 1,2026/10/15 00:03:21,012345678901,TRAFFIC,end,2561,2026/10/15 00:03:20,10.10.20.15,8.8.8.8,203.0.113.10,8.8.8.8,allow-web,,,ssl,vsys1,trust,untrust,ethernet1/1,ethernet1/2,forward-all,2026/10/15 00:03:21,123456,1,51234,443,45001,443,0x400000,tcp,allow,1480,720,760,12,2026/10/15 00:02:55,25,any,0,0x0,10.0.0.0-10.255.255.255,United States,,6,6,tcp-fin,0,0,0,0,,PA-FW01,from-policy';
   const parsedPan=runRuby("parserstudio_generic_structural",pan) as any;

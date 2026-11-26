@@ -3,6 +3,7 @@ import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {TextDecoder} from "node:util";
 import {BACKEND_CAPABILITIES} from "./capabilities.js";
+import {parserExportIdentityIssue} from "./parser-export-identity.js";
 import {compilePair} from "./compiler.js";
 import {validateProject,MAX_PROJECT_BYTES} from "./validate.js";
 import {inspectPair,MAX_IMPORT_BYTES,PairInspectionError} from "./import.js";
@@ -14,7 +15,7 @@ import recipeSchema from "../schema/parser-recipe.v0.2.schema.json" with {type:"
 import type {PairExport} from "./types.js";
 import {HOST_CUSTOMIZED_TARGET, TARGET_REGEX_EXPORT_ERROR,
   requiresUnavailableTargetRegex,
-  pairIncludesUnavailableTargetRegex, ruby24RegexRefusalDetail} from "./target-runtime-export.js";
+  pairIncludesUnavailableTargetRegex, ruby24RegexRefusalDetail,targetRegexExportIssue} from "./target-runtime-export.js";
 
 /**
  * Shipping HTTP entrypoint: intentionally imports ONLY offline parser
@@ -222,6 +223,9 @@ async function handleOfflineRequest(req:IncomingMessage,res:ServerResponse):Prom
         send(res,200,{ok:true,issues:[],compilerMode:"V01_EQUIVALENT_SUBSET",
           nativeUserParserVerified:false,targetImportVerified:false});return;
       }
+      const project=(input as {legacyProject:{vendor:string;product:string}}).legacyProject;
+      const identityIssue=parserExportIdentityIssue(project.vendor,project.product);
+      if(identityIssue){send(res,422,{error:identityIssue.code,issues:[identityIssue]});return;}
       send(res,200,compileRecipePair(input));
     }catch(error){requestError(error,res,"RECIPE_GENERATION_FAILED");}
     return;
@@ -260,10 +264,12 @@ async function handleOfflineRequest(req:IncomingMessage,res:ServerResponse):Prom
   try{
     const validated=validateProject(input);
     if(path==="/api/v1/parser-pairs/validate"){
+      const targetIssue=validated.ok?targetRegexExportIssue(
+        (input as {extraction?:unknown})?.extraction):null;
       send(res,validated.ok?200:422,{
         ...validated,
-        targetExportSupported:validated.ok&&!requiresUnavailableTargetRegex(
-          (input as {extraction?:unknown})?.extraction),
+        targetExportSupported:validated.ok&&targetIssue===null,
+        targetExportIssues:targetIssue?[targetIssue]:[],
         targetRuntimeProfile:HOST_CUSTOMIZED_TARGET.profile,
       });return;
     }
@@ -276,6 +282,9 @@ async function handleOfflineRequest(req:IncomingMessage,res:ServerResponse):Prom
         message:ruby24RegexRefusalDetail((input as {extraction?:{pattern?:unknown}})?.extraction?.pattern),
       }]});return;
     }
+    const project=input as {vendor:string;product:string};
+    const identityIssue=parserExportIdentityIssue(project.vendor,project.product);
+    if(identityIssue){send(res,422,{error:identityIssue.code,issues:[identityIssue]});return;}
     send(res,200,compilePair(input));
   }catch(error){requestError(error,res,"GENERATION_ERROR");}
 }

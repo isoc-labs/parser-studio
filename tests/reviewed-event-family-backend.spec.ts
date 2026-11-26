@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page} from './support/downloadSink';
 
 async function openReviewedFlow(page:Page,reanalyze=true){
@@ -22,6 +23,7 @@ test('one reviewed parser DRAFT retains all three event types with exact backend
   test.skip(process.env.PARSER_STUDIO_SCOPED_AUTHORING_E2E!=='1',
     'Runs separately against the current compiled offline backend exact Git HEAD.');
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const raw=page.getByLabel('Auto Parser raw logs');
   await raw.fill(source);
   await expect(page.getByLabel('Automatic event accounting'))
@@ -93,6 +95,7 @@ test('reviewed relay and three event types compile into the same downloaded Ruby
   ];
   const source=lines.join('\n');
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const input=page.getByLabel('Auto Parser raw logs');
   await input.fill(source);
   // A source-only literal boundary review must coexist with reviewed relay
@@ -157,6 +160,7 @@ test('declared relay source review must match all events, never one sample only'
     '<134>Jan 16 15:19:06 relay01 fw: {"event_type":"user","username":"山田"}',
   ].join('\n');
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(sample);
   const relay=page.locator('details[aria-label="Review declared relay hosts"]');
   await relay.locator('summary').click();
@@ -180,6 +184,7 @@ test('reviewed mapping collisions and oversized event schemas fail closed in the
   test.skip(process.env.PARSER_STUDIO_SCOPED_AUTHORING_E2E!=='1',
     'Requires the actual current offline backend, not an unsupported pinned compiler.');
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const raw=page.getByLabel('Auto Parser raw logs');
   const source=[
     '{"event_type":"threat","indicator":"198.51.100.1","confidence":"high","action":"deny"}',
@@ -239,6 +244,7 @@ test('saved multi-event and declared relay rules remain comparable and restorabl
     '<134>Jan 16 15:19:07 relay01 fw: {"event_type":"asset","hostname":"fw01","action":"found"}',
   ].join('\n');
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const raw=page.getByLabel('Auto Parser raw logs');
   await raw.fill(source);
   const toggle=page.getByRole('button',{name:'Local Versions',exact:true});
@@ -312,6 +318,7 @@ test('saved reviewed relay and event families download intact after reload',asyn
       outsideRequests.push(req.url());
   });
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(source);
   const relay=page.locator('details[aria-label="Review declared relay hosts"]');
   await relay.locator('summary').first().click();

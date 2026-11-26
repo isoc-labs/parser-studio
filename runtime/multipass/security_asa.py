@@ -20,6 +20,19 @@ ASA_DENY_FULL=re.compile(
     rf'\A(?P<action>Deny) (?P<protocol>tcp|udp|icmp) src '
     rf'(?P<src_interface>[A-Za-z0-9_.:-]{{1,64}}):(?P<src_ip>{ASA_ADDRESS})/(?P<src_port>{ASA_PORT}) dst '
     rf'(?P<dst_interface>[A-Za-z0-9_.:-]{{1,64}}):(?P<dst_ip>{ASA_ADDRESS})/(?P<dst_port>{ASA_PORT})\Z')
+# Direction semantics from Cisco's 302013 documentation and NAT example.
+# Rename the spans with their values: never move or duplicate source bytes.
+_OUTBOUND_NAMES={
+    'src_interface':'dst_interface','src_ip':'dst_ip','src_port':'dst_port',
+    'mapped_src_ip':'mapped_dst_ip','mapped_src_port':'mapped_dst_port',
+    'dst_interface':'src_interface','dst_ip':'src_ip','dst_port':'src_port',
+    'mapped_dst_ip':'mapped_src_ip','mapped_dst_port':'mapped_src_port',
+}
+ASA_DENY_ACCESS_FULL=re.compile(
+    rf'\A(?P<action>Deny) (?P<protocol>tcp|udp|icmp) src (?:(?P<src_context>v[12]):)?'
+    rf'(?P<src_interface>[A-Za-z0-9_.-]{{1,64}}):(?P<src_ip>{ASA_ADDRESS})(?:/(?P<src_port>{ASA_PORT}))? dst '
+    rf'(?:(?P<dst_context>v[12]):)?(?P<dst_interface>[A-Za-z0-9_.-]{{1,64}}):(?P<dst_ip>{ASA_ADDRESS})(?:/(?P<dst_port>{ASA_PORT}))? '
+    r'by access-group "(?P<access_group>[^"\r\n]{0,128})" \[(?P<flag_1>0x[0-9A-Fa-f]+), (?P<flag_2>0x[0-9A-Fa-f]+)\]\Z')
 ASA_SYSLOG_PREFIX=re.compile(
     r'\A(?:<(?P<pri>[0-9]{1,3})>)?(?P<month>[A-Z][a-z]{2}) +'
     r'(?P<day>[0-9]{1,2}) +(?:(?P<year>[0-9]{4}) +)?'
@@ -61,15 +74,16 @@ def parse_asa_message(raw:str)->SourceEvent|None:
         tree[name]=value
         spans.append(ValueSpan('asa.'+name,len(raw[:a].encode()),len(raw[:b].encode()),('asa',name)))
     body=raw[match.end():]
-    full=ASA_BUILT_FULL.match(body) or ASA_DENY_FULL.match(body)
+    full=ASA_BUILT_FULL.match(body) or ASA_DENY_FULL.match(body) or ASA_DENY_ACCESS_FULL.match(body)
     if full is not None:
         # These message-ID bodies are fully delimited by Cisco's published token
         # structure. Keep exact source strings; do not infer any absent value.
         for name,value in full.groupdict().items():
             if value is None:continue
             a,b=full.span(name);a+=match.end();b+=match.end()
-            tree[name]=value
-            spans.append(ValueSpan('asa.'+name,len(raw[:a].encode()),len(raw[:b].encode()),('asa',name)))
+            semantic_name=_OUTBOUND_NAMES.get(name,name) if full.groupdict().get('direction')=='outbound' else name
+            tree[semantic_name]=value
+            spans.append(ValueSpan('asa.'+semantic_name,len(raw[:a].encode()),len(raw[:b].encode()),('asa',semantic_name)))
         for name in ('src_port','dst_port','mapped_src_port','mapped_dst_port'):
             if name in tree and not 0<=int(tree[name])<=65535:
                 full=None;break

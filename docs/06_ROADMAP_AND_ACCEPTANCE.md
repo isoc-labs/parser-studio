@@ -769,3 +769,36 @@ are authoritative in [#266](https://github.com/xdr-labs/parser-studio/issues/266
   (404, empty Rulesets). Previous private-plan 403 is stale. Branch policy changes
   require their separate authorization; repository visibility was not changed here.
 - H5: real DP 7.0 import/receive remains NOT VERIFIED without an accessible designated lab.
+
+## 2026-11-26 — System recertification (ACTIVE, release-blocking)
+
+Owner decision: consolidate the ChatGPT and Claude independent audits of ISOC
+main `14dcacddff48365001bfca2653c4466037d023b0`. Existing acceptance claims
+remain historical evidence, not current certification. No new engine or vendor
+exception patches; complete existing architecture. Parsing correctness precedes
+mapping coverage and performance. Preserve unmapped fields, raw input and
+partial events. Runtime limitations must be demonstrated, not inferred from a
+missing implementation. Do not request further owner E2E before recertification.
+
+| Work | Scope and exit evidence | State |
+| --- | --- | --- |
+| W0 | Inventory all design/contract/verification documents; resolve supersession using owner decisions; trace every active requirement to code, actual journey, independent oracle, native and deployed evidence. | ACTIVE |
+| W1 | Repair Regex proof soundness before relaxing UI denial; shared safety decision, positive and adversarial native Ruby 2.4.9 checks; test direct/recipe/package boundaries. | ACTIVE |
+| W2 | Canonical capability and reason codes; eliminate policy drift across all consumers and contradictory contract declarations; fail CI on drift. | OPEN |
+| W3 | Auto, Assisted and inline Recovery actual journeys to downloaded Ruby/CONF and ZIP; safe Regex succeeds, unsafe Regex rejected with actionable reason. W1/W2 prerequisite. | OPEN |
+| W4 | One event assessment and executable candidate decision; mixed FULL/PARTIAL input can continue for supported events without losing excluded original events. | OPEN |
+| W5 | Audit all independent golden truth, especially direction/NAT and handwritten expectations; fix oracle before implementation; no self-derived expected output. | OPEN |
+| W6 | Extraction independent of automatic mapping; Auto → ChatGPT → manual; unmapped names and values preserved; per-event mapping accuracy against Stellar 7.0 only. | OPEN |
+| W7 | Container-based layout, structured alert component; 1024/1280/1440/1920px all stages and recovery; no unintended overflow/overlap or inaccessible controls. | OPEN |
+| W8 | Audit all tests and CI conditions, mocks and skipped mandatory journeys; align test success with owner requirements. | OPEN |
+| W9 | Negative controls: restore stale UI denial, unsafe proof, field-value mutation, mapping/direction reversal, layout regression; required gates must fail. | OPEN |
+| W10 | Diverse vendor/format corpus, independently authored exact values, real downloaded Ruby 2.4.9 / Fluentd 1.7.4 execution and source accounting. | OPEN |
+| W11 | Exact-head independent review, required CI, isolated candidate E2E, separately approved preview deployment and same-head verification; only then owner E2E. | OPEN |
+
+Initial evidence: both audits confirmed policy drift, orphaned frontend deny,
+incorrect outbound ASA oracle, and layout defects. Claude additionally
+reproduced incorrect Regex cost classification and mixed-event continuation
+failure. Existing backend schema rejects the sampled nested repetitions; an
+end-to-end safety bypass has not been established. Claude's document audit
+was metadata-level, not full-text; exact target import remains NOT VERIFIED.
+See [recertification register](SYSTEM_RECERTIFICATION_20261126.md).

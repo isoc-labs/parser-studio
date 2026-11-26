@@ -211,3 +211,21 @@ test('the Ruby runner source stays Ruby 2.4 compatible (no endless def, no numbe
   assert.doesNotMatch(text, /^\s*def [^\n]*\)\s*=\s/m);
   assert.doesNotMatch(text, /\b_1\b|\bit\b\./);
 });
+
+test('an extra null callback cannot hide behind a valid emitted record', () => {
+  assert.deepEqual(codes(compare({events:[goodEvent,{time:null,record:null}]})),['EVENT_COUNT']);
+});
+test('vendor timestamp precision and original offset are not normalized by the oracle', () => {
+  const expected='2017-04-07T22:24:37.251547+0100';
+  const run=(actual:string)=>compareEventToGolden({
+    golden:[{sourcePath:'timestamp',sourceValue:expected}],
+    rows:[{source:'timestamp',target:'timestamp',vendorNamespace:true}],
+    required:['timestamp'],events:[{time:null,record:{vendor:{timestamp:actual}}}],
+  });
+  assert.deepEqual(run(expected).problems,[]);
+  assert.deepEqual(codes(run('2017-04-07T21:24:37.251Z')),['REQUIRED_FIELD_VALUE_MISMATCH']);
+});
+test('invalid clock and offset fields cannot compare equal by rollover', () => {
+  assert.deepEqual(codes(timestampCase('2014-07-16T15:60:00Z','2014-07-16T16:00:00Z')),['REQUIRED_FIELD_VALUE_MISMATCH']);
+  assert.deepEqual(codes(timestampCase('2014-07-16T15:00:00+0060','2014-07-16T14:00:00Z')),['REQUIRED_FIELD_VALUE_MISMATCH']);
+});

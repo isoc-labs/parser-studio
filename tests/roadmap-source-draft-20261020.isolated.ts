@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page,type TestInfo} from './support/downloadSink';
 import {writeFile} from 'node:fs/promises';
 
@@ -51,6 +52,7 @@ async function downloadDraft(page:Page,info:TestInfo,raw:string,format:string){
 
 test.beforeEach(async({page})=>{
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
 });
 
 test('strict RFC5424 structured data and free-form MSG reach actual parser downloads',async({page},info)=>{

@@ -30,15 +30,13 @@ test('published Snort original plus reviewed recipe and independent holdout, rea
   console.log('DOC_SNORT_HOLDOUT '+JSON.stringify(finding).slice(0,1400));
   await expect(page.getByLabel('ChatGPT fix test result')).toContainText('Overall test: PASS');
   await page.getByLabel('Approve tested ChatGPT fix').check();
-  // The published Snort one-line recipe is source-backed Regex. It may PASS
-  // browser and holdout tests, but is not deployable to Stellar7 Ruby2.4.
-  // The UI must refuse creation explicitly, not simulate native success
-  // or suggest trying the same Regex with another ChatGPT prompt.
-  const blocked=page.getByRole('alert').filter({hasText:/Native parser files and/});
-  await expect(blocked).toContainText('Ruby 2.4.9');
-  await expect(blocked).toContainText('bounded Regexp execution is unsupported');
-  await expect(page.getByRole('button',{name:'Apply Fix & Create Parser Files'})).toBeDisabled();
+  // The supplied pattern is rejected for its actual static-cost reason,
+  // not because every Regex is unsupported.
+  const apply=page.getByRole('button',{name:'Apply Fix & Create Parser Files'});
+  await expect(apply).toBeEnabled();
+  await apply.click();
+  await expect(page.getByRole('status').filter({hasText:'REGEX_NONDETERMINISTIC_CHOICE'})).toBeVisible();
   await expect(page.getByLabel('ChatGPT created parser files')).toHaveCount(0);
-  await expect(page.getByLabel('ChatGPT adaptive repair')).toHaveCount(0);
+  await expect(page.getByLabel('ChatGPT adaptive repair')).toBeVisible();
   expect(errors).toEqual([]);
 });

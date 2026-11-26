@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {expect,test} from './support/downloadSink';
 import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
@@ -16,6 +17,7 @@ test('reviewed two-column CSV survives local restore and downloaded Python trans
     if(response.url().includes('/api/')&&response.status()>=500)httpFailures.push(response.status());
   });
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const origin=new URL(page.url()).origin;
   page.on('request',request=>{
     if(/^https?:/.test(request.url())&&new URL(request.url()).origin!==origin)

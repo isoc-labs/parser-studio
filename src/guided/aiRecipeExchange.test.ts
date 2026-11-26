@@ -85,6 +85,16 @@ describe('P1-AP6 explicit local AI exchange, fail-closed',()=>{
   ])expect(await importReviewOnlyAIRecipe(JSON.stringify(changed),source,draft,suite()))
    .toMatchObject({ok:false,reason:'UNTRUSTED_RECIPE'});
  });
+ it('reports the existing unsafe Regex rejection without accepting the recipe',async()=>{
+  const built=await buildReviewableRecipe(source,draft,suite());
+  if(!built.ok)throw new Error('Expected supported recipe');
+  const unsafe={...built.recipe,sourceFormat:'regex',bodyFormat:'regex',
+    stages:[{op:'split_event',boundary:'single-line'},{op:'parse_regex',pattern:'^(?<field>(a+)+)$'},
+      ...built.recipe.stages.filter(stage=>stage.op==='map_field'||stage.op==='cast_type'||stage.op==='classify'||stage.op==='fallback_unparsed')]};
+  for(const importer of [importReviewOnlyAIRecipe,importRecoveryAIRecipe])
+    expect(await importer(JSON.stringify(unsafe),source,draft,suite())).toMatchObject({
+      ok:false,reason:'REGEX_PREVIEW_UNSUPPORTED',detail:expect.stringMatching(/unsupported|repetition/i)});
+ });
  it('permits exactly one new safe AI field mapping to become a non-applied v0.1 repair candidate',async()=>{
   const original=await buildReviewableRecipe(source,draft,suite());
   if(!original.ok)throw new Error('Expected supported original');

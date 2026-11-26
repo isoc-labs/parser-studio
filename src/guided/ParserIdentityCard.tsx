@@ -43,7 +43,7 @@ export default function ParserIdentityCard({draft,setDraft,assisted=false,warnIf
       aria-label="Placeholder parser name">
       {'The '+placeholderParts.join(' and ')+' still show the placeholder '+
         placeholderParts.map(part=>'\u201c'+(part==='manufacturer'?PLACEHOLDER_PARSER_VENDOR:PLACEHOLDER_PARSER_PRODUCT)+'\u201d').join(' / ')+
-        '. That text would be written into the downloaded files (header comments and file names). Enter the real '+
+        '. Downloaded files are blocked until you enter the actual '+
         placeholderParts.join(' and ')+' below before downloading.'}
     </p>}
     <div className="parser-identity-fields">

@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 
@@ -11,6 +12,7 @@ const FULL=[PAN,CEF,PAN.replace('10.10.20.15','10.10.20.16'),CEF.replace('10.0.0
 test('ChatGPT JSONata mapping changes one event type of a multi-type parser and the generated parser',async({page})=>{
   test.skip(process.env.PARSER_STUDIO_LIVE_BACKEND!=='1','Requires the same-HEAD backend.');
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(FULL);
   await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
   const reviewButton=page.getByRole('button',{name:'Review Fields',exact:true});
