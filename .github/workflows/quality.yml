@@ -16,6 +16,8 @@ jobs:
     # job must never allow this required status context to succeed.
     needs: [native-isolated-synthetic, web-quality, browser-regression]
     runs-on: ubuntu-latest
+    env:
+      PARSER_STUDIO_EXPECTED_SOURCE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     timeout-minutes: 12
     permissions:
       contents: read
@@ -38,8 +40,6 @@ jobs:
           name: parser-studio-artifact-lineage-web
           path: ${{ runner.temp }}/parser-studio-lineage-web
       - name: Fail closed on mismatched exact-HEAD Native and Web artifact receipts
-        env:
-          PARSER_STUDIO_EXPECTED_SOURCE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$PARSER_STUDIO_EXPECTED_SOURCE_HEAD"
@@ -57,9 +57,9 @@ jobs:
           pattern: parser-studio-e2e-downloads-shard-*
           path: ${{ runner.temp }}/e2e-downloads
       - name: Mandatory real-browser journey census across all six shards
-        env:
-          PARSER_STUDIO_EXPECTED_SOURCE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$PARSER_STUDIO_EXPECTED_SOURCE_HEAD"
           node --test scripts/verification/browser-required-journeys.test.mjs
           node scripts/verification/browser-required-journeys.mjs compare "$RUNNER_TEMP/e2e-downloads" "$PARSER_STUDIO_EXPECTED_SOURCE_HEAD"
       - name: Install backend tooling for the downloaded-artifact gate

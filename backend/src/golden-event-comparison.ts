@@ -97,13 +97,18 @@ function instantMs(value: string): number | null {
   if (!match) return null;
   const [, y, mo, d, h, mi, s, fraction, zone] = match;
   const ms = Number(((fraction ?? '') + '000').slice(0, 3));
+  if (Number(mo) < 1 || Number(mo) > 12 || Number(d) < 1 || Number(d) > 31 ||
+      Number(h) > 23 || Number(mi) > 59 || Number(s) > 59) return null;
   let offsetMinutes = 0;
   if (zone !== 'Z') {
     const digits = zone!.replace(':', '');
+    if (Number(digits.slice(1, 3)) > 23 || Number(digits.slice(3, 5)) > 59) return null;
     offsetMinutes = (digits[0] === '-' ? -1 : 1) * (Number(digits.slice(1, 3)) * 60 + Number(digits.slice(3, 5)));
   }
-  const utc = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s), ms);
-  const roundTrip = new Date(utc);
+  const roundTrip = new Date(0);
+  roundTrip.setUTCFullYear(Number(y), Number(mo) - 1, Number(d));
+  roundTrip.setUTCHours(Number(h), Number(mi), Number(s), ms);
+  const utc = roundTrip.getTime();
   if (roundTrip.getUTCMonth() !== Number(mo) - 1 || roundTrip.getUTCDate() !== Number(d)) return null;
   return utc - offsetMinutes * 60_000;
 }
@@ -144,7 +149,11 @@ function evaluateRow(
     };
   }
   const actual = text(lookup.value);
-  if (!sameValue(actual, expected)) {
+  // Millisecond equivalence belongs to the official timestamp conversion,
+  // never to a vendor string that must retain the original precision and zone.
+  const equal = !row.vendorNamespace && row.target === 'timestamp'
+    ? sameValue(actual, expected) : actual === expected;
+  if (!equal) {
     return {
       problem: {
         code: 'REQUIRED_FIELD_VALUE_MISMATCH', sourcePath: path,
@@ -168,10 +177,10 @@ export function compareEventToGolden(input: {
   const matched: { sourcePath: string; target: string; value: string }[] = [];
   const live = input.events.filter(event => event.record !== null && event.record !== undefined);
 
-  if (live.length !== 1) {
+  if (input.events.length !== 1 || live.length !== 1) {
     problems.push({
       code: 'EVENT_COUNT', sourcePath: '*',
-      detail: 'expected exactly one emitted event for one raw log, got ' + live.length,
+      detail: 'expected exactly one emitted event for one raw log, got ' + input.events.length + ' calls (' + live.length + ' non-null records)',
     });
     return { matched, unrequiredUnmapped: [], problems };
   }

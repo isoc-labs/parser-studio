@@ -22,12 +22,12 @@ def require(condition, message):
     if not condition:
         raise ValueError(message)
 
-def downloaded_ruby(root, title):
+def downloaded_ruby(root, title, name="customized_demo_firewall"):
     matches = []
     for index in root.rglob("index-*.jsonl"):
         for line in index.read_text().splitlines():
             entry = json.loads(line)
-            if entry.get("test", "").endswith(title) and entry.get("name") == "customized_demo_firewall" and entry.get("synthetic") is None:
+            if entry.get("test", "").endswith(title) and entry.get("name") == name and entry.get("synthetic") is None:
                 artifact = (index.parent / entry["file"]).resolve()
                 require(artifact.is_relative_to(index.parent.resolve()), "ASSISTED_ARTIFACT_OUTSIDE_INDEX")
                 raw = artifact.read_bytes()

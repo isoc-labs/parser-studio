@@ -185,3 +185,29 @@ deployment remain separate gates.
   project, retry, stale HEAD and duplicate controls. Actual real-backend
   JSONata mapping journey passed and its real JSON reporter produced the
   expected receipt (1/1). Full six-shard aggregate CI remains pending.
+
+## W6/W8/W9/W10 — mapping paths and stricter comparison
+
+- CI run 45733561899 on 236e7c9: all six Chromium shards, native isolated
+  synthetic, and Ruby 2.4.9 / Fluentd 1.7.4 UDP jobs succeeded. Web-quality
+  failed because the new receipt step duplicated the expected source-HEAD
+  declaration checked by the executable contract guard. The release job now
+  shares one job-level exact-HEAD variable; both checks assert the checkout
+  identity. Guard and six receipt tests passed. No policy guard was disabled.
+- Real Chromium: Q3-1 partially mapped CSV, manual event-specific mapping,
+  and scoped ChatGPT JSONata mapping each passed. Their three actual recorded
+  downloads were checked by SHA and executed in the local Ruby 2.4.9 chroot:
+  15/15 independent events passed, including IPv6, Unicode, original unmapped
+  leaf name/value, unchanged event types and PAN-OS NAT/serial preservation.
+  The manual case deliberately changes a role by operator choice; this proves
+  faithful execution and isolation, not semantic endorsement of that choice.
+- The same mapping oracle is mandatory in the aggregate downloaded-Ruby gate.
+  Its four unit tests cover missing values/events, unapproved mappings,
+  cross-event leakage, incorrect type, duplicate callbacks and wrong Ruby.
+- Golden comparator now requires exactly one callback including null callback
+  accounting, and allows timestamp instant equivalence only for an official
+  timestamp mapping, not a vendor string. Invalid clock and offset rollovers
+  are refused. Comparator suite 25/25 PASS; actual prior vendor downloads
+  14/14 PASS under the stricter comparison. This is not a new browser run.
+- Latest CI aggregate, further non-endpoint semantic audit, exact requirement
+  traceability, independent review and actual proprietary target remain open.
