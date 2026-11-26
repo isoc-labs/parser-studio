@@ -133,3 +133,15 @@ deployment remain separate gates.
   assertions. Language and multilingual/Unicode regression: 15/15 PASS.
 - Scope: these four tested desktop layouts; independent visual review and
   other UI journeys remain open.
+
+## W9/W10 mixed-download oracle
+
+- The existing aggregate download gate now requires the actual mixed ASA
+  browser artifact in addition to the Assisted Regex artifact. Both are
+  checked against the download index and SHA-256 before executing Ruby.
+- Local real Chromium downloads: 2/2 journeys; Ruby 2.4.9 source-value
+  oracles: Assisted 6/6 and mixed ASA 4/4, including exact raw fallback,
+  extraction error stage, normalized endpoint sockets and vendor NAT/ACL.
+- Three mutated output records (reversed source IP, missing original log,
+  wrong error stage) were all rejected by the independent mixed oracle.
+- Full CI aggregate result and the remaining vendor corpus remain open.

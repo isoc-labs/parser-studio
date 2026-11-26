@@ -22,20 +22,24 @@ def require(condition, message):
     if not condition:
         raise ValueError(message)
 
-def prepare(root, path):
+def downloaded_ruby(root, title):
     matches = []
     for index in root.rglob("index-*.jsonl"):
         for line in index.read_text().splitlines():
             entry = json.loads(line)
-            if entry.get("test", "").endswith(TITLE) and entry.get("name") == "customized_demo_firewall" and entry.get("synthetic") is None:
+            if entry.get("test", "").endswith(title) and entry.get("name") == "customized_demo_firewall" and entry.get("synthetic") is None:
                 artifact = (index.parent / entry["file"]).resolve()
                 require(artifact.is_relative_to(index.parent.resolve()), "ASSISTED_ARTIFACT_OUTSIDE_INDEX")
                 raw = artifact.read_bytes()
                 require(len(raw) == entry["bytes"] and hashlib.sha256(raw).hexdigest() == entry["sha256"], "ASSISTED_ARTIFACT_HASH_MISMATCH")
                 matches.append(raw.decode("utf-8"))
     require(len(matches) == 1, f"ASSISTED_REAL_DOWNLOAD_COUNT {len(matches)}")
+    return matches[0]
+
+def prepare(root, path):
+    ruby = downloaded_ruby(root, TITLE)
     doc = json.loads(path.read_text())
-    doc["cases"].extend({"id": f"assisted-regex-{i}", "ruby": matches[0], "raw": row[0]} for i, row in enumerate(CASES))
+    doc["cases"].extend({"id": f"assisted-regex-{i}", "ruby": ruby, "raw": row[0]} for i, row in enumerate(CASES))
     path.write_text(json.dumps(doc, ensure_ascii=False))
     print("ASSISTED_NATIVE_PREPARED cases=6")
 
