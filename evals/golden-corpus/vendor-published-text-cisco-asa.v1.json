@@ -34,11 +34,11 @@
     "direction": "inbound",
     "protocol": "TCP",
     "connection_id": "11",
-    "src_ip": "10.1.2.1",
-    "src_port": "21647",
-    "dst_ip": "10.1.1.2",
-    "dst_port": "22",
-    "dst_mapped_ip": "10.1.1.2"
+    "a_ip": "10.1.2.1",
+    "a_port": "21647",
+    "b_ip": "10.1.1.2",
+    "b_port": "22",
+    "b_mapped_ip": "10.1.1.2"
    },
    "expectedStellarFields": {
     "srcip": "10.1.2.1",
@@ -47,7 +47,7 @@
    }
   },
   {
-   "id": "cisco_asa_302013_outbound_outside_to_inside",
+   "id": "cisco_asa_302013_outbound_inside_to_outside",
    "family": "FIREWALL",
    "sampleClass": "VENDOR_PUBLISHED_TEXT",
    "publisher": "Cisco",
@@ -77,15 +77,15 @@
     "direction": "outbound",
     "protocol": "TCP",
     "connection_id": "9",
-    "src_ip": "10.1.2.1",
-    "src_port": "22",
-    "dst_ip": "10.1.1.2",
-    "dst_port": "53496",
-    "dst_mapped_ip": "10.1.1.2"
+    "a_ip": "10.1.2.1",
+    "a_port": "22",
+    "b_ip": "10.1.1.2",
+    "b_port": "53496",
+    "b_mapped_ip": "10.1.1.2"
    },
    "expectedStellarFields": {
-    "srcip": "10.1.2.1",
-    "dstip": "10.1.1.2",
+    "srcip": "10.1.1.2",
+    "dstip": "10.1.2.1",
     "protocol": "TCP"
    }
   },
@@ -120,11 +120,11 @@
     "direction": "inbound",
     "protocol": "TCP",
     "connection_id": "1",
-    "src_ip": "10.1.2.1",
-    "src_port": "17891",
-    "dst_ip": "10.1.1.2",
-    "dst_port": "23",
-    "dst_mapped_ip": "10.1.2.5"
+    "a_ip": "10.1.2.1",
+    "a_port": "17891",
+    "b_ip": "10.1.1.2",
+    "b_port": "23",
+    "b_mapped_ip": "10.1.2.5"
    },
    "expectedStellarFields": {
     "srcip": "10.1.2.1",

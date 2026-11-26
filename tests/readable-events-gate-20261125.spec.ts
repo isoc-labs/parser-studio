@@ -91,15 +91,19 @@ test('a sample that cannot go on and has no readable event still says so',async(
 test('bounded compiler candidate remains usable beside unsupported events',async({page})=>{
   test.setTimeout(120_000);
   const supported='<166>Nov 26 2026 09:12:01 fw01 : %ASA-6-302013: Built outbound TCP connection 7345 for outside:203.0.113.10/443 (203.0.113.10/443) to inside:10.1.1.5/52044 (198.51.100.7/61012)';
-  const unsupported='kernel panic - not syncing: fatal exception in interrupt';
-  const source=[supported,unsupported].join('\n');
-  await analyze(page,[supported,unsupported]);
+  const unsupported=[
+    '<166>Nov 26 2026 09:12:09 fw01 : %ASA-6-302014: Teardown TCP connection 7345 for outside:203.0.113.10/443 to inside:10.1.1.5/52044 duration 0:00:08 bytes 4521 TCP FINs',
+    '<164>Nov 26 2026 09:12:15 fw01 : %ASA-4-106023: Deny tcp src outside:192.0.2.9/40222 dst inside:10.1.1.20/22 by access-group "OUTSIDE_IN" [0x0, 0x0]',
+    '<166>Nov 26 2026 09:12:20 fw01 : %ASA-6-113005: AAA user authentication Rejected : reason = Invalid password : server = 10.1.1.9 : user = alice',
+  ];
+  const source=[supported,...unsupported].join('\n');
+  await analyze(page,[supported,...unsupported]);
   const offer=page.getByLabel('Readable events',{exact:true});
-  await expect(offer).toContainText('1 of 2 events were read completely',{timeout:5000});
+  await expect(offer).toContainText('2 of 4 events were read completely',{timeout:5000});
   await offer.getByRole('button',{name:'Continue with readable events'}).click();
-  await expect(page.getByLabel('Auto Parser raw logs')).toHaveValue(supported);
+  await expect(page.getByLabel('Auto Parser raw logs')).toHaveValue([supported,unsupported[1]].join('\n'));
   const context=page.getByLabel('Events not covered by this parser');
-  await expect(context).toContainText('This parser covers 1 of your 2 events');
+  await expect(context).toContainText('This parser covers 2 of your 4 events');
   const review=page.getByRole('button',{name:'Review Fields',exact:true}).last();
   await expect(review).toBeEnabled({timeout:20000});
   await review.click();
@@ -109,7 +113,14 @@ test('bounded compiler candidate remains usable beside unsupported events',async
   const download=page.getByText(/Download parser logic/).first();
   await expect(download).toBeVisible({timeout:30000});
   const [file]=await Promise.all([page.waitForEvent('download'),download.click()]);
-  expect((await readFile(await file.path(),'utf8')).length).toBeGreaterThan(1000);
-  await context.getByRole('button',{name:'Return to all 2 logs'}).click();
+  const ruby=await readFile(await file.path(),'utf8');
+  expect(ruby.length).toBeGreaterThan(1000);
+  if(process.env.READABLE_GATE_OUT){
+    const dir=process.env.READABLE_GATE_OUT+'/asa_mixed';
+    mkdirSync(dir,{recursive:true});
+    writeFileSync(dir+'/parser.rb',ruby);
+    writeFileSync(dir+'/runtime.lines',source+'\n');
+  }
+  await context.getByRole('button',{name:'Return to all 4 logs'}).click();
   await expect(page.getByLabel('Auto Parser raw logs')).toHaveValue(source);
 });

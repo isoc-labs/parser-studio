@@ -15,7 +15,7 @@ permitted. Therefore:
 Cisco's page wraps each example across two printed lines. The assembled sample
 joins the printed fragments with ONE space; the fragments are kept verbatim.
 The interface names are published but not extracted (the project schema caps a
-Regex pattern at 256 characters). Expected values are hand-authored from Cisco's documented message grammar
+Regex pattern at 256 characters). Expected positional captures and direction-aware normalized values are hand-authored from Cisco's documented message grammar
 (message 302013: Built {inbound|outbound} TCP connection_id for
 interface:real-address/real-port (mapped-address/mapped-port) to
 interface:real-address/real-port (mapped-address/mapped-port)); they share no
@@ -53,22 +53,22 @@ def main():
              ['%ASA-6-302013: Built inbound TCP connection 11 for outside:10.1.2.1/21647',
               '(10.1.2.1/21647) to inside:10.1.1.2/22 (10.1.1.2/22)'],
              {'event_id': '302013', 'direction': 'inbound', 'protocol': 'TCP', 'connection_id': '11',
-              'src_ip': '10.1.2.1', 'src_port': '21647', 
-              'dst_ip': '10.1.1.2', 'dst_port': '22', 'dst_mapped_ip': '10.1.1.2'},
+              'a_ip': '10.1.2.1', 'a_port': '21647',
+              'b_ip': '10.1.1.2', 'b_port': '22', 'b_mapped_ip': '10.1.1.2'},
              {'srcip': '10.1.2.1', 'dstip': '10.1.1.2', 'protocol': 'TCP'}),
-        case('cisco_asa_302013_outbound_outside_to_inside', 'Traffic through the ASA from the inside host to the outside host',
+        case('cisco_asa_302013_outbound_inside_to_outside', 'Traffic through the ASA from the inside host to the outside host',
              ['%ASA-6-302013: Built outbound TCP connection 9 for outside:10.1.2.1/22 (10.1.2.1/22)',
               'to inside:10.1.1.2/53496 (10.1.1.2/53496)'],
              {'event_id': '302013', 'direction': 'outbound', 'protocol': 'TCP', 'connection_id': '9',
-              'src_ip': '10.1.2.1', 'src_port': '22', 
-              'dst_ip': '10.1.1.2', 'dst_port': '53496', 'dst_mapped_ip': '10.1.1.2'},
-             {'srcip': '10.1.2.1', 'dstip': '10.1.1.2', 'protocol': 'TCP'}),
+              'a_ip': '10.1.2.1', 'a_port': '22',
+              'b_ip': '10.1.1.2', 'b_port': '53496', 'b_mapped_ip': '10.1.1.2'},
+             {'srcip': '10.1.1.2', 'dstip': '10.1.2.1', 'protocol': 'TCP'}),
         case('cisco_asa_302013_inbound_mapped_destination_differs', 'Same-security interfaces, traffic from the outside host to the inside host',
              ['%ASA-6-302013: Built inbound TCP connection 1 for outside:10.1.2.1/17891 (10.1.2.1/17891)',
               'to inside:10.1.1.2/23 (10.1.2.5/23)'],
              {'event_id': '302013', 'direction': 'inbound', 'protocol': 'TCP', 'connection_id': '1',
-              'src_ip': '10.1.2.1', 'src_port': '17891', 
-              'dst_ip': '10.1.1.2', 'dst_port': '23', 'dst_mapped_ip': '10.1.2.5'},
+              'a_ip': '10.1.2.1', 'a_port': '17891',
+              'b_ip': '10.1.1.2', 'b_port': '23', 'b_mapped_ip': '10.1.2.5'},
              {'srcip': '10.1.2.1', 'dstip': '10.1.1.2', 'protocol': 'TCP'}),
         case('cisco_asa_302014_teardown_is_a_different_message', 'Teardown of the same-security scenario 2 connection',
              ['%ASA-6-302014: Teardown TCP connection 1 for outside:10.1.2.1/17891 to inside:10.1.1.2/23',

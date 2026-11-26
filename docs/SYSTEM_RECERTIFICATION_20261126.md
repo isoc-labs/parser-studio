@@ -87,3 +87,36 @@ deployment remain separate gates.
 - Remaining: broader combinations, source accounting in actual native
   execution including excluded events, and independent semantic direction
   oracle (W5/W10). This is not certification of ASA source/destination.
+
+## W4/W5 checkpoint — ASA direction, exact source spans and mixed execution
+
+- Independent reference: Cisco ASA syslog 302013 description and configuration
+  example (https://www.cisco.com/c/en/us/td/docs/security/asa/syslog/asa-syslog/syslog-messages-302003-to-342008.html
+  and https://www.cisco.com/c/en/us/support/docs/ip/network-address-translation-nat/118996-config-asa-00.html).
+  Outbound connection initiator is the second endpoint in the documented
+  foreign/local layout; real and mapped address/port pairs must follow it.
+- RED: corrected hand-authored Browser oracle failed with both endpoints
+  and NAT values reversed. The published-text corpus also used the wrong
+  initiator. Corrected corpus and direction-specific regex mapping profiles.
+- Shared TypeScript -> generated Ruby grammar reorders the complete tuple;
+  Python changes corresponding semantic names without changing byte offsets.
+  Python now also recognizes the existing bounded ACL access-group grammar.
+  Explicit deny labels are unchanged; teardown without established initiator
+  remains partial. No guessed source/destination from positional teardown.
+- Browser unit regression 82/82; Python independent direction/span checks
+  4/4 (including TCP/UDP and inbound/outbound subcases); Ruby 2.4.9 offline
+  28/28 and 50/50 cost probes. Backend build passed.
+- Actual isolated Chromium, four mixed ASA records: two readable events,
+  download, restore original sample. Actual downloaded fragment executed in
+  Ruby 2.4.9; 4/4 events accounted, exact normalized source/destination
+  sockets for connection and ACL denial, NAT and ACL values preserved,
+  two unsupported records retained byte-for-byte as parser_raw_msg.
+- Full semantic oracle invocation hit the 30-second remote command deadline
+  during mutation testing. Do not report it as completed.
+- Regenerated template-set digest:
+  6384710b9af630de6a4ceee86a344e12f7ecb9fddef1a72e7f284fcbec93f00f.
+  Existing owner approval remains unchanged; new digest requires owner
+  review before merge. Do not change approval constants.
+- Remaining W5: independent truth audit across the rest of the corpus;
+  W6 mapping audit, W7 layout and W8-W11 remain open. No actual Stellar
+  sensor import or indexed event has been verified.

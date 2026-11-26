@@ -370,8 +370,8 @@ describe('bounded Generic Structural browser compiler twin',()=>{
     expect(result.fields).toMatchObject({
       syslog:{pri:'166',month:'Oct',day:'15',year:'2026',time:'00:05:03',hostname:'ASA-EDGE01',app_tag:'%ASA-6-302013'},
       asa:{action:'Built',direction:'outbound',protocol:'TCP',connection_id:'18745213',
-        src_ip:'203.0.113.50',src_port:'443',dst_ip:'10.1.15.27',dst_port:'51822',
-        mapped_dst_ip:'198.51.100.15',mapped_dst_port:'51822'},
+        src_interface:'inside',src_ip:'10.1.15.27',src_port:'51822',dst_interface:'outside',dst_ip:'203.0.113.50',dst_port:'443',
+        mapped_src_ip:'198.51.100.15',mapped_src_port:'51822',mapped_dst_ip:'203.0.113.50',mapped_dst_port:'443'},
     });
   });
 
