@@ -83,3 +83,37 @@ test('Auto Parser applies a lossless ChatGPT recovery across multi-token residua
     writeFileSync(process.env.H2_CHATGPT_OUT+'/runtime.lines',[SAMPLE,HOLDOUT,...RUNTIME].join('\n')+'\n');
   }
 });
+
+
+test('independent ChatGPT Assisted journey exports a statically accepted Regex with real backend',async({page})=>{
+  test.setTimeout(120_000);
+  await page.goto('/?workspace=chatgpt');
+  await page.getByLabel('ChatGPT local sample logs').fill(SAMPLE);
+  await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();
+  await expect(page.getByLabel('ChatGPT copyable prompt')).toBeVisible();
+  await page.getByLabel('ChatGPT result JSON').fill(reply(PATTERN));
+  await page.getByRole('button',{name:'Check ChatGPT Result'}).click();
+  await expect(page.getByLabel('ChatGPT result ready for testing')).toContainText('accepted for testing');
+  await page.getByLabel('Additional ChatGPT test logs').fill(HOLDOUT);
+  await page.getByLabel('Confirm test examples are different').check();
+  await page.getByRole('button',{name:'Test Proposed Fix'}).click();
+  await expect(page.getByLabel('ChatGPT fix test result')).toContainText('Overall test: PASS');
+  await page.getByLabel('Approve tested ChatGPT fix').check();
+  const apply=page.getByRole('button',{name:'Apply Fix & Create Parser Files'});
+  await expect(apply).toBeEnabled();
+  await apply.click();
+  const generated=page.getByLabel('ChatGPT created parser files');
+  await expect(generated).toContainText('Parser files created successfully',{timeout:60_000});
+  const [file]=await Promise.all([page.waitForEvent('download'),
+    generated.getByRole('button',{name:'Download customized_demo_firewall',exact:true}).click()]);
+  const ruby=await readFile(await file.path(),'utf8');
+  expect(ruby).toContain('def parserstudio_regex_cost_proven?');
+  const [conf]=await Promise.all([page.waitForEvent('download'),
+    generated.getByRole('button',{name:'Download customized_demo_firewall.conf'}).click()]);
+  expect(await readFile(await conf.path(),'utf8')).toMatch(/^\s+port 6801$/m);
+  if(process.env.H2_ASSISTED_OUT){
+    mkdirSync(process.env.H2_ASSISTED_OUT,{recursive:true});
+    writeFileSync(process.env.H2_ASSISTED_OUT+'/parser.rb',ruby);
+    writeFileSync(process.env.H2_ASSISTED_OUT+'/runtime.lines',[SAMPLE,HOLDOUT,...RUNTIME].join('\n')+'\n');
+  }
+});

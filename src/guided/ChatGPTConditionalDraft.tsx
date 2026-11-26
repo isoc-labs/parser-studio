@@ -4,7 +4,7 @@ import type {ParserDraft,SuiteResult} from '../model';
 import type {BackendCapabilities} from './backendCapabilities';
 import {fetchBackendCapabilities,assertBackendProjectSupported} from './backendCapabilities';
 import {toBackendProject} from './backendAdapter';
-import {validateBackendProject,generateBackendPair,type GeneratedPair} from './backendClient';
+import {validateBackendProject,assertBackendValidationAllowsExport,generateBackendPair,type GeneratedPair} from './backendClient';
 import {verifyGeneratedPair} from './artifactPackageClient';
 import ReviewedEventProfilesPanel from './ReviewedEventProfilesPanel';
 import {validateNamedLogs,type NamedLogType} from './namedLogTypes';
@@ -83,7 +83,7 @@ export default function ChatGPTConditionalDraft({
         throw new Error('Conditional routing is not representable by the backend.');
       assertBackendProjectSupported(adapted.project,capability!.value);
       const checked=await validateBackendProject(adapted.project);
-      if(!checked.ok)throw new Error('The backend rejected the conditional parser draft.');
+      assertBackendValidationAllowsExport(checked,adapted.project);
       const pair=await generateBackendPair(adapted.project);
       await verifyGeneratedPair(pair);
       setGenerated({identity,pair});

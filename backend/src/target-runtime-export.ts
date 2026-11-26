@@ -31,22 +31,22 @@ export function ruby24RegexRefusalDetail(pattern:unknown):string{
   return result.ok?"":TARGET_REGEX_EXPORT_MESSAGE+" Reason: "+RUBY24_REGEX_REJECTION_TEXT[result.reason]+".";
 }
 
-interface ExtractionRecord {
-  format?:unknown;
-  syslogBodyFormat?:unknown;
-  pattern?:unknown;
+/** Candidate-specific export decision; schema validity is a separate fact. */
+export function targetRegexExportIssue(extraction:unknown):{code:string;path:string;message:string}|null {
+  if(!extraction||typeof extraction!=="object"||Array.isArray(extraction))return null;
+  const value=extraction as {format?:unknown;syslogBodyFormat?:unknown;pattern?:unknown};
+  const usesRegex=value.format==="regex"||
+    ((value.format==="syslog_rfc3164"||value.format==="syslog_rfc5424")&&value.syslogBodyFormat==="regex");
+  if(!usesRegex)return null;
+  const cost=typeof value.pattern==="string"?analyzeRuby24RegexCost(value.pattern):null;
+  if(cost?.ok)return null;
+  return {code:cost?.reason??"REGEX_NOT_PORTABLE",path:"/extraction/pattern",
+    message:ruby24RegexRefusalDetail(value.pattern)};
 }
-function usesRegex(value:ExtractionRecord):boolean{
-  return value.format==="regex"||
-    (["syslog_rfc3164","syslog_rfc5424"].includes(String(value.format))&&
-     value.syslogBodyFormat==="regex");
-}
+
 /** True when the project uses Regex AND its pattern has no static cost proof. */
 export function requiresUnavailableTargetRegex(extraction:unknown):boolean {
-  if(!extraction||typeof extraction!=="object"||Array.isArray(extraction))return false;
-  const value=extraction as ExtractionRecord;
-  if(!usesRegex(value))return false;
-  return !(typeof value.pattern==="string"&&analyzeRuby24RegexCost(value.pattern).ok);
+  return targetRegexExportIssue(extraction)!==null;
 }
 
 /**

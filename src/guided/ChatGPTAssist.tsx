@@ -14,7 +14,7 @@ import {prepareAutoParserDraft} from './autoParserDraft';
 import {buildReviewableRecipe} from './parserRecipeV2';
 import {toBackendProject} from './backendAdapter';
 import {fetchBackendCapabilities,assertBackendProjectSupported} from './backendCapabilities';
-import {validateBackendProject,generateBackendPair,type GeneratedPair} from './backendClient';
+import {validateBackendProject,assertBackendValidationAllowsExport,generateBackendPair,type GeneratedPair} from './backendClient';
 import {verifyGeneratedPair} from './artifactPackageClient';
 import {compileReviewedRecipeV02,canonicalJson} from './recipeV2BackendClient';
 import {HelpTip,StageGuide} from './BeginnerHelp';
@@ -360,11 +360,6 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
   }
   async function generateVerifiedDraft(){
     if(!context||context.sample!==sample||!review?.ok||pending||busy||draft.eventProfiles)return;
-    if(review.candidate.sourceFormat==='regex'||review.candidate.bodyFormat==='regex'){
-      setGenerated(null);setRetryFailure(null);
-      setNotice('Browser parsing may pass, but native Regex parser export is blocked for the current Stellar Cyber 7.0 target (Ruby 2.4.9). This runtime has no bounded Regexp timeout. No files were generated; use a supported non-Regex source format.');
-      return;
-    }
     const recovery=review.report.mode==='FULL_RECOVERY';
     const baseline=recovery?null:await buildReviewableRecipe(sample,context.draft,context.suite);
     if(!recovery&&(!baseline||!baseline.ok)){setNotice('No validated baseline is available. No files generated.');return;}
@@ -396,7 +391,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       const cap=await fetchBackendCapabilities();
       assertBackendProjectSupported(adapted.project,cap);
       const validated=await validateBackendProject(adapted.project);
-      if(!validated.ok)throw new Error('Backend schema rejected the reviewed parser.');
+      assertBackendValidationAllowsExport(validated,adapted.project);
       const pair=await generateBackendPair(adapted.project);
       await verifyGeneratedPair(pair);
       const exact=await buildReviewableRecipe(sample,candidate,local);
@@ -412,10 +407,14 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       setGenerated({pair,draft:candidate,
         evidence:unchanged?'UNCHANGED':comparison!.evidence});
       setNotice('DRAFT parser files created after local checks. No deployment or target compatibility is implied.');
-    }catch{
-      setRetryFailure({failure:'NATIVE_VALIDATION_FAILED',
-        diagnostic:'NATIVE_VALIDATION_FAILED'});
-      setNotice('Parser Studio could not safely create files from this ChatGPT result. No files were released and no parser rules were changed.');
+    }catch(error){
+      const detail=error instanceof Error?error.message:'Parser creation failed.';
+      const reason=error&&typeof error==='object'?
+        (error as {reason?:string;code?:string}).reason??(error as {code?:string}).code:undefined;
+      const targetRejected=Boolean(reason?.startsWith('REGEX_')||reason==='TARGET_RUNTIME_REGEX_UNSUPPORTED');
+      setRetryFailure({failure:targetRejected?'RECIPE_UNSUPPORTED':'NATIVE_VALIDATION_FAILED',
+        diagnostic:reason??'NATIVE_VALIDATION_FAILED'});
+      setNotice((reason?reason+': ':'')+detail+' No files were released and no parser rules were changed.');
     }finally{setBusy(false);}
   }
   const download=(filename:string,content:string)=>{
@@ -424,12 +423,6 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
     anchor.href=url;anchor.download=filename;document.body.append(anchor);anchor.click();anchor.remove();
     window.setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
-  // A reviewed Regex can pass local and independent holdout examples,
-  // but it cannot produce a safe parser on the observed Ruby 2.4.9 target.
-  // This is a target/runtime limitation, never a request to try another
-  // Regex prompt or a claim that the browser preview was wrong.
-  const regexTargetBlocked=Boolean(review?.ok&&(
-    review.candidate.sourceFormat==='regex'||review.candidate.bodyFormat==='regex'));
   const baselineUnchanged=Boolean(review?.ok&&context&&
     review.report.addedMappings===0&&review.report.removedMappings===0&&
     review.report.changedStageCount===0);
@@ -569,15 +562,8 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
               ?'I reviewed the extracted fields and approve a sample-only DRAFT. No independent examples or target validation were performed.'
               :'I reviewed the test result and approve applying this fix.'}
           </label>}
-          {regexTargetBlocked&&<p className="auto-parser-warning" role="alert">
-            Regex passed only the browser-level review. Native parser files and
-            ZIP export are blocked for the current Stellar Cyber 7.0 target
-            (Ruby 2.4.9): bounded Regexp execution is unsupported.
-            Use a supported non-Regex source format; retrying the same
-            Regex through ChatGPT cannot enable this runtime capability.
-          </p>}
           <button type="button" className="auto-parser-primary"
-            disabled={regexTargetBlocked||busy||pending||
+            disabled={busy||pending||
               (!baselineUnchanged&&(!comparison?.qualified||!candidateApproval))}
             onClick={()=>{void generateVerifiedDraft();}}>
             {busy?'Creating parser files…':'Apply Fix & Create Parser Files'} <ArrowRight size={15}/>

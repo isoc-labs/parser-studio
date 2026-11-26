@@ -54,10 +54,7 @@
       "targetVerified": false
     }
   ],
-  "unsupportedTargetRuntime": [
-    "regex@stellar70-observed-ruby24",
-    "syslog-regex-body@stellar70-observed-ruby24"
-  ],
+  "targetRuntimeProfiles": "contracts/target-runtime-profiles.v1.json",
   "independentRuntimeProof": false,
   "stellar7IndexedProof": false,
   "independentSemanticOracle": "scripts/verification/independent-semantic-identity-oracle.ts",

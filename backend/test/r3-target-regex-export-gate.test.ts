@@ -53,9 +53,10 @@ test("standalone and RFC3164/5424 Regex without a static cost proof is browser-s
       assert.equal(requiresUnavailableTargetRegex(project.extraction),true);
       const validate=await post(base,"/api/v1/parser-pairs/validate",project);
       assert.equal(validate.status,200,format);
-      const validation=await validate.json() as {ok:boolean;targetExportSupported:boolean};
+      const validation=await validate.json() as {ok:boolean;targetExportSupported:boolean;targetExportIssues:Array<{code:string}>};
       assert.equal(validation.ok,true);
       assert.equal(validation.targetExportSupported,false);
+      assert.equal(validation.targetExportIssues[0]?.code,"REGEX_POLYNOMIAL_AMBIGUITY");
       const generate=await post(base,"/api/v1/parser-pairs/generate",project);
       assert.equal(generate.status,422,format);
       const refusal=await generate.json() as {error:string;issues:Array<{code:string;message:string}>};

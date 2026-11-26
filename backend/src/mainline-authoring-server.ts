@@ -14,7 +14,7 @@ import recipeSchema from "../schema/parser-recipe.v0.2.schema.json" with {type:"
 import type {PairExport} from "./types.js";
 import {HOST_CUSTOMIZED_TARGET, TARGET_REGEX_EXPORT_ERROR,
   requiresUnavailableTargetRegex,
-  pairIncludesUnavailableTargetRegex, ruby24RegexRefusalDetail} from "./target-runtime-export.js";
+  pairIncludesUnavailableTargetRegex, ruby24RegexRefusalDetail,targetRegexExportIssue} from "./target-runtime-export.js";
 
 /**
  * Shipping HTTP entrypoint: intentionally imports ONLY offline parser
@@ -260,10 +260,12 @@ async function handleOfflineRequest(req:IncomingMessage,res:ServerResponse):Prom
   try{
     const validated=validateProject(input);
     if(path==="/api/v1/parser-pairs/validate"){
+      const targetIssue=validated.ok?targetRegexExportIssue(
+        (input as {extraction?:unknown})?.extraction):null;
       send(res,validated.ok?200:422,{
         ...validated,
-        targetExportSupported:validated.ok&&!requiresUnavailableTargetRegex(
-          (input as {extraction?:unknown})?.extraction),
+        targetExportSupported:validated.ok&&targetIssue===null,
+        targetExportIssues:targetIssue?[targetIssue]:[],
         targetRuntimeProfile:HOST_CUSTOMIZED_TARGET.profile,
       });return;
     }

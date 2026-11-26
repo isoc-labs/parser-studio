@@ -10,7 +10,7 @@ import {describeCsvColumnNameProblem} from './csvColumnNames';
 import {fetchBackendCapabilities,assertBackendProjectSupported,
   type BackendCapabilities} from './backendCapabilities';
 import {fetchBackendSchemaGuide} from './backendSchemaGuide';
-import {validateBackendProject,generateBackendPair,type GeneratedPair} from './backendClient';
+import {validateBackendProject,assertBackendValidationAllowsExport,generateBackendPair,type GeneratedPair} from './backendClient';
 import {verifyGeneratedPair,packageGeneratedPair} from './artifactPackageClient';
 import {analyzeLogEnvelopes,assessEnvelopeCompilation} from './autoParserEnvelope';
 import {describeExcluded,readableEvents,type ExcludedEvents} from './readableEvents';
@@ -543,6 +543,7 @@ export default function AutoParser({
          issues:validated.issues.map(i=>i.code).slice(0,8)});
        return;
      }
+     assertBackendValidationAllowsExport(validated,translated.project);
      const generated=await generateBackendPair(translated.project);
      await verifyGeneratedPair(generated);
      if(token!==epoch.current||currentRef.current!==expected)return;
