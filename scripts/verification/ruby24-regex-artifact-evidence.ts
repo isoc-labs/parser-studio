@@ -6,6 +6,9 @@
 import {deflateSync} from 'node:zlib';
 import {compilePair} from '../../backend/src/compiler';
 import {sampleProject} from '../../backend/test/fixture';
+import {ACCEPTED,ADVERSARIAL_INPUTS} from '../../backend/test/ruby24-regex-cost-corpus';
+import {analyzeRuby24RegexCost} from '../../backend/src/ruby24-regex-cost';
+import {validateBoundedRegexPattern} from '../../backend/src/validate';
 import {ASA_CORPUS,ASA_PATTERN,applyAsaNormalization} from './cisco-asa-fixture';
 
 // Independently authored operator-style pattern (statically bounded: anchored,
@@ -71,7 +74,13 @@ const records=fixtures.map(({id,pattern,extraction})=>{
 if(process.argv[2]==='--private-payload'){
   // Outer compression keeps the private transport small: all artifacts share
   // most of their fixed template, so transmitting separately is unnecessary.
-  const input=JSON.stringify({contract:'parser-studio.synthetic-ruby24-regex.v1',records});
+  const costPatterns=ACCEPTED.map(pattern=>{
+    if(!analyzeRuby24RegexCost(pattern).ok||validateBoundedRegexPattern(pattern)!==null)
+      throw new Error('REGEX_COST_CORPUS_NO_LONGER_ACCEPTED');
+    return pattern;
+  });
+  const input=JSON.stringify({contract:'parser-studio.synthetic-ruby24-regex.v1',records,
+    costPatterns,costInputs:ADVERSARIAL_INPUTS});
   process.stdout.write(deflateSync(Buffer.from(input,'utf8')).toString('base64')+'\n');
 }else if(process.argv.length===2){
   console.log(JSON.stringify({

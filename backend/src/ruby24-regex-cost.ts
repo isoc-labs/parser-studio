@@ -10,11 +10,11 @@
  * generation time by construction.
  *
  * Model. The pattern is lowered to its Glushkov position automaton (one state
- * per consuming atom, no epsilon edges). A backtracking engine explores one
- * search-tree node per distinct path of the automaton, so its work on an input
- * of length n is the sum, over prefix lengths, of the number of live paths. We
- * accept a pattern only if that number is bounded by a pattern-dependent
- * constant, which gives O(n) work:
+ * per consuming atom, no epsilon edges). This abstraction merges syntactic
+ * paths through nested repetition, so the shared AST rejection rule must
+ * exclude repeated choices before it is used. The remaining automaton
+ * analysis conservatively rejects the following ambiguity classes; it is
+ * a restricted cost classification, not a general proof of Onigmo behavior:
  *   1. no exponential degree of ambiguity (EDA): no state p with two distinct
  *      cycles p -> p reading the same word;
  *   2. no infinite degree of ambiguity (IDA): no distinct states p, q with a
@@ -36,7 +36,7 @@
  * helper additionally refuses multi-line input and input over
  * RUBY24_REGEX_MAX_INPUT_BYTES, which the analysis assumes.
  */
-import {parsePortableRegexAst,portableRegexIssue,type PortableRegexNode}
+import {parsePortableRegexAst,portableRegexIssue,hasRepeatedChoice,type PortableRegexNode}
   from './portable-regex.js';
 
 export const RUBY24_REGEX_COST_CONTRACT='parser-studio.ruby24-regex-cost.v1';
@@ -49,7 +49,7 @@ const TRIPLE_BUDGET_NODES=1_500_000;
 export type Ruby24RegexRejection=
   'REGEX_NOT_PORTABLE'|'REGEX_TOO_MANY_POSITIONS'|'REGEX_NONDETERMINISTIC_CHOICE'|
   'REGEX_TOO_MANY_AMBIGUOUS_LOOPS'|'REGEX_EXPONENTIAL_AMBIGUITY'|
-  'REGEX_POLYNOMIAL_AMBIGUITY'|'REGEX_ANALYSIS_BUDGET';
+  'REGEX_POLYNOMIAL_AMBIGUITY'|'REGEX_ANALYSIS_BUDGET'|'REGEX_NESTED_REPETITION';
 
 export const RUBY24_REGEX_REJECTION_TEXT:Record<Ruby24RegexRejection,string>={
   REGEX_NOT_PORTABLE:"the pattern uses syntax outside the portable subset",
@@ -58,6 +58,7 @@ export const RUBY24_REGEX_REJECTION_TEXT:Record<Ruby24RegexRejection,string>={
   REGEX_TOO_MANY_AMBIGUOUS_LOOPS:"more than two repeats overlap what follows them, or an unanchored pattern also has an overlapping repeat",
   REGEX_EXPONENTIAL_AMBIGUITY:"the pattern can backtrack exponentially",
   REGEX_POLYNOMIAL_AMBIGUITY:"two repeats can consume the same text, which can backtrack quadratically; anchor with ^ and separate them with a literal",
+  REGEX_NESTED_REPETITION:"a repeated group contains another repetition or alternation; use separated named captures without nested repetition",
   REGEX_ANALYSIS_BUDGET:"the pattern is too complex to prove bounded",
 };
 
@@ -177,6 +178,7 @@ export function analyzeRuby24RegexCost(pattern:string):Ruby24RegexCost{
   if(portableRegexIssue(pattern))return {ok:false,reason:'REGEX_NOT_PORTABLE'};
   const parsed=parsePortableRegexAst(pattern);
   if(!parsed.ok)return {ok:false,reason:'REGEX_NOT_PORTABLE'};
+  if(hasRepeatedChoice(parsed.ast))return {ok:false,reason:'REGEX_NESTED_REPETITION'};
 
   const sets:CharSet[]=[];
   const follow:Array<Set<number>>=[];

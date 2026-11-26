@@ -1,5 +1,5 @@
 import {createPortableRegex,parsePortableRegexAst,portableRegexIssue,
-  portableRegexBytes,PORTABLE_REGEX_MAX_BYTES} from './portable-regex.js';
+  portableRegexBytes,PORTABLE_REGEX_MAX_BYTES,hasRepeatedChoice} from './portable-regex.js';
 import {READING_FAMILY_DISCRIMINATOR,supportsCanonicalClassificationOperator,validCanonicalSourcePath} from './canonical-operator-contract.js';
 import { Ajv } from "ajv";
 import {validManufacturerNamespace} from "./vendor-namespace.js";
@@ -13,54 +13,6 @@ const RESERVED = new Set(["stellar_log_index", "parser_err_msg", "parser_err_sta
   "parser_err_field", "msg_origin", "parserstudio_source",
   "parserstudio_event_family", "parserstudio_transport"]);
 const UNSAFE_PARTS = new Set(["__proto__", "constructor", "prototype"]);
-
-/** Fail closed on quantified groups containing another repetition.
- * Length limits alone do not bound backtracking (for example (a{1,3})+).
- * The browser worker independently imposes a wall-clock deadline.
- */
-function hasNestedQuantifiers(pattern:string):boolean {
-  const stack:{repeated:boolean;alternative:boolean}[]=[];
-  let characterClass=false;
-  for(let i=0;i<pattern.length;i++){
-    const char=pattern[i];
-    if(char==='\\'){i++;continue;}
-    if(char==='['&&!characterClass){characterClass=true;continue;}
-    if(char===']'&&characterClass){characterClass=false;continue;}
-    if(characterClass)continue;
-    if(char==='('){
-      stack.push({repeated:false,alternative:false});
-      if(pattern.startsWith('(?:',i)){i+=2;continue;}
-      if(pattern.startsWith('(?<',i)){
-        const end=pattern.indexOf('>',i+3);
-        if(end>=0){i=end;continue;}
-      }
-      continue;
-    }
-    if(char===')'){
-      const frame=stack.pop();
-      if(!frame)continue;
-      const suffix=pattern.slice(i+1);
-      const bound=/^\{(\d{1,8})(?:,(\d{0,8}))?\}/.exec(suffix);
-      const repeats=suffix.startsWith('+')||suffix.startsWith('*')||
-        Boolean(bound&&(bound[2]===''||Number(bound[2]??bound[1])>1));
-      if(repeats&&(frame.repeated||frame.alternative))return true;
-      if(stack.length){
-        if(frame.repeated||repeats)stack[stack.length-1]!.repeated=true;
-        if(frame.alternative)stack[stack.length-1]!.alternative=true;
-      }
-      continue;
-    }
-    if(!stack.length)continue;
-    if(char==='|')stack[stack.length-1]!.alternative=true;
-    if(char==='*'||char==='+'||char==='?'){
-      stack[stack.length-1]!.repeated=true;
-    }else if(char==='{'){
-      const bound=/^\{\d{1,8}(?:,\d{0,8})?\}/.exec(pattern.slice(i));
-      if(bound){stack[stack.length-1]!.repeated=true;i+=bound[0].length-1;}
-    }
-  }
-  return false;
-}
 
 /** Adjacent unbounded captures can overlap with polynomial backtracking
  * despite having no nested groups or identical literal atoms. Conservatively
@@ -92,7 +44,7 @@ export function validateBoundedRegexPattern(pattern: unknown): string | null {
     return unsupported;
   if (/\((?:\?:)?[^()]*\|[^()]*\)(?:[+*]|\{\d+(?:,\d*)?\})/.test(pattern))
     return unsupported;
-  if(hasNestedQuantifiers(pattern))return unsupported;
+  if(hasRepeatedChoice(ast.ast))return unsupported;
   if(hasAdjacentQuantifiedCaptures(pattern))return unsupported;
   if (/([A-Za-z0-9])(?:[*+])\1(?:[*+])/.test(pattern)) return unsupported;
   for (const match of pattern.matchAll(/\{(\d{1,8})(?:,(\d{0,8}))?\}/g)) {

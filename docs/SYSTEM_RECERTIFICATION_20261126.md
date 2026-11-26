@@ -43,3 +43,22 @@ LIMITATION requires evidence and considered alternatives. Native synthetic
 qualification is not proprietary target validation. Each work item requires
 red/green evidence and exact candidate SHA; independent review and approved
 deployment remain separate gates.
+
+## W1 checkpoint — shared AST and native cost corpus
+
+- RED: new 11-pattern nested-choice classification test failed on the first
+  counterexample at the baseline (accepted, zero ambiguous loops).
+- GREEN: shared AST rejection used by cost classifier, Browser preview and
+  backend schema. The old independent nested-quantifier scans were removed;
+  other existing safety checks retained. A conservative rejection is not a
+  universal proof of runtime safety.
+- Focused backend classifier/portable/export suites: 30/30 before the
+  additional boundary regression; export suite then 7/7 (including the new
+  direct validate/generate/compiler negative test). Browser regex suites 47/47.
+- Local Ruby 2.4.9p362 chroot runner: accepted cost corpus 50 probes, existing
+  generated-artifact checks 28/28; CI's sealed Ruby 2.4/3.2 gate now consumes
+  the same accepted fixture corpus. Existing ASA oracle is NOT recertified.
+- Backend typecheck PASS; full web typecheck attempt timed out at the remote
+  command deadline, no PASS claimed. Full CI and independent verification open.
+- Frontend legacy blanket denial remains until W2/W3 changes and required
+  positive/negative shipping journey tests are verified.

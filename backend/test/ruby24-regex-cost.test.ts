@@ -1,18 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {analyzeRuby24RegexCost,RUBY24_REGEX_MAX_INPUT_BYTES} from "../src/ruby24-regex-cost.js";
+import {analyzeRuby24RegexCost} from "../src/ruby24-regex-cost.js";
 import {createPortableRegex} from "../src/portable-regex.js";
 
-const ftd=String.raw`^.*%FTD-\d-(?<event_id>\d+): Built inbound (?<protocol>TCP|UDP) connection \d+ for \w+:(?<srcip>[\d.]+)/(?<srcport>\d+) \([\d.]+/\d+\) to \w+:(?<dstip>[\d.]+)/(?<dstport>\d+) \([\d.]+/\d+\)$`;
-
-/** Patterns a real operator writes: anchored, delimiter-separated, one scan loop. */
-const ACCEPTED=[
-  ftd,
-  String.raw`^(?<ts>\w+ \d+ [\d:]+) (?<host>\S+) (?<proc>[\w-]+)\[(?<pid>\d+)\]: (?<msg>.*)$`,
-  String.raw`^src=(?<src>[\d.]+) dst=(?<dst>[\d.]+) proto=(?<proto>\w+)$`,
-  String.raw`^(?<action>ACCEPT|DENY),(?<srcip>\d+\.\d+\.\d+\.\d+),(?<port>\d{1,5})$`,
-  String.raw`^(?<a>[^,]*),(?<b>[^,]*),(?<c>[^,]*)$`,
-];
+import {ACCEPTED,ADVERSARIAL_INPUTS} from './ruby24-regex-cost-corpus.js';
 
 /** Each entry must be refused for its documented reason. */
 const REJECTED:Array<[string,string]>=[
@@ -44,17 +35,29 @@ test("non-portable syntax is refused before any cost analysis",()=>{
 });
 
 test("accepted patterns stay fast on adversarial input under an independent backtracking engine",()=>{
-  const n=RUBY24_REGEX_MAX_INPUT_BYTES;
-  const attacks=["a".repeat(n),"1".repeat(n),
-    "%FTD-6-1: Built inbound TCP connection 1 for a:1.1/1 ".repeat(Math.floor(n/52)),
-    ",".repeat(n),"a=1 ".repeat(n/4),"x ".repeat(n/2),"1.".repeat(n/2)];
   for(const pattern of ACCEPTED){
     const regex=createPortableRegex(pattern);
-    for(const input of attacks){
+    for(const input of ADVERSARIAL_INPUTS){
       const started=process.hrtime.bigint();
       regex.exec(input);
       const millis=Number(process.hrtime.bigint()-started)/1e6;
       assert.ok(millis<250,`${millis.toFixed(1)}ms for ${pattern.slice(0,40)} on ${input.slice(0,12)}`);
     }
+  }
+});
+
+// The position automaton collapses repeated traversal of one syntactic atom.
+// Nested choices must be rejected before that abstraction loses multiplicity.
+test("nested repetition cannot obtain a native static cost proof",()=>{
+  const patterns=[
+    "^(a+)+$", "^(a*)*$", "^([a-z]+)+$", "^(a+){2,}$",
+    String.raw`^(\w+\s?)*$`, String.raw`^(\d+)*$`,
+    "^(?<value>(?:a+)+)$", "^(?<value>(?:(?:a?)){2,8})$",
+    "^(?<value>(?:a|b)+)$", "^(?<value>(?:a{2})+)$",
+    "^(?<value>(?:a*){2})$",
+  ];
+  for(const pattern of patterns){
+    const result=analyzeRuby24RegexCost(pattern);
+    assert.deepEqual(result,{ok:false,reason:"REGEX_NESTED_REPETITION"},pattern);
   }
 });

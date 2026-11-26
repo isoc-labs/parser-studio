@@ -144,3 +144,21 @@ test("a forged proof marker cannot export an unbounded Regex pair",async()=>{
     assert.equal(archive.status,422);
   });
 });
+
+
+test("repeated choices fail closed at each shipping generation boundary",async()=>{
+  await runWithServer(async base=>{
+    const pattern="^(?<value>(?:a+)+)$";
+    for(const format of ["regex","syslog_rfc3164","syslog_rfc5424"] as const){
+      const project=regexProject(format,pattern);
+      assert.equal(requiresUnavailableTargetRegex(project.extraction),true);
+      const validated=await post(base,"/api/v1/parser-pairs/validate",project);
+      assert.equal(validated.status,422);
+      const body=await validated.json() as {ok:boolean;targetExportSupported:boolean};
+      assert.equal(body.ok,false);
+      assert.equal(body.targetExportSupported,false);
+      assert.equal((await post(base,"/api/v1/parser-pairs/generate",project)).status,422);
+      assert.throws(()=>compilePair(project));
+    }
+  });
+});
