@@ -269,3 +269,18 @@ deployment remain separate gates.
   PASS, prior exact-head native and six browser jobs PASS. Prior web-quality
   failed solely on owner template approval, not bypassed. Latest exact-head
   CI and independent semantic/native coverage remain separate.
+
+## W8 — full Chromium catalogue census
+
+- Registered all 523 unique discovered file/title pairs. Required 510; only
+  six retired target-UI cases and seven historical fixed-public-URL cases
+  have explicit non-required dispositions. All six exact-source shards enable
+  scoped authoring and must reconcile every case to its declared outcome.
+- Scoped authoring suite: 66 passed; two concurrent-output trace-file
+  teardown failures rerun with isolated output directories, both passed.
+  No application assertion failed in those two cases.
+- Receipt gate negative tests 9/9 and real-report receipt preparation passed.
+- Shared package surface retains missing-capability and corrupt-SHA refusal
+  with a visible alert and existing loose pair; real browser fault tests 2/2.
+- Full exact-HEAD CI remains required; catalogue disposition does not imply
+  independent vendor semantic verification.

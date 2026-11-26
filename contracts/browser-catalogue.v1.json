@@ -1,0 +1,2634 @@
+{
+  "contract": "parser-studio.browser-catalogue.v1",
+  "scope": "Current exact-source Chromium catalogue; new, renamed or removed tests require explicit reviewed inventory change. Historical public-only tests do not establish current deployment proof.",
+  "cases": [
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "Review Fields remains locked before Analyze Logs on original Docker source",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "guided source-only block: Kubernetes CRI original wire messages",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "guided source-only block: Linux audit serial stream",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "guided source-only block: RFC6587 octet-counted JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "guided source-only block: RFC7464 original JSON text sequence",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "guided source-only block: W3C original schema-dependent stream",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "guided source-only block: Zeek original declared TSV stream",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "guided source-only block: systemd journal text-export framing",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "normal Analyze Logs review remains available for supported ordinary JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-docker-compilability-probe-20261019.spec.ts",
+      "title": "original Docker source PARTIAL cannot become a downloadable parser through Analyze Logs",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-mixed-original-source-20261019.spec.ts",
+      "title": "Advanced input: ordinary security JSON followed by Docker original JSON-file is not a supported DRAFT",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/advanced-mixed-original-source-20261019.spec.ts",
+      "title": "Advanced named types: eligible Threat/User entries do not qualify a later Docker source wrapper",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/ai-field-correction.spec.ts",
+      "title": "source field correction requires independent ChatGPT test and explicit approval before any DRAFT change",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/ai-field-correction.spec.ts",
+      "title": "unsupported ChatGPT split operator fails closed without changing parsed source or creating a DRAFT",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/ai-split-merge-backend.spec.ts",
+      "title": "current Auto Parser reviews bounded AI split and merge with independent holdouts before generating DRAFT files",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/auto-parser-csv-review.spec.ts",
+      "title": "Auto Parser reviews the CSV subset of a mixed structured sample without treating JSON or KV as CSV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/auto-parser-csv-review.spec.ts",
+      "title": "quoted CSV with equals signs inside URL fields remains one CSV family",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/auto-parser-three-step.spec.ts",
+      "title": "FULL JSON extraction auto-retains a vendor field and permits a manual override",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/auto-parser-three-step.spec.ts",
+      "title": "denied backend metadata cannot release parser files or leak the source",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/auto-parser-three-step.spec.ts",
+      "title": "desktop keyboard controls keep source local and enter Reviewed Fields without extra mode",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/auto-parser-three-step.spec.ts",
+      "title": "mixed families and unknown logs are not dropped or transmitted to validation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/auto-parser-three-step.spec.ts",
+      "title": "new visitor sees only the two supported creation methods and a four-step Auto Parser",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/auto-parser-three-step.spec.ts",
+      "title": "novice reviews original/extracted/normalized samples, keeps source, and sees safe mapping provenance",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/auto-parser-three-step.spec.ts",
+      "title": "partial source stays at Add Logs with its exact residual visible and creation locked",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "Cisco FTD recovery completes the user + ChatGPT + holdout + explicit approval loop",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "a comma inside Syslog prose does not expose positional CSV controls",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "beginner mode offers reversible Parser Set groups for repeated unknown shapes",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "beginner sees a clear UI/backend version mismatch instead of a vague backend unavailable error",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "comma-bearing ASA recovery clears stale CSV review and enables Review Fields",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "complete structured logs get a simple success result without technical status language",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "first-time user gets one Analyze action, plain failure location and a ready ChatGPT prompt",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "metadata-only source anomaly explains that no bytes were dropped and does not invent an extraction fix",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "structured partial result exposes strict ParserRecipe paste and rejects an invalid AI result",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "unconfirmed comma-delimited candidates do not falsely claim positional CSV columns",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "unknown non-Syslog text recommends a bounded text pattern without inventing Syslog context",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-analysis.spec.ts",
+      "title": "vendor-prefixed JSON offers bounded local authoring without an unsafe CSV merge",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-common-firewalls.spec.ts",
+      "title": "BIG-IP ASM comma KV is read completely and its leaf names drive Stellar suggestions",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-common-firewalls.spec.ts",
+      "title": "common PAN-OS Traffic syslog is auto-adopted and mapped without a repair click",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-common-firewalls.spec.ts",
+      "title": "common year-bearing ASA 302013 wrapper is auto-adopted as a complete event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-compiler-gap.spec.ts",
+      "title": "source extraction success is not falsely called parser-ready when the DRAFT compiler still needs a rule",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-csv-neutral.spec.ts",
+      "title": "beginner can preserve PAN-OS positional values with neutral columns without guessing semantics",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-csv-neutral.spec.ts",
+      "title": "shape diagnostics keep valid groups visible when another event has malformed CSV quoting",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-csv-neutral.spec.ts",
+      "title": "shape diagnostics report rows above the 100-column parser limit without enabling confirmation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-csv-neutral.spec.ts",
+      "title": "source-complete PAN-OS positional CSV still asks for neutral column approval before review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-csv-neutral.spec.ts",
+      "title": "source-complete variable-width positional CSV explains that one schema cannot cover every row",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-guided-navigation.spec.ts",
+      "title": "new user cannot skip required analysis, but reaches normal review without advanced mode",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-guided-navigation.spec.ts",
+      "title": "the single Analyze Logs workflow retains beginner contextual help",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-guided-ux.spec.ts",
+      "title": "first-time user sees one guided path, contextual help, and no empty technical counters",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-guided-ux.spec.ts",
+      "title": "single Analyze path shows contextual tools without the removed advanced-mode switch",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-no-research-tools-20261023.spec.ts",
+      "title": "first-time Auto Parser keeps only actionable options, not research-only grouping tools",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-regex-recovery.spec.ts",
+      "title": "beginner uses the bounded local Cisco FTD rule before unnecessary ChatGPT recovery",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-source-header-clarity-20261023.spec.ts",
+      "title": "W3C header metadata and data events are explained separately without claiming native parser readiness",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-source-header-clarity-20261023.spec.ts",
+      "title": "Zeek header metadata and data events are explained separately without claiming native parser readiness",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/beginner-source-header-clarity-20261023.spec.ts",
+      "title": "positional CSV summary updates from needing review to reviewed and ready",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/browser-full-history-restore-20261020.spec.ts",
+      "title": "full verified history restores saved working copies without discarding unsaved changes",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/browser-local-versions.spec.ts",
+      "title": "a browser-only version never synchronizes to a second browser profile",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/browser-local-versions.spec.ts",
+      "title": "browser-local versions retain original logs, compare snapshots and restore earlier experiments",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/browser-local-versions.spec.ts",
+      "title": "multiple field-mapping experiments remain independently restorable from local history",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/browser-local-versions.spec.ts",
+      "title": "saved version can be deleted without changing current logs",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/browser-rejected-local-version-recovery-20261020.spec.ts",
+      "title": "a full local history with rejected rows can recover space without losing verified versions",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-adaptive-single-sample-20261024.spec.ts",
+      "title": "one security log → rejected first ChatGPT JSON → adaptive retry → source-only DRAFT native pair",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-adaptive-single-sample-20261024.spec.ts",
+      "title": "retry limit stops after third failed model response without changing parser",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-auto-metadata-parity-20261026.spec.ts",
+      "title": "Auto Parser metadata is the sole shared source for ChatGPT prompt and CONF port",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-auto-metadata-parity-20261026.spec.ts",
+      "title": "ChatGPT DRAFT native files retain the shared manufacturer, product, version and listener port",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-auto-metadata-parity-20261026.spec.ts",
+      "title": "mobile ChatGPT metadata exposes the same four controls without horizontal overflow",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-auto-metadata-parity-20261026.spec.ts",
+      "title": "untouched demo metadata is not asserted to be real manufacturer evidence in the AI prompt",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-candidate-failure-explained-20261026.spec.ts",
+      "title": "a novice sees exact field-loss reason instead of generic failed status",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-candidate-failure-explained-20261026.spec.ts",
+      "title": "a novice sees why header-dependent source is unsupported without generating files",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-controlled-result-matrix-20261023.spec.ts",
+      "title": "controlled Full Recovery CSV candidate undergoes independent holdout and explicit approval",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-controlled-result-matrix-20261023.spec.ts",
+      "title": "controlled baseline-model answer and actual UI compiler: CEF security event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-controlled-result-matrix-20261023.spec.ts",
+      "title": "controlled baseline-model answer and actual UI compiler: CloudTrail JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-controlled-result-matrix-20261023.spec.ts",
+      "title": "controlled baseline-model answer and actual UI compiler: Defender XDR JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-controlled-result-matrix-20261023.spec.ts",
+      "title": "controlled baseline-model answer and actual UI compiler: Fortinet KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-controlled-result-matrix-20261023.spec.ts",
+      "title": "controlled baseline-model answer and actual UI compiler: Korean JSON values",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-controlled-result-matrix-20261023.spec.ts",
+      "title": "controlled baseline-model answer and actual UI compiler: LEEF authentication",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-controlled-result-matrix-20261023.spec.ts",
+      "title": "controlled baseline-model answer and actual UI compiler: Suricata JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-controlled-result-matrix-20261023.spec.ts",
+      "title": "unsupported Windows XML accepts precise human REVIEW_REQUIRED diagnosis but never creates a parser",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-copy-paste-contract-20261024.spec.ts",
+      "title": "Auto Parser Fix with ChatGPT is a first-paste-complete source-bound request: HDFS unsupported semantics",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-copy-paste-contract-20261024.spec.ts",
+      "title": "Auto Parser Fix with ChatGPT is a first-paste-complete source-bound request: Snort partial alert",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-copy-paste-contract-20261024.spec.ts",
+      "title": "raw recovery prompt is independently copyable and includes exact versioned stage syntax",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-copy-paste-contract-20261024.spec.ts",
+      "title": "untrusted log delimiters never prematurely end the SHA-scoped original source",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-event-profile-scope-20261123.spec.ts",
+      "title": "ChatGPT Assisted improves one event type of a multi-type parser and generates one parser",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-first-viewport-and-steps-20261023.spec.ts",
+      "title": "ChatGPT Assisted starts with original logs and shows ordered copy/paste steps at 1280",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-first-viewport-and-steps-20261023.spec.ts",
+      "title": "ChatGPT Assisted starts with original logs and shows ordered copy/paste steps at 1440",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-full-recovery.spec.ts",
+      "title": "RAW_ONLY ChatGPT recovery reaches verified DRAFT Ruby and CONF through the real backend",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-h2-residuals-20261125.spec.ts",
+      "title": "Auto Parser applies a lossless ChatGPT recovery across multi-token residual regions and refuses lossy ones (H-2)",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-h2-residuals-20261125.spec.ts",
+      "title": "independent ChatGPT Assisted journey exports a statically accepted Regex with real backend",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-irregular-hints-20261024.spec.ts",
+      "title": "Logcat prompt carries producer-grammar hints without inventing year, action or values",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-irregular-hints-20261024.spec.ts",
+      "title": "irregular HDFS-like logs produce bounded value-free ChatGPT review hints",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-irregular-hints-20261024.spec.ts",
+      "title": "unsupported free prose does not gain imaginary parser grammar",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-jsonata-event-profile-20261123.spec.ts",
+      "title": "ChatGPT JSONata mapping changes one event type of a multi-type parser and the generated parser",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-key-outside-region-20261125.spec.ts",
+      "title": "ChatGPT Assisted reads a pipe-separated key=value log: the prompt names what failed, lossy replies are refused, the lossless reply is applied",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-prompt-source-evidence-20261023.spec.ts",
+      "title": "W3C data events differ from original physical records in a safe manually copied prompt",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-prompt-source-evidence-20261023.spec.ts",
+      "title": "Zeek data events differ from original physical records in a safe manually copied prompt",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-prompt-source-evidence-20261023.spec.ts",
+      "title": "normal JSON prompt contains local grammar evidence, and unchanged baseline does not claim untested holdout",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-prompt-source-evidence-20261023.spec.ts",
+      "title": "unsupported freeform Snort syntax stays unrecognized instead of making up grammar",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-q31-unmapped-20261124.spec.ts",
+      "title": "ChatGPT Assisted refuses wrong replies and keeps the column a reply leaves unmapped (Q3-1)",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-reviewed-conditional-generation-20261021.spec.ts",
+      "title": "ChatGPT Assisted compiles one previously reviewed conditional parser for three independent types",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-security-event-diversity-20261024.spec.ts",
+      "title": "one security event type cannot claim multi-type product coverage",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-security-event-diversity-20261024.spec.ts",
+      "title": "security log baseline fields remain explicitly protected without echoing source values in notes",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-security-event-diversity-20261024.spec.ts",
+      "title": "security product multi-event prompt includes original type coverage without inventing event mappings: FortiGate firewall/IPS/AV/VPN",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-security-event-diversity-20261024.spec.ts",
+      "title": "security product multi-event prompt includes original type coverage without inventing event mappings: Suricata alert/http/dns/flow",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-security-json-order-native-20261024.spec.ts",
+      "title": "a security parser from an unedited valid first reply compiles despite JSON property ordering",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-solution-multitype-favicon-20261021.spec.ts",
+      "title": "ChatGPT Assisted preserves reviewed multi-type solution context and serves the real favicon",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-mapping-correction-20261023.spec.ts",
+      "title": "controlled vendor mapping correction, real prompt, real compiler: CloudTrail API operation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-mapping-correction-20261023.spec.ts",
+      "title": "controlled vendor mapping correction, real prompt, real compiler: FortiGate device identity",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-mapping-correction-20261023.spec.ts",
+      "title": "controlled vendor mapping correction, real prompt, real compiler: Suricata alert signature",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: AWS CloudTrail",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: ArcSight CEF IDS",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Check Point Firewall",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Cisco ASA session",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Cisco Umbrella DNS",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: CrowdStrike Falcon",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: F5 ASM WAF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Fortinet FortiGate traffic",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: IBM QRadar LEEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Juniper SRX RT_FLOW",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Korean UTF-8 EDR",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Microsoft Defender XDR",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Multitype JSON threat/user/asset",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Okta System Log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Palo Alto PAN-OS traffic",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Snort alert",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Suricata EVE alert",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Unsupported Windows Event XML",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: W3C IIS WAF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: WatchGuard Firebox",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Zeek connection TSV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/chatgpt-vendor-prompt-matrix-20261023.spec.ts",
+      "title": "beginner→Auto→ChatGPT prompt fidelity: Zscaler ZIA Proxy",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/common-security-logs.spec.ts",
+      "title": "BIG-IP ASM KV maps network fields but keeps HTTPS application label vendor-local",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/common-security-logs.spec.ts",
+      "title": "ChatGPT Assisted keeps original user logs and provides warning instead of fake redaction example",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/common-security-logs.spec.ts",
+      "title": "common EDR JSON gets automatic Stellar mappings instead of leaving every field vendor-only",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/common-security-logs.spec.ts",
+      "title": "common PAN-OS traffic syslog is parsed automatically and maps core fields",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/common-security-logs.spec.ts",
+      "title": "entered manufacturer product and version control generated parser names and metadata",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/common-security-logs.spec.ts",
+      "title": "single-line logs retain accurate event accounting without an obsolete multi-line tool",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/common-security-logs.spec.ts",
+      "title": "year-bearing Cisco ASA wrapper is parsed before the ASA body",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/d2-pri-cef-journey-20261125.spec.ts",
+      "title": "D-2: RFC 5424 messages that only claim CEF are not completely parsed, so nothing is generated from them alone",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/d2-pri-cef-journey-20261125.spec.ts",
+      "title": "D-2: with a plain message in the sample, the parser keeps such messages whole with their envelope",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/d2-pri-cef-journey-20261125.spec.ts",
+      "title": "a bare PRI before CEF (<189>CEF:0| and <189>CEF: 0|) is read as CEF with the PRI",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-fortigate-multiple-types-20261104.spec.ts",
+      "title": "published FortiGate traffic + web filter + IPS samples in one reviewed parser draft",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-jsonata-mapping-assisted-20261104.spec.ts",
+      "title": "Juniper ChatGPT JSONata review protects a user-edited mapping and blocks unsafe proposals",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-full-authoring-20261104.spec.ts",
+      "title": "documentation full DRAFT authoring 01-juniper-srx.log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-full-authoring-20261104.spec.ts",
+      "title": "documentation full DRAFT authoring 04-fortigate-threat.log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-full-authoring-20261104.spec.ts",
+      "title": "documentation full DRAFT authoring 04-fortigate-traffic.log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-full-authoring-20261104.spec.ts",
+      "title": "documentation full DRAFT authoring 05-relay-forwarded.log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-full-authoring-20261104.spec.ts",
+      "title": "documentation full DRAFT authoring 05-relay-holdout.log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-full-authoring-20261104.spec.ts",
+      "title": "documentation full DRAFT authoring 06-panos-traffic-issue.log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "01-juniper-srx.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "02-sophos-xg.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "03-snort-alert.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "03-snort-holdout.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "04-fortigate-threat.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "04-fortigate-traffic.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "05-relay-forwarded.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "05-relay-holdout-original.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "05-relay-holdout.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "05-relay-original.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "06-panos-traffic-issue.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-practice-inventory-20261104.spec.ts",
+      "title": "07-elasticsearch-java-error.log real Chromium novice analysis and field mapping inventory",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/docs-snort-assisted-20261104.spec.ts",
+      "title": "published Snort original plus reviewed recipe and independent holdout, real browser and backend",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/documented-vendor-map-audit-20261109.spec.ts",
+      "title": "documented security-log source and mapping review · aws_cloudtrail_consolelogin",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/documented-vendor-map-audit-20261109.spec.ts",
+      "title": "documented security-log source and mapping review · fortinet-008",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/documented-vendor-map-audit-20261109.spec.ts",
+      "title": "documented security-log source and mapping review · fortinet-021",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/documented-vendor-map-audit-20261109.spec.ts",
+      "title": "documented security-log source and mapping review · fortinet-024",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/documented-vendor-map-audit-20261109.spec.ts",
+      "title": "documented security-log source and mapping review · fortinet_fortios_system",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/documented-vendor-map-audit-20261109.spec.ts",
+      "title": "documented security-log source and mapping review · fortinet_fortios_traffic",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/documented-vendor-map-audit-20261109.spec.ts",
+      "title": "documented security-log source and mapping review · suricata_eve_alert",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/evidence-recovery.spec.ts",
+      "title": "ordinary Auto Parser review never exposes Test Lab, Interflow or sensor commands",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/evidence-recovery.spec.ts",
+      "title": "removed owner evidence endpoints fail closed with no injected authorization",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/existing-parser-review.spec.ts",
+      "title": "Auto Parser offers only source-driven creation, not legacy parser import or inspection",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/explicit-multi-log-input.spec.ts",
+      "title": "invalid, empty or duplicate named groups fail closed and preserve source",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/explicit-multi-log-input.spec.ts",
+      "title": "named log input stays inside narrow viewport",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/explicit-multi-log-input.spec.ts",
+      "title": "named type uploads replace only selected type and local versions restore labels",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/explicit-multi-log-input.spec.ts",
+      "title": "novice adds three named types and creates one reviewed conditional DRAFT",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/first-time-complete-auto-journey-20261023.spec.ts",
+      "title": "a first-time desktop user saves logs, generates actual files, and restores the source",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/g5-reserved-names-journey-20261125.spec.ts",
+      "title": "G-5: JSON members named __proto__ and constructor, and a dotted key, are parsed and kept",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/g5-reserved-names-journey-20261125.spec.ts",
+      "title": "G-5: key=value fields named __proto__, constructor and prototype are parsed and kept",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/generic-json-duplicate-browser-20261021.spec.ts",
+      "title": "real browser Generic Structural decoder does not lose duplicate JSON members in wrapped records",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/generic-json-duplicate-source-20261021.spec.ts",
+      "title": "duplicate JSON fields inside a recognized generic wrapper never become a generated success",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/generic-json-duplicate-source-20261021.spec.ts",
+      "title": "separate JSON objects with the same member names remain reviewable without changing source",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "a manufacturer name with an unsupported character explains the one thing to change",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · arcsight_cef_basic_v0",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · arcsight_cef_escaped_equals",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · arcsight_cef_escaped_header_pipe",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · aws_cloudtrail_consolelogin",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · fortinet-008",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · fortinet-021",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · fortinet-024",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · fortinet_fortios_system",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · fortinet_fortios_traffic",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · meraki_mr_flows_allow",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · meraki_mx_flows_pattern",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · meraki_mx_gp_firewall",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · sophos_sfw_antivirus_ftp",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/golden-vendor-execution-20261110.spec.ts",
+      "title": "golden vendor log executes to the documented values · suricata_eve_alert",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "AP2 novice flow compiles a real backend DRAFT pair without choosing parser syntax",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "Auto Parser mixed CSV compiles reviewed DRAFT Ruby and CONF without replay or source egress",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "ChatGPT Assisted: visible source warning -> manual original-log prompt -> reviewed exact DRAFT pair",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "Map Fields source tree supports an explicit Stellar selection and a same-head Ruby/CONF DRAFT",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "P0 novice confirms strict LF LF framed TCP Java exceptions and generates exact backend DRAFT files",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "P0 strict RFC3164 wrapped CEF/LEEF + standalone JSON/KV compiles actual Native-qualified backend with yearless policy",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "P0 strict RFC5424 JSON/KV wrapped + standalone JSON/KV mixed compiles exact Native-qualified backend",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "P0 strict mixed RFC3164 TAG KV plus standalone JSON/KV compiles exact pinned backend without timestamp guessing",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "generated Auto Parser results retain only local versions, never a target or sensor operation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "invalid projects, malformed HTTP and foreign owner reads cannot fake an artifact PASS",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated Test Lab and Interflow: independent authorizations reject forged readback, never send a real packet",
+      "disposition": "RETIRED_TARGET_UI",
+      "reason": "Server-operated target history, Test Lab, replay and indexed lookup are excluded by current PS-003."
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated expired status: a verified terminal run cannot offer Stop, Resume, or sensor transmission",
+      "disposition": "RETIRED_TARGET_UI",
+      "reason": "Server-operated target history, Test Lab, replay and indexed lookup are excluded by current PS-003."
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated legacy ZIP: a tampered real backend SHA blocks Auto Parser ZIP download without losing DRAFT pair",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated legacy ZIP: missing package capability fails closed before any backend ZIP POST",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated legacy field safety: invalid in-place Auto mapping disables generation and can be repaired without Wizard",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated legacy mapping safety: overlapping normalized destinations cannot reach backend until repaired in place",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated owner denial: invalid, foreign, and forged run replies never restore a session or leak raw data",
+      "disposition": "RETIRED_TARGET_UI",
+      "reason": "Server-operated target history, Test Lab, replay and indexed lookup are excluded by current PS-003."
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated owner-scoped history: real backend 403 and forged foreign revision metadata never leak into Auto result",
+      "disposition": "RETIRED_TARGET_UI",
+      "reason": "Server-operated target history, Test Lab, replay and indexed lookup are excluded by current PS-003."
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated recovery race: editing a run ID while lookup is pending cannot restore a stale session",
+      "disposition": "RETIRED_TARGET_UI",
+      "reason": "Server-operated target history, Test Lab, replay and indexed lookup are excluded by current PS-003."
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "migrated recovery: reload needs a manual owned run GET, and Stop survives both paths without Start",
+      "disposition": "RETIRED_TARGET_UI",
+      "reason": "Server-operated target history, Test Lab, replay and indexed lookup are excluded by current PS-003."
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "mixed RFC5424 wrapped CEF and LEEF + standalone JSON compile against the exact Native-qualified backend",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "real same-origin schema, capabilities and independent default-deny authorizations",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "removed local replay cannot send events or resurrect drafts during navigation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "same synthetic sample: Auto Parser -> live backend validate/generate -> ZIP and SHA downloads",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "same-head backend exports only statically bounded Ruby2.4 Regex and refuses the rest with a reason",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "same-head public backend refuses legacy name-only mapping API",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/integrated-backend.spec.ts",
+      "title": "tampered real backend generated SHA is rejected in Auto Parser without deployment",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/irregular-real-multipass-review-20261024.spec.ts",
+      "title": "real local Python Multi-Pass preserves irregular source framing and review-only semantics",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue210-e2e.spec.ts",
+      "title": "Issue #210 ECS root timestamp remains reviewable through the JSONata UI and DRAFT backend",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue210-e2e.spec.ts",
+      "title": "Issue #210 rejects source events exceeding the configured 8192-byte receiver limit",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue210-e2e.spec.ts",
+      "title": "Issue #210 requires explicit TCP LF LF framing for pretty-printed JSON events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue212214-e2e.spec.ts",
+      "title": "Issue #212 malformed Syslog returns bounded preview instead of HTTP 422",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue212214-e2e.spec.ts",
+      "title": "Issue #214 physical RS inside key value cannot enable false-green review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue215-header-source-e2e.spec.ts",
+      "title": "Issue #215 browser isolates malformed Syslog envelope 0",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue215-header-source-e2e.spec.ts",
+      "title": "Issue #215 browser isolates malformed Syslog envelope 1",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue215-header-source-e2e.spec.ts",
+      "title": "Issue #215 browser isolates malformed Syslog envelope 2",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue215-header-source-e2e.spec.ts",
+      "title": "Issue #215 browser isolates malformed Syslog envelope 3",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue217-mapping-budget-e2e.spec.ts",
+      "title": "Issue #217 late invalid official IP blocks mapping after optional-field warnings are suppressed",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue217-mapping-budget-e2e.spec.ts",
+      "title": "Issue #217 optional fields remain nonblocking for all valid IP values",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue232-semantic-auto-parser.spec.ts",
+      "title": "Issue #232 original tutorial: shared numeric port aliases compile to DRAFT pair",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue270-namespace-parity.spec.ts",
+      "title": "manufacturer whitespace preserves preview/native namespace \" Audit\"",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue270-namespace-parity.spec.ts",
+      "title": "manufacturer whitespace preserves preview/native namespace \"Audit \"",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue270-namespace-parity.spec.ts",
+      "title": "manufacturer whitespace preserves preview/native namespace \"Audit\"",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/issue270-namespace-parity.spec.ts",
+      "title": "manufacturer whitespace preserves preview/native namespace \" Audit \"",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/json-duplicate-source-parity-20261021.spec.ts",
+      "title": "identical JSON member names in separate valid objects remain source-preserving",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/json-duplicate-source-parity-20261021.spec.ts",
+      "title": "invalid JSON object names never become complete browser events or DRAFT compiler approval",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/juniper-sd-field-normalization-20261104.spec.ts",
+      "title": "Juniper RFC5424 novice flow maps IPs and explicit numeric source/destination ports",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/kv-bare-token-verdict-20261125.spec.ts",
+      "title": "key=value text with a bare token is not reported as parsed; Fix with ChatGPT gives a parser with stable fields",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/kv-duplicate-census-safety-20261021.spec.ts",
+      "title": "novice event accounting refuses duplicate KV sources before generating a DRAFT",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/kv-duplicate-census-safety-20261021.spec.ts",
+      "title": "quotes, distinct case-sensitive names and legitimate KV events do not trigger duplicate warning",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/manual-source-boundaries.spec.ts",
+      "title": "novice marks a fixed wrapper without modifying multilingual source or certifying a parser",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/map-fields-event-type-manual-20261125.spec.ts",
+      "title": "the field matches of one event type are added, changed and removed by hand; the parser follows",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/map-fields-event-types-20261125.spec.ts",
+      "title": "Map Fields shows the field matches of every event type of a multi-type parser",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/multilingual-source-review.spec.ts",
+      "title": "multilingual event values survive Auto Parser review and source-type comparison",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/multipass-ai-recovery.spec.ts",
+      "title": "default Multi-Pass partial Snort source offers a manual exact-log ChatGPT recovery prompt",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/multipass-batch.spec.ts",
+      "title": "default Analyze Logs uses exact Multi-Pass event framing and preserves source in review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/multipass-dictionary.spec.ts",
+      "title": "Stellar 7.0 field mapping keeps unknown vendor values and requires no advanced analysis UI",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/multipass-redaction.spec.ts",
+      "title": "existing visible masks are preserved and ChatGPT only receives logs after manual copy",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/named-type-stream-boundaries-20261019.spec.ts",
+      "title": "CRI P/F stdout and standalone stderr retain exactly two logical source events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/named-type-stream-boundaries-20261019.spec.ts",
+      "title": "Docker JSON-file stdout and stderr retain exactly two logical source events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/named-type-stream-boundaries-20261019.spec.ts",
+      "title": "JSON event types each ending in LF still complete the reviewed single-parser DRAFT",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/named-type-stream-boundaries-20261019.spec.ts",
+      "title": "a CRI logical event spanning named group boundaries cannot be assigned or exported",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/named-type-stream-boundaries-20261019.spec.ts",
+      "title": "a browser-saved named snapshot from the old separator algorithm remains restorable without altering original samples",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-boundary-e2e.spec.ts",
+      "title": "CEF alias with a non-IP value is REVIEW-only rather than falsely normalized",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-boundary-e2e.spec.ts",
+      "title": "IPv6 source addresses remain HIGH-confidence and bulk-applicable",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-boundary-e2e.spec.ts",
+      "title": "out-of-range L4 port is REVIEW-only and not silently bulk mapped",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-boundary-e2e.spec.ts",
+      "title": "timestamp without explicit timezone is REVIEW-only, Z timestamps are HIGH",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-event-limit.spec.ts",
+      "title": "501 events fail closed with an explicit beginner-readable limit explanation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-event-limit.spec.ts",
+      "title": "exact 500-event normalization batch remains reviewable with no truncation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-mapping-review.spec.ts",
+      "title": "beginner can review official Stellar mappings, compare output and correct a target",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-edge.spec.ts",
+      "title": "IPv6 addresses are high-confidence when runtime conversion accepts them",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-edge.spec.ts",
+      "title": "RFC5424 wrapped CEF maps body fields plus host/time without flattening source",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-edge.spec.ts",
+      "title": "RFC5424 wrapped LEEF maps standard body aliases",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-edge.spec.ts",
+      "title": "array-valued source IP is preserved in extracted JSON but not falsely scalar-mapped",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-edge.spec.ts",
+      "title": "duplicate source aliases do not create duplicate official destinations",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-edge.spec.ts",
+      "title": "out-of-range L4 destination port stays REVIEW",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-edge.spec.ts",
+      "title": "severity outside documented 0-100 range stays REVIEW",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-edge.spec.ts",
+      "title": "timezone-less timestamp stays REVIEW and is never bulk-applied",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · CDN/WAF · Akamai-style web security JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · Cloud Network · Azure NSG-style flow JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · DNS Security · Cisco Umbrella-style DNS JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · EDR · Microsoft Defender-style endpoint JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · EDR · SentinelOne-style endpoint network JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · Firewall · Juniper SRX-style KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · Firewall · Sophos XG-style KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · NDR · Darktrace-style network detection JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · NDR · Vectra-style detection JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · SIEM · Rapid7 InsightIDR-style normalized JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · SaaS Audit · Google Workspace-style audit JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded-wave2.spec.ts",
+      "title": "expanded wave2 normalization E2E · WAF · Imperva-style CEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · CASB · Netskope-style transaction JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · CDN/WAF · Cloudflare-style HTTP JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · ECS · ECS-style normalized security JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · EDR · Trend Micro-style camelCase JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · Email Security · Proofpoint-style CEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · Firewall · Check Point-style KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · Firewall · FortiGate-style traffic KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · Firewall · SonicWall-style LEEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · IAM · Okta-style system audit JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · NAC · Cisco ISE-style JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · NGFW · Cisco Secure Firewall CEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · NGFW · PAN-OS-style named JSON traffic",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · SWG · Zscaler ZIA-style JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · WAF · F5 BIG-IP ASM-style JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-expanded.spec.ts",
+      "title": "expanded normalization E2E · Windows · Windows Event-style JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-families.spec.ts",
+      "title": "normalization Full User E2E · AWS WAF · AWS WAF-style HTTP event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-families.spec.ts",
+      "title": "normalization Full User E2E · AWS · CloudTrail-style audit event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-families.spec.ts",
+      "title": "normalization Full User E2E · EDR · CrowdStrike-style endpoint network event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-families.spec.ts",
+      "title": "normalization Full User E2E · EPP · Defender-style endpoint prevention event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-families.spec.ts",
+      "title": "normalization Full User E2E · IPS · Suricata-style alert event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-families.spec.ts",
+      "title": "normalization Full User E2E · NDR · Zeek-style flow event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-families.spec.ts",
+      "title": "normalization Full User E2E · VPN · FortiGate-style VPN KV event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-families.spec.ts",
+      "title": "normalization Full User E2E · XDR · Cortex-style nested network event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-volume.spec.ts",
+      "title": "normalization volume E2E · 100 CEF security events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-volume.spec.ts",
+      "title": "normalization volume E2E · 100 KV firewall events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-volume.spec.ts",
+      "title": "normalization volume E2E · 100 LEEF security events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-volume.spec.ts",
+      "title": "normalization volume E2E · 100 Windows Event JSON records",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-volume.spec.ts",
+      "title": "normalization volume E2E · 100 flat JSON firewall events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/normalization-security-volume.spec.ts",
+      "title": "normalization volume E2E · 100 nested ECS/XDR events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-500-events-json-wire-20261023.spec.ts",
+      "title": "500 valid JSON events preserve every source event and remain reviewable",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-500-events-json-wire-20261023.spec.ts",
+      "title": "501 source events are not silently truncated or sent for parser generation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-audit-cri-docker-20261019.spec.ts",
+      "title": "Docker JSON-file source wrapper — exact source bytes, partial honesty, browser recovery",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-audit-cri-docker-20261019.spec.ts",
+      "title": "Kubernetes CRI P/F message boundaries — exact source bytes, partial honesty, browser recovery",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-audit-cri-docker-20261019.spec.ts",
+      "title": "Linux Audit multi-record event serial — exact source bytes, partial honesty, browser recovery",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-audit-cri-docker-20261019.spec.ts",
+      "title": "Malformed CRI partial without final event fails closed — exact source bytes, partial honesty, browser recovery",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: AWS WAF nested JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: ArcSight CEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: Checkpoint KV syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: CrowdStrike EDR JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: Fortinet FortiGate KV syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: IBM QRadar LEEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: Juniper SRX syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: Microsoft Defender XDR JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: Palo Alto PAN-OS positional CSV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: Quoted multiline CSV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: RFC5424 generic KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: Suricata IPS EVE JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: WatchGuard Firebox syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: Windows Security Event XML",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Earlier: Zeek TSV with schema header",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: AWS CloudTrail JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: AWS GuardDuty finding JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Azure sign-in JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: CEF + syslog with bad PRI",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: CSV unlabelled positions",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Cisco ASA TCP connection",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Cisco FTD intrusion",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Cloudflare WAF JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: F5 ASM CEF wrapped",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: F5 ASM KV reporting",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: JSON threat-user-asset family",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Linux auditd keyed",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Malformed CEF escape",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Malformed LEEF header",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Okta auth JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Quoted multiline CSV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: SentinelOne EDR JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Snort fast alert",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: SonicWall firewall",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Sophos XG firewall",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Suricata DNS EVE JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: UTF8 mixed vendor KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Vectra NDR JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: W3C with header",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Wazuh alert JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Zeek with tabs",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: Zscaler NSS LEEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: duplicate keys",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: mixed JSON KV CEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: unclosed KV quoted field",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-46-public-20261019.spec.ts",
+      "title": "Expanded: unrecognized plain text",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "01 AWS WAF rule decision",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "02 Cloudflare WAF request",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "03 F5 ASM WAF syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "04 Akamai edge JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "05 ModSecurity audit-style",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "06 Palo Alto PAN-OS traffic CSV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "07 Fortinet FortiGate KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "08 Check Point firewall KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "09 Cisco ASA message ID",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "10 Cisco FTD threat",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "11 Juniper SRX RT_FLOW",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "12 WatchGuard Firebox",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "13 SonicWall firewall",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "14 Sophos Firewall",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "15 pfSense filterlog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "16 OPNsense filterlog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "17 Barracuda firewall",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "18 Suricata EVE alert",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "19 Snort alert syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "20 CrowdStrike Falcon",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "21 Microsoft Defender XDR",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "22 SentinelOne agent event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "23 VMware Carbon Black",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "24 Sophos endpoint detection",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "25 Trend Micro Vision One",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "26 Zeek conn TSV with headers",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "27 Corelight Zeek JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "28 Vectra Detect alert",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "29 Darktrace model breach",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "30 ExtraHop Reveal(x)",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "31 Cisco Umbrella DNS",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "32 Infoblox DNS security",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "33 Zscaler ZIA proxy",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "34 Netskope CASB",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "35 Proofpoint TAP",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "36 Mimecast email security",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "37 Okta system log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "38 Azure Entra sign-in",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "39 Ping Identity audit",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "40 AWS CloudTrail",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "41 Azure Activity Log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "42 Google Cloud audit",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "43 Kubernetes audit",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "44 ArcSight CEF escaped message",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "45 IBM QRadar LEEF custom delimiter",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "46 Generic RFC5424 SD",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "47 W3C IIS WAF access",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "48 CSV quoted delimiter",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "49 Unclosed CSV quote",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "50 Windows Event XML unsupported",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "51 Windows Event JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "52 UTF8 Korean values",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "53 Mixed three JSON event types",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-corpus-54-public-20261019.spec.ts",
+      "title": "54 Mixed JSON and KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-csv-embedded-query-20261020.spec.ts",
+      "title": "unquoted CSV URL query equals survives real novice source accounting and delimiter review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-csv-lexical-accounting-20261020.spec.ts",
+      "title": "strict source accounting rejects illegal CSV quote transitions but accepts valid quoted delimiters",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-csv-null-parity-20261103.spec.ts",
+      "title": "novice preserves reviewed CSV empty and whitespace-only source across comma and TAB",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-declared-schema-20261019.spec.ts",
+      "title": "W3C original schema source to novice guidance",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-declared-schema-20261019.spec.ts",
+      "title": "Zeek original schema source to novice guidance",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-declared-schema-20261019.spec.ts",
+      "title": "adversarial declared columns remain review-only",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-declared-schema-20261019.spec.ts",
+      "title": "pasted CRLF text is browser-normalized, not misrepresented as original bytes",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-first-log-entry-desktop-20261021.spec.ts",
+      "title": "a new desktop user can jump from the opening explanation straight to the original raw log input",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-first-log-entry-desktop-20261021.spec.ts",
+      "title": "the desktop shortcut never clears manually entered parser identity",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-first-log-entry-desktop-20261021.spec.ts",
+      "title": "the single input shortcut is absent when named log types replace the raw input",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-first-viewport-20261023.spec.ts",
+      "title": "first-time desktop visitor sees raw log entry without scrolling at 1280",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-first-viewport-20261023.spec.ts",
+      "title": "first-time desktop visitor sees raw log entry without scrolling at 1440",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "AWS WAF nested JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "ArcSight CEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "Checkpoint KV syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "CrowdStrike EDR JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "Fortinet FortiGate KV syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "IBM QRadar LEEF",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "Juniper SRX syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "Microsoft Defender XDR JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "Palo Alto PAN-OS positional CSV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "Quoted multiline CSV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "RFC5424 generic KV",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "Suricata IPS EVE JSON",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "WatchGuard Firebox syslog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "Windows Security Event XML",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "Zeek TSV with schema header",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "beginner follows AWS WAF fields into mapping review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-live-diverse-20261019.spec.ts",
+      "title": "novice prepares Zeek field schema, confirms source boundaries and reverses them",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-mapping-output-contract-20261119.spec.ts",
+      "title": "novice keeps one source event through suggestions, blocked manual AI proposal, final preview and DRAFT pair",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-parser-readiness-20261019.spec.ts",
+      "title": "Repeated KV occurrences honest source-only compilation block",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-parser-readiness-20261019.spec.ts",
+      "title": "Wrapped OPNsense positional CSV honest source-only compilation block",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-parser-readiness-20261019.spec.ts",
+      "title": "Wrapped pfSense positional CSV honest source-only compilation block",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-parser-readiness-20261019.spec.ts",
+      "title": "qualified JSON normal workflow still reaches field mapping",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-quoted-pair-csv-20261020.spec.ts",
+      "title": "neutral names for two quoted fields remain user-approved and reset on changed source",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-quoted-pair-csv-20261020.spec.ts",
+      "title": "novice reviews strongly quoted two-column CSV without inventing column names",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-scan-vs-parser-status-20261023.spec.ts",
+      "title": "W3C schema-header stream distinguishes the early format census from final review requirements",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-scan-vs-parser-status-20261023.spec.ts",
+      "title": "positional CSV distinguishes the early format census from final review requirements",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-transport-framing-20261019.spec.ts",
+      "title": "GELF TCP shows original-source frame review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-transport-framing-20261019.spec.ts",
+      "title": "Journal grouped shows original-source frame review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-transport-framing-20261019.spec.ts",
+      "title": "RFC6587 NUL shows original-source frame review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-transport-framing-20261019.spec.ts",
+      "title": "RFC6587 octet UTF8 shows original-source frame review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-transport-framing-20261019.spec.ts",
+      "title": "RFC7464 JSON sequence shows original-source frame review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/novice-vendor-field-collision-20261020.spec.ts",
+      "title": "all 23 reviewed quoted CSV values survive vendor-local severity validation and real DRAFT compilation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/parser-listener-port-6801.spec.ts",
+      "title": "Auto and ChatGPT Assisted use one editable port before logs are supplied",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/parser-listener-port-6801.spec.ts",
+      "title": "generated Ruby/CONF files use explicitly selected 6801 on actual backend",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/parser-listener-port-6801.spec.ts",
+      "title": "generated Ruby/CONF files use explicitly selected 6819 on actual backend",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/parser-listener-port-6801.spec.ts",
+      "title": "new source identity displays editable CONF port before log analysis",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/priless-panos-long-sd-20261121.spec.ts",
+      "title": "Junos RT_FLOW records with a structured-data element above 1 KiB are parsed and mapped",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/priless-panos-long-sd-20261121.spec.ts",
+      "title": "PAN-OS traffic Syslog without a PRI is adopted like the same record with a PRI",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/priless-panos-long-sd-20261121.spec.ts",
+      "title": "plain positional CSV rows keep the column review",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/private-drain3.spec.ts",
+      "title": "beginner Auto Parser cannot trigger private text grouping or raw-source transfer",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/private-drain3.spec.ts",
+      "title": "retired private miner controls remain unavailable when switching to ChatGPT Assisted",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/prototype-key-source-fields-20261121.spec.ts",
+      "title": "tagged Syslog KV with a source field named hasOwnProperty is analyzed, reviewed and mapped",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/prototype-key-source-fields-20261121.spec.ts",
+      "title": "tagged Syslog KV with a source field named normalKey is analyzed, reviewed and mapped",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/prototype-key-source-fields-20261121.spec.ts",
+      "title": "tagged Syslog KV with a source field named toString is analyzed, reviewed and mapped",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/prototype-key-source-fields-20261121.spec.ts",
+      "title": "tagged Syslog KV with a source field named valueOf is analyzed, reviewed and mapped",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/python-sender-auto-csv-query-20261020.spec.ts",
+      "title": "downloaded reviewed CSV Python test sender preserves all positional CSV URL query parameters offline",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/python-test-sender.spec.ts",
+      "title": "downloaded sender transmits bounded LF-framed TCP messages without third-party dependencies",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/python-test-sender.spec.ts",
+      "title": "user downloads self-contained Python, approves network destination and sends 1 event/s over loopback UDP",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/readable-events-20261122.spec.ts",
+      "title": "a sample in which no event can be read gets no offer to go on",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/readable-events-20261122.spec.ts",
+      "title": "events that cannot be read do not stop the parser for the events that can",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/readable-events-gate-20261125.spec.ts",
+      "title": "a Syslog line whose free text needs a rule is left out; the parser is created for the key=value events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/readable-events-gate-20261125.spec.ts",
+      "title": "a sample that cannot go on and has no readable event still says so",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/readable-events-gate-20261125.spec.ts",
+      "title": "an RFC 5424 line with VERSION 2 is not offered as read completely; the parser is created for the VERSION 1 event",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/readable-events-gate-20261125.spec.ts",
+      "title": "bounded compiler candidate remains usable beside unsupported events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/real-novice-ux-20261021.spec.ts",
+      "title": "a new user gets one Auto analysis path and real extracted fields without an advanced mode",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/real-novice-ux-20261021.spec.ts",
+      "title": "real log input, not an unrelated EXAMPLE-FW sample, is used for a reviewed ChatGPT request",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/real-novice-ux-20261021.spec.ts",
+      "title": "unrecognized free-form security text has a visible recovery path without a second analysis button",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/recertification-layout-20261126.spec.ts",
+      "title": "responsive recovery and mapping workspace 1024",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/recertification-layout-20261126.spec.ts",
+      "title": "responsive recovery and mapping workspace 1280",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/recertification-layout-20261126.spec.ts",
+      "title": "responsive recovery and mapping workspace 1440",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/recertification-layout-20261126.spec.ts",
+      "title": "responsive recovery and mapping workspace 1920",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/remaining-security-ai-recovery-20261026.spec.ts",
+      "title": "real novice ChatGPT recovery with 2 source-disjoint holdouts: CSV quoted field with neutral columns",
+      "disposition": "HISTORICAL_PUBLIC_ONLY",
+      "reason": "Historical externally deployed public URL scenario. Not an exact-source CI acceptance test; current local source/holdout and export guards are separate."
+    },
+    {
+      "file": "tests/remaining-security-ai-recovery-20261026.spec.ts",
+      "title": "real novice ChatGPT recovery with 2 source-disjoint holdouts: Cisco ASA connection 302013",
+      "disposition": "HISTORICAL_PUBLIC_ONLY",
+      "reason": "Historical externally deployed public URL scenario. Not an exact-source CI acceptance test; current local source/holdout and export guards are separate."
+    },
+    {
+      "file": "tests/remaining-security-ai-recovery-20261026.spec.ts",
+      "title": "real novice ChatGPT recovery with 2 source-disjoint holdouts: ModSecurity WAF denied request",
+      "disposition": "HISTORICAL_PUBLIC_ONLY",
+      "reason": "Historical externally deployed public URL scenario. Not an exact-source CI acceptance test; current local source/holdout and export guards are separate."
+    },
+    {
+      "file": "tests/remaining-security-ai-recovery-20261026.spec.ts",
+      "title": "real novice ChatGPT recovery with 2 source-disjoint holdouts: Snort diverse alert layouts",
+      "disposition": "HISTORICAL_PUBLIC_ONLY",
+      "reason": "Historical externally deployed public URL scenario. Not an exact-source CI acceptance test; current local source/holdout and export guards are separate."
+    },
+    {
+      "file": "tests/remaining-security-ai-recovery-20261026.spec.ts",
+      "title": "real novice ChatGPT recovery with 2 source-disjoint holdouts: WatchGuard Firebox firewall",
+      "disposition": "HISTORICAL_PUBLIC_ONLY",
+      "reason": "Historical externally deployed public URL scenario. Not an exact-source CI acceptance test; current local source/holdout and export guards are separate."
+    },
+    {
+      "file": "tests/remaining-security-header-guard-20261026.spec.ts",
+      "title": "header-aware source cannot silently become unsupported v0.2 parser: W3C IIS declared space-separated schema",
+      "disposition": "HISTORICAL_PUBLIC_ONLY",
+      "reason": "Historical externally deployed public URL scenario. Not an exact-source CI acceptance test; current local source/holdout and export guards are separate."
+    },
+    {
+      "file": "tests/remaining-security-header-guard-20261026.spec.ts",
+      "title": "header-aware source cannot silently become unsupported v0.2 parser: Zeek declared tab schema with original header",
+      "disposition": "HISTORICAL_PUBLIC_ONLY",
+      "reason": "Historical externally deployed public URL scenario. Not an exact-source CI acceptance test; current local source/holdout and export guards are separate."
+    },
+    {
+      "file": "tests/reviewed-csv-local-sender-integration-20261020.spec.ts",
+      "title": "reviewed two-column CSV survives local restore and downloaded Python transformation",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/reviewed-event-family-backend.spec.ts",
+      "title": "declared relay source review must match all events, never one sample only",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/reviewed-event-family-backend.spec.ts",
+      "title": "one reviewed parser DRAFT retains all three event types with exact backend capability",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/reviewed-event-family-backend.spec.ts",
+      "title": "reviewed mapping collisions and oversized event schemas fail closed in the novice UI",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/reviewed-event-family-backend.spec.ts",
+      "title": "reviewed relay and three event types compile into the same downloaded Ruby pair",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/reviewed-event-family-backend.spec.ts",
+      "title": "saved multi-event and declared relay rules remain comparable and restorable offline",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/reviewed-event-family-backend.spec.ts",
+      "title": "saved reviewed relay and event families download intact after reload",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/source-analysis-disclosure-20261024.spec.ts",
+      "title": "Analyze discloses the first-party server upload and never sends logs to ChatGPT",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/stellar7-event-family-reviewed-browser-20261021.spec.ts",
+      "title": "novice reviews three Stellar 7.0 event families and downloads one scoped DRAFT parser",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/stellar7-normalization-safety-20261021.spec.ts",
+      "title": "7.0 nested field mappings generate real backend DRAFT files with checked digests",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/stellar7-normalization-safety-20261021.spec.ts",
+      "title": "fixed Stellar 7.0 Dictionary: conflicting address aliases cannot be bulk-approved",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/stellar7-normalization-safety-20261021.spec.ts",
+      "title": "fixed Stellar 7.0 Dictionary: official nested process, file, host and user fields require proper types",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/stellar7-reviewed-family-mapping-20261021.spec.ts",
+      "title": "novice explicitly reviews 7.0 type-specific suggestions and downloads one conditional DRAFT",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/stellar7-runtime-semantic-preview-20261021.spec.ts",
+      "title": "manual Stellar 7.0 official hash selection never turns invalid source values into successful normalized events",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/syslog-json-duplicate-boundary-20261021.spec.ts",
+      "title": "actual browser rejects duplicate JSON inside explicit RFC5424/3164 before normalizing",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/syslog-json-duplicate-boundary-20261021.spec.ts",
+      "title": "multiline browser grouping treats duplicate JSON names as ambiguous rather than parsed",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/two-path.spec.ts",
+      "title": "ChatGPT Assisted displays a warning and includes the actual logs only in a manually copied prompt",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/two-path.spec.ts",
+      "title": "Parser Studio exposes exactly two parser creation methods, never old Wizard or Workbench",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/two-path.spec.ts",
+      "title": "editing the original source revokes the old prompt and rebuilds the correct source identity",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/two-path.spec.ts",
+      "title": "mobile viewport preserves both creation paths and has no horizontal overflow",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/two-path.spec.ts",
+      "title": "previous Guided and Expert deep links cannot reveal retired authoring pages",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/two-profile-beta-user-journeys-20261020.spec.ts",
+      "title": "two independent browser profiles complete distinct public beta drafts with no version crossing",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/usable-beta-repair-warning.spec.ts",
+      "title": "unresolved logs warn before manual copying without requiring a separate masking approval",
+      "disposition": "REQUIRED"
+    }
+  ]
+}

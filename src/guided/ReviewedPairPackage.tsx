@@ -32,11 +32,10 @@ export default function ReviewedPairPackage({pair,capabilities,port,disabled=fal
       if(token===epoch.current)setError('ZIP verification failed; the two original DRAFT files remain available.');
     }finally{if(token===epoch.current)setBusy(false);}
   }
-  if(!capabilities.downloads?.zipWithManifest)return null;
   return <>
     <button type="button" className="auto-parser-secondary" disabled={busy||disabled}
       onClick={()=>{void save();}}><FileArchive size={16}/> {busy?'Verifying package…':'Download Parser Package'}</button>
-    {error&&<p role="status">{error}</p>}
+    {error&&<p role="alert">{error}</p>}
     {showChecksum&&result&&<details className="auto-parser-recipe">
       <summary>Package checksum</summary><small>ZIP SHA-256: {result.sha256} · {result.filename}</small>
     </details>}

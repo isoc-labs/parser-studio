@@ -642,6 +642,7 @@ jobs:
         env:
           PARSER_STUDIO_LIVE_BACKEND: '1'
           PARSER_STUDIO_BROWSER_BACKEND: '1'
+          PARSER_STUDIO_SCOPED_AUTHORING_E2E: '1'
           PARSER_STUDIO_BACKEND_ROOT: backend
           PARSER_STUDIO_BACKEND_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           PARSER_STUDIO_BACKEND_PORT: '4191'

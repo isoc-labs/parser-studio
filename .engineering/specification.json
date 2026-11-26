@@ -171,7 +171,7 @@
     },
     "docs/SYSTEM_RECERTIFICATION_20261126.md": {
       "status": "supporting",
-      "sha256": "684c6df96852c2ee03705624950b92c6caaa0c6f90e54810b7cee9e70f88cf91"
+      "sha256": "ed085c83a2ecd9ce7cbd90d68d8e365b29ca5a22cafd831f083a0e9ca963e167"
     },
     "docs/verification/20261019-advanced-original-source-compiler-gate.md": {
       "status": "historical",
@@ -576,7 +576,7 @@
       "state": "implemented",
       "source": {
         "path": "docs/02_WEB_UI_SPEC.md",
-        "contains": "Auto Parser follows Add Logs \u2192 Review Fields \u2192 Map Fields \u2192 Create Parser."
+        "contains": "Auto Parser follows Add Logs → Review Fields → Map Fields → Create Parser."
       },
       "implementation": [
         {
@@ -761,7 +761,7 @@
         },
         {
           "path": "src/guided/NormalizationMappingReview.tsx",
-          "contains": "KEPT \u00b7 original name and value in the vendor fields"
+          "contains": "KEPT · original name and value in the vendor fields"
         }
       ],
       "tests": [
