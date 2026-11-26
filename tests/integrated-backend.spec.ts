@@ -622,7 +622,16 @@ test.describe('actual Chromium UI ↔ exact same-HEAD authoring backend; target 
     await expect(created).toContainText('Parser files created successfully');
     await expect(created.locator('details'))
       .toContainText('Two parser files passed integrity checks before download.');
-    await expect(created.getByRole('button',{name:/Download/})).toHaveCount(2);
+    await expect(created.getByRole('button',{name:/Download/})).toHaveCount(3);
+    const packageResponse=page.waitForResponse(r=>
+      r.url().endsWith('/parser-pairs/package')&&r.request().method()==='POST');
+    const packageDownload=page.waitForEvent('download');
+    await created.getByRole('button',{name:'Download Parser Package',exact:true}).click();
+    const zip=await packageResponse;
+    expect(zip.status()).toBe(200);
+    const bytes=await readFile(await (await packageDownload).path());
+    expect(bytes.subarray(0,4).toString('hex')).toBe('504b0304');
+    expect(sha(bytes)).toBe(zip.headers()['x-parser-zip-sha256']);
     expect(posts.filter(path=>path.endsWith('/generate')).length).toBeGreaterThanOrEqual(2);
   });
 
