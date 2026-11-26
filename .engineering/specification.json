@@ -548,6 +548,10 @@
     "docs/verification/roadmap-followup-20261020.md": {
       "status": "historical",
       "sha256": "65dadcd381ee9bca649bbbd04add94d97c9e16de881c50e0fbd853cb59192f43"
+    },
+    "docs/verification/20261126-owner-template-approval.md": {
+      "status": "historical",
+      "sha256": "adb31e6e2b8d6335ccb981d73615bb67bcae002fe8d6c092d1ec90cd01233a90"
     }
   },
   "requirements": [
