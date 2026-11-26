@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {extractRecipeJson} from './aiReplyExtract';
 import {describeNonJsonReply,describeRejectedReply,describeFailedCheck,COPY_DAMAGE_HINT} from './chatGptResultNotice';
 import type {Dispatch,SetStateAction} from 'react';
@@ -113,17 +113,18 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       })))+
       '\nGroup names are NOT discriminators. Require explicit source event-type values and reject-unknown behavior before a shared parser is approved.'
     :'';
-  useEffect(()=>{
+  // An async review belongs to the exact input and approval that started it.
+  // Invalidate synchronously on local edits and on committed source changes.
+  const epoch=useRef(0);
+  const invalidateOperation=()=>{epoch.current++;setBusy(false);};
+  useLayoutEffect(()=>{
+    invalidateOperation();
     setPrompt('');setPromptError('');setCopied(false);setReview(null);
     setComparison(null);setNotice('');setContext(null);setGenerated(null);
     setHoldoutAttested(false);setCandidateApproval(false);
     setAttempt(1);setRetryFailure(null);setResponse('');
-  },[sourceKey]);
-  useEffect(()=>{
-    setPrompt('');setCopied(false);setReview(null);setComparison(null);
-    setNotice('');setContext(null);setGenerated(null);setHoldoutAttested(false);setCandidateApproval(false);
-    setAttempt(1);setRetryFailure(null);setResponse('');
-  },[goal]);
+    return ()=>{epoch.current++;};
+  },[sourceKey,goal,familyScope?.context]);
 
   async function prepare(){
     if(!suite||pending||busy||!sample.trim()||draft.eventProfiles)return;
@@ -132,7 +133,10 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       return;
     }
     if(!reviewedContext.ok){setPromptError(reviewedContext.reason);return;}
+    const token=++epoch.current;
     setBusy(true);setPromptError('');setContext(null);setGenerated(null);
+    setReview(null);setComparison(null);setCandidateApproval(false);
+    setHoldoutAttested(false);setPrompt('');setCopied(false);setResponse('');
     try {
       let next=draft;
       let local=suite;
@@ -142,6 +146,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
         try{
           const ledger=analyzeLogEnvelopes(sample,'single-line');
           const capabilities=await fetchBackendCapabilities();
+          if(token!==epoch.current)return;
           const compilation=assessEnvelopeCompilation(ledger,capabilities);
           const reviewed=prepareAutoParserDraft(sample,draft,suite,ledger,compilation);
           if(reviewed.ok){
@@ -152,12 +157,15 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
           // No provider call, no network egress and no guessed parser readiness.
         }
       }
+      if(token!==epoch.current)return;
       const prepared=await createPrivacySafeAIPrompt(sample,next,local);
+      if(token!==epoch.current)return;
       if(!prepared.ok){
         setPromptError('The local source needs review before preparing a prompt: '+prepared.reason);
         return;
       }
       const baseline=await buildReviewableRecipe(sample,next,local);
+      if(token!==epoch.current)return;
       const projectId=baseline.ok?baseline.recipe.projectId:
         'draft-'+(next.guided??draft.guided)?.slug;
       const basePrompt=composeChatGPTPrompt({
@@ -171,16 +179,18 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       setContext({sample,draft:next,suite:local,basePrompt});
       setPrompt(basePrompt);setAttempt(1);setRetryFailure(null);
     }catch{
-      setPromptError('Could not prepare the reviewed AI prompt. No log data was transmitted.');
-    }finally{setBusy(false);}
+      if(token===epoch.current)setPromptError('Could not prepare the reviewed AI prompt. No log data was transmitted.');
+    }finally{if(token===epoch.current)setBusy(false);}
   }
   async function copyPrompt(){
     if(!prompt)return;
-    try{await navigator.clipboard.writeText(prompt);setCopied(true);}
-    catch{setPromptError('Clipboard unavailable. Select and copy the visible prompt manually.');}
+    const token=epoch.current;
+    try{await navigator.clipboard.writeText(prompt);if(token===epoch.current)setCopied(true);}
+    catch{if(token===epoch.current)setPromptError('Clipboard unavailable. Select and copy the visible prompt manually.');}
   }
   async function copyImprovedPrompt(){
     if(!context||!retryFailure||!response.trim()||pending||busy||attempt>=3)return;
+    const token=++epoch.current;
     const nextAttempt=(attempt+1) as 2|3;
     try{
       const updated=buildAdaptiveRetryPrompt({
@@ -192,18 +202,20 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       setCandidateApproval(false);setHoldoutAttested(false);setCopied(false);
       try{
         await navigator.clipboard.writeText(updated);
+        if(token!==epoch.current)return;
         setCopied(true);
         setNotice('Improved attempt '+nextAttempt+' prompt copied. Paste it into ChatGPT, then bring back the complete JSON.');
       }catch{
-        setNotice('Improved attempt '+nextAttempt+' prompt prepared. Clipboard unavailable: copy the visible prompt manually.');
+        if(token===epoch.current)setNotice('Improved attempt '+nextAttempt+' prompt prepared. Clipboard unavailable: copy the visible prompt manually.');
       }
     }catch{
-      setNotice('Could not prepare a safe retry. Original parser rules remain unchanged.');
+      if(token===epoch.current)setNotice('Could not prepare a safe retry. Original parser rules remain unchanged.');
     }
   }
 
   async function validate(){
     if(!context||context.sample!==sample||pending||busy||!response.trim())return;
+    const token=++epoch.current;
     setBusy(true);setReview(null);setComparison(null);setGenerated(null);setNotice('');setRetryFailure(null);
     try{
       // ChatGPT often wraps the recipe in explanation. Pick out the one JSON recipe and
@@ -217,8 +229,10 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       }
       const text=extracted.text;
       let result=await importReviewOnlyAIRecipe(text,sample,context.draft,context.suite);
+      if(token!==epoch.current)return;
       if(!result.ok&&result.reason==='CURRENT_RECIPE_UNAVAILABLE')
         result=await importRecoveryAIRecipe(text,sample,context.draft,context.suite);
+      if(token!==epoch.current)return;
       setReview(result);setHoldoutAttested(false);setCandidateApproval(false);
       if(!result.ok){
         const failure:AdaptiveRepairFailure=result.reason==='SOURCE_IDENTITY_MISMATCH'
@@ -232,9 +246,10 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
           (extracted.ignoredText?' Text around the JSON recipe was ignored.':''));
       else if(extracted.ignoredText)setNotice('Text around the JSON recipe was ignored.');
     }catch{
+      if(token!==epoch.current)return;
       setRetryFailure({failure:'SCHEMA_REJECTED',diagnostic:'INVALID_JSON'});
       setNotice('The AI response could not be validated. No rules changed. '+COPY_DAMAGE_HINT);
-    }finally{setBusy(false);}
+    }finally{if(token===epoch.current)setBusy(false);}
   }
   async function compareMapping(sourceOnly=false){
     if(!context||context.sample!==sample||!review||!review.ok||busy||pending)return;
@@ -274,20 +289,25 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
         'The proposed grammar cannot be translated into a supported parser: '+proposal.reason);
       return;
     }
-    setBusy(true);setComparison(null);setCandidateApproval(false);setNotice('');
+    const token=++epoch.current;
+    setBusy(true);setComparison(null);setGenerated(null);setCandidateApproval(false);setNotice('');
     setRetryFailure(null);
     try{
       const candidate=await runPreview(proposal.candidate,sample);
+      if(token!==epoch.current)return;
       const variationCandidate=sourceOnly
         ?buildSingleSampleVariation(sample,proposal.candidate.format):null;
       const changed=variationCandidate&&hasExtractedVariationTarget(variationCandidate,candidate)
         ?variationCandidate:null;
       const changedSuite=changed?await runPreview(proposal.candidate,changed.mutatedSource):null;
+      if(token!==epoch.current)return;
       const changedOk=!changed||Boolean(changedSuite&&
         verifySingleSampleVariation(changed,candidate,changedSuite));
       const variation=changed?(changedOk?'PASS' as const:'FAIL' as const):'NOT_APPLICABLE' as const;
       const baselineHoldout=sourceOnly?null:await runPreview(context.draft,holdout);
+      if(token!==epoch.current)return;
       const candidateHoldout=sourceOnly?null:await runPreview(proposal.candidate,holdout);
+      if(token!==epoch.current)return;
       const input=baselineHoldout&&candidateHoldout
         ?{source:sample,baseline:context.suite,candidate,
             holdout:{source:holdout,baseline:baselineHoldout,candidate:candidateHoldout}}
@@ -299,6 +319,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       const typeSuites=namedLogTypes
         ?await Promise.all(namedLogTypes.map(group=>runPreview(proposal.candidate,group.sample)))
         :[];
+      if(token!==epoch.current)return;
       const typeCoverage=namedLogTypes
         ?checkNamedParserCoverage(proposal.candidate,namedLogTypes,typeSuites)
         :{ok:true as const};
@@ -355,32 +376,37 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
         ?'The original sample passed. Review its extracted fields before accepting a sample-only DRAFT; generalization was not tested.'
         :'Original and independent examples passed. Review and approve the fix.');
     }catch{
+      if(token!==epoch.current)return;
       setRetryFailure({failure:'SAMPLE_REGRESSION',diagnostic:'SOURCE_TEST_FAILED'});
       setNotice('Candidate validation failed. Existing rules remain unchanged.');
-    }finally{setBusy(false);}
+    }finally{if(token===epoch.current)setBusy(false);}
   }
   async function generateVerifiedDraft(){
     if(!context||context.sample!==sample||!review?.ok||pending||busy||draft.eventProfiles)return;
-    const recovery=review.report.mode==='FULL_RECOVERY';
-    const baseline=recovery?null:await buildReviewableRecipe(sample,context.draft,context.suite);
-    if(!recovery&&(!baseline||!baseline.ok)){setNotice('No validated baseline is available. No files generated.');return;}
-    const unchanged=!recovery&&baseline?.ok&&canonicalJson(baseline.recipe)===canonicalJson(review.candidate);
-    const acceptable=Boolean(comparison?.qualified&&(
-      comparison.evidence==='INDEPENDENT'&&comparison.value.holdoutStatus==='TESTED'||
-      comparison.evidence==='SAMPLE_ONLY'&&comparison.value.holdoutStatus==='NOT_SUPPLIED'));
-    if(!unchanged&&(!acceptable||!candidateApproval)){
-      setNotice('Validate the proposal on your original sample (and any independent examples) and explicitly approve the evidence level before creating a DRAFT.');
-      return;
-    }
-    const candidate=unchanged?context.draft:comparison!.candidate;
+    const token=++epoch.current;
     setBusy(true);setGenerated(null);setNotice('');
     try{
+      const recovery=review.report.mode==='FULL_RECOVERY';
+      const baseline=recovery?null:await buildReviewableRecipe(sample,context.draft,context.suite);
+      if(token!==epoch.current)return;
+      if(!recovery&&(!baseline||!baseline.ok)){setNotice('No validated baseline is available. No files generated.');return;}
+      const unchanged=!recovery&&baseline?.ok&&canonicalJson(baseline.recipe)===canonicalJson(review.candidate);
+      const acceptable=Boolean(comparison?.qualified&&(
+        comparison.evidence==='INDEPENDENT'&&comparison.value.holdoutStatus==='TESTED'||
+        comparison.evidence==='SAMPLE_ONLY'&&comparison.value.holdoutStatus==='NOT_SUPPLIED'));
+      if(!unchanged&&(!acceptable||!candidateApproval)){
+        setNotice('Validate the proposal on your original sample (and any independent examples) and explicitly approve the evidence level before creating a DRAFT.');
+        return;
+      }
+      const candidate=unchanged?context.draft:comparison!.candidate;
       const local=await runPreview(candidate,sample);
+      if(token!==epoch.current)return;
       if(!completeSuite(local))
         throw new Error('The complete sample did not pass local parsing and normalization.');
       if(namedLogTypes){
         const perType=await Promise.all(namedLogTypes.map(group=>
           runPreview(candidate,group.sample)));
+        if(token!==epoch.current)return;
         const groupCoverage=checkNamedParserCoverage(candidate,namedLogTypes,perType);
         if(!groupCoverage.ok){
           setNotice('Cannot create one parser yet: '+groupCoverage.reason+' No files were generated.');
@@ -390,12 +416,17 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       const adapted=toBackendProject(candidate);
       if(!adapted.ok)throw new Error('The proposed parser cannot be represented by the current backend.');
       const cap=await fetchBackendCapabilities();
+      if(token!==epoch.current)return;
       assertBackendProjectSupported(adapted.project,cap);
       const validated=await validateBackendProject(adapted.project);
+      if(token!==epoch.current)return;
       assertBackendValidationAllowsExport(validated,adapted.project);
       const pair=await generateBackendPair(adapted.project);
+      if(token!==epoch.current)return;
       await verifyGeneratedPair(pair);
+      if(token!==epoch.current)return;
       const exact=await buildReviewableRecipe(sample,candidate,local);
+      if(token!==epoch.current)return;
       if(!exact.ok||canonicalJson(exact.recipe)!==canonicalJson(review.candidate))
         throw new Error('The AI proposal differs from the compiler-owned validated recipe.');
       // Restricted Recipe v0.2 excludes conditional event routing.
@@ -405,10 +436,12 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       await compileReviewedRecipeV02({
         recipe:review.candidate,legacyProject:adapted.project,
       },pair);
+      if(token!==epoch.current)return;
       setGenerated({pair,draft:candidate,sourceKey,goal,capabilities:cap,port:adapted.project.receiver.port,
         evidence:unchanged?'UNCHANGED':comparison!.evidence});
       setNotice('DRAFT parser files created after local checks. No deployment or target compatibility is implied.');
     }catch(error){
+      if(token!==epoch.current)return;
       const detail=error instanceof Error?error.message:'Parser creation failed.';
       const reason=error&&typeof error==='object'?
         (error as {reason?:string;code?:string}).reason??(error as {code?:string}).code:undefined;
@@ -416,7 +449,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       setRetryFailure({failure:targetRejected?'RECIPE_UNSUPPORTED':'NATIVE_VALIDATION_FAILED',
         diagnostic:reason??'NATIVE_VALIDATION_FAILED'});
       setNotice((reason?reason+': ':'')+detail+' No files were released and no parser rules were changed.');
-    }finally{setBusy(false);}
+    }finally{if(token===epoch.current)setBusy(false);}
   }
   const download=(filename:string,content:string)=>{
     const url=URL.createObjectURL(new Blob([content],{type:'application/octet-stream'}));
@@ -453,7 +486,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
           <textarea aria-label="ChatGPT local sample logs" rows={6} spellCheck={false}
             maxLength={MAX_SAMPLE} value={sample} readOnly={Boolean(namedLogTypes)||Boolean(familyScope)}
             placeholder="Paste the logs you want to parse."
-            onChange={e=>{if(!namedLogTypes)setSample(e.target.value);}}/>
+            onChange={e=>{if(!namedLogTypes){invalidateOperation();setSample(e.target.value);}}}/>
         </label>
         {!familyScope&&<ParserIdentityCard draft={draft} setDraft={setDraft} assisted
           warnIfPlaceholder={Boolean(review?.ok)||Boolean(generated)}/>}
@@ -469,7 +502,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
         <label>What do you want Parser Studio to find? <HelpTip label="What should be extracted?"
           text="Describe the values you care about in plain language, for example: source IP, destination IP, username, action, URL, process name, or event ID. You do not need to know Stellar field names yet."/>
           <input aria-label="ChatGPT desired fields" maxLength={512} type="text"
-            value={goal} onChange={e=>setGoal(e.target.value)}/>
+            value={goal} onChange={e=>{invalidateOperation();setGoal(e.target.value);}}/>
         </label>
         <p className="auto-parser-warning" role="alert">
           <ShieldAlert size={17}/> The ChatGPT prompt includes your original log text,
@@ -488,7 +521,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
         {prompt&&<div className="auto-parser-recipe" aria-label="ChatGPT prepared prompt">
           <h3>2. Copy to ChatGPT{attempt>1?' · Attempt '+attempt+' of 3':''}</h3>
           <textarea aria-label="ChatGPT copyable prompt" rows={10} value={prompt}
-            onChange={e=>{setPrompt(e.target.value);setCopied(false);}}/>
+            onChange={e=>{invalidateOperation();setPrompt(e.target.value);setCopied(false);setReview(null);setComparison(null);setCandidateApproval(false);setHoldoutAttested(false);setGenerated(null);setNotice('');setRetryFailure(null);}}/>
           <button type="button" onClick={()=>{void copyPrompt();}}>
             <ClipboardCopy size={15}/> Copy Prompt</button>
           {copied&&<p role="status">Prompt copied by your action. Paste it into ChatGPT.</p>}
@@ -501,7 +534,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
         <p>Paste the JSON result from ChatGPT. Parser Studio checks it before any parser rule can change.</p>
         <textarea aria-label="ChatGPT result JSON" rows={8} maxLength={MAX_RECIPE}
           spellCheck={false} value={response} onChange={e=>{
-            setResponse(e.target.value);setReview(null);setComparison(null);setGenerated(null);setRetryFailure(null);setNotice('');setHoldoutAttested(false);setCandidateApproval(false);
+            invalidateOperation();setResponse(e.target.value);setReview(null);setComparison(null);setGenerated(null);setRetryFailure(null);setNotice('');setHoldoutAttested(false);setCandidateApproval(false);
           }} placeholder="Paste the JSON result from ChatGPT here."/>
         <button type="button" disabled={!response.trim()||!context||pending||busy}
           className="auto-parser-secondary" onClick={()=>{void validate();}}>Check ChatGPT Result</button>
@@ -528,12 +561,12 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
             text="Use new, independently collected examples from every relevant event type. Parser Studio tests the complete combined source and rechecks each named type separately."/>
             <textarea aria-label="Additional ChatGPT test logs" rows={4}
               maxLength={MAX_SAMPLE} value={holdout} onChange={e=>{
-                setHoldout(e.target.value);setHoldoutAttested(false);setCandidateApproval(false);setComparison(null);setGenerated(null);
+                invalidateOperation();setHoldout(e.target.value);setHoldoutAttested(false);setCandidateApproval(false);setComparison(null);setGenerated(null);setNotice('');setRetryFailure(null);
               }}/>
           </label>
           {!baselineUnchanged&&<label className="auto-parser-persist-label">
             <input type="checkbox" aria-label="Confirm test examples are different"
-              checked={holdoutAttested} onChange={e=>{setHoldoutAttested(e.target.checked);setCandidateApproval(false);setComparison(null);}}/>
+              checked={holdoutAttested} onChange={e=>{invalidateOperation();setHoldoutAttested(e.target.checked);setCandidateApproval(false);setComparison(null);setGenerated(null);setNotice('');setRetryFailure(null);}}/>
             These are different log examples from the ones used to create this fix.
           </label>}
           {!baselineUnchanged&&!holdout.trim()&&<button type="button" className="auto-parser-secondary" disabled={busy||pending}
@@ -558,7 +591,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
           {!baselineUnchanged&&comparison?.qualified&&<label className="auto-parser-persist-label">
             <input type="checkbox" aria-label={comparison.evidence==='SAMPLE_ONLY'
               ?'Approve sample-only draft':'Approve tested ChatGPT fix'}
-              checked={candidateApproval} onChange={e=>setCandidateApproval(e.target.checked)}/>
+              checked={candidateApproval} onChange={e=>{invalidateOperation();setCandidateApproval(e.target.checked);setGenerated(null);setNotice('');setRetryFailure(null);}}/>
             {comparison.evidence==='SAMPLE_ONLY'
               ?'I reviewed the extracted fields and approve a sample-only DRAFT. No independent examples or target validation were performed.'
               :'I reviewed the test result and approve applying this fix.'}

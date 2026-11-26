@@ -311,3 +311,23 @@ deployment remain separate gates.
 - Remaining work: review-required and compiler-gap coverage, additional
   automatic mapping recall without guessing, independent review, current
   exact-HEAD CI, and explicit owner approval of the changed template set.
+
+## W3/W6/W8 — stale review invalidation and integrated download evidence
+- CI on 175168a exposed an outdated two-button assertion after the shared ZIP
+  was added. ead02ad checks all three actions and the actual downloaded ZIP
+  signature and server SHA-256; targeted live-browser test passed.
+- Reproduced a late ChatGPT comparison posting a stale result after the
+  response had changed. The operation epoch now revokes asynchronous
+  preparation, validation, comparison and generation on changed input,
+  evidence, approval or scope; conditional generation also rejects stale
+  completion. RED/GREEN regression and focused Assisted tests 8/8,
+  language/multilingual plus regression tests 8/8, typecheck PASS and
+  five affected real-backend Chromium journeys PASS.
+- Full local Python test discovery: 272/272 PASS. Full Python semantic
+  mutation oracle (previously local timeout) passed on CI run 45744117009.
+- ead02ad CI run 45745312367: all six exact-head browser shards, Ruby
+  2.4.9/Fluentd UDP and native-isolated-synthetic passed. Web-quality was
+  still running at the last check; these are prior-HEAD results once the
+  invalidation change is committed.
+- Current template digest still requires explicit owner review; no approval
+  constant, release or deployment has been changed.

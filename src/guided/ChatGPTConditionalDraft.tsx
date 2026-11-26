@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import type {Dispatch,SetStateAction} from 'react';
 import type {ParserDraft,SuiteResult} from '../model';
 import type {BackendCapabilities} from './backendCapabilities';
@@ -52,7 +52,11 @@ export default function ChatGPTConditionalDraft({
     }).catch(()=>{if(!cancelled)setAvailability('UNAVAILABLE');});
     return ()=>{cancelled=true;};
   },[sample,suite?.counts.total,pending]);
-  useEffect(()=>{setNotice('');setGenerated(null);},[identity]);
+  const epoch=useRef(0);
+  useLayoutEffect(()=>{
+    setBusy(false);setNotice('');setGenerated(null);
+    return ()=>{epoch.current++;};
+  },[identity]);
 
   const supported=availability==='READY'&&capability?.source===sample;
   const complete=(result:SuiteResult)=>result.counts.total>1&&
@@ -63,15 +67,18 @@ export default function ChatGPTConditionalDraft({
     result.events.every(event=>event.extracted&&event.normalizedOk);
   const generate=async()=>{
     if(busy||pending||!supported||!draft.eventProfiles||!sample.trim())return;
+    const token=++epoch.current;
     setBusy(true);setGenerated(null);setNotice('');
     try{
       const local=await runPreview(draft,sample);
+      if(token!==epoch.current)return;
       if(!complete(local))throw new Error('Every log must pass before one conditional parser can be generated.');
       if(namedLogTypes){
         if(!validateNamedLogs(namedLogTypes).ok)
           throw new Error('Complete each named log type before generating a combined parser.');
         const perType=await Promise.all(namedLogTypes.map(group=>
           runPreview(draft,group.sample)));
+        if(token!==epoch.current)return;
         const coverage=checkNamedParserCoverage(draft,namedLogTypes,perType);
         if(!coverage.ok)throw new Error('Log type review required: '+coverage.reason);
       }
@@ -84,14 +91,17 @@ export default function ChatGPTConditionalDraft({
         throw new Error('Conditional routing is not representable by the backend.');
       assertBackendProjectSupported(adapted.project,capability!.value);
       const checked=await validateBackendProject(adapted.project);
+      if(token!==epoch.current)return;
       assertBackendValidationAllowsExport(checked,adapted.project);
       const pair=await generateBackendPair(adapted.project);
+      if(token!==epoch.current)return;
       await verifyGeneratedPair(pair);
+      if(token!==epoch.current)return;
       setGenerated({identity,pair,port:adapted.project.receiver.port});
       setNotice('One reviewed conditional parser DRAFT is ready. No target installation or log transmission occurred.');
     }catch(error){
-      setNotice(error instanceof Error?error.message:'The conditional parser was not generated.');
-    }finally{setBusy(false);}
+      if(token===epoch.current)setNotice(error instanceof Error?error.message:'The conditional parser was not generated.');
+    }finally{if(token===epoch.current)setBusy(false);}
   };
   const download=(filename:string,content:string)=>{
     const url=URL.createObjectURL(new Blob([content],{type:'application/octet-stream'}));
