@@ -37,7 +37,8 @@ export type GoldenProblemCode =
   | 'REQUIRED_FIELD_UNMAPPED'
   | 'REQUIRED_FIELD_MISSING_IN_EVENT'
   | 'REQUIRED_FIELD_VALUE_MISMATCH'
-  | 'AMBIGUOUS_VENDOR_NAMESPACE';
+  | 'AMBIGUOUS_VENDOR_NAMESPACE'
+  | 'CANONICAL_DESTINATION_MISMATCH';
 
 export interface GoldenProblem {
   readonly code: GoldenProblemCode;
@@ -160,6 +161,8 @@ export function compareEventToGolden(input: {
   /** Source paths that must be mapped and must round-trip exactly. */
   readonly required: readonly string[];
   readonly events: readonly EmittedEvent[];
+  /** Independently authored official root values; never supplied by browser mapping rows. */
+  readonly expectedDestinations?: Readonly<Record<string, string | number>>;
 }): GoldenComparison {
   const problems: GoldenProblem[] = [];
   const matched: { sourcePath: string; target: string; value: string }[] = [];
@@ -176,6 +179,13 @@ export function compareEventToGolden(input: {
   if (!isPlainObject(record)) {
     problems.push({ code: 'EVENT_NOT_OBJECT', sourcePath: '*', detail: 'emitted record is not an object' });
     return { matched, unrequiredUnmapped: [], problems };
+  }
+
+  for (const [target, expected] of Object.entries(input.expectedDestinations ?? {})) {
+    if (!Object.prototype.hasOwnProperty.call(record, target) || record[target] !== expected) {
+      problems.push({ code: 'CANONICAL_DESTINATION_MISMATCH', sourcePath: target,
+        detail: target + ' expected ' + text(expected) + ' but the event holds ' + text(record[target]) });
+    }
   }
 
   const goldenByPath = new Map(input.golden.map(item => [item.sourcePath, item.sourceValue] as const));

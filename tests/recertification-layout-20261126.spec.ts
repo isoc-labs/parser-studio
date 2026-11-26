@@ -1,4 +1,4 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page} from './support/downloadSink';
 
 // The application is max-width constrained: viewport width alone cannot
 // determine the space available to a mapping editor inside three columns.

@@ -1,0 +1,75 @@
+{
+  "contract": "parserstudio.stellar70-endpoint-goldens.v1",
+  "provenance": "Hand-authored from the raw publisher-documented examples registered in corpus-files.v1.json, not mapping rows or parser output. Only explicit original endpoint IP/port roles. Port outputs must be integers. Fortinet VPN remote/local roles are outside this direct endpoint oracle; existing source-value checks remain mandatory.",
+  "cases": {
+    "fortinet_fortios_traffic": {
+      "srcip": "10.1.100.11",
+      "srcport": 58012,
+      "dstip": "23.59.154.35",
+      "dstport": 80
+    },
+    "fortinet_fortios_system": {
+      "srcip": "172.16.200.254",
+      "dstip": "172.16.200.1"
+    },
+    "suricata_eve_alert": {
+      "srcip": "192.168.2.14",
+      "srcport": 50096,
+      "dstip": "209.53.113.5",
+      "dstport": 80
+    },
+    "aws_cloudtrail_consolelogin": {
+      "srcip": "192.0.2.110"
+    },
+    "fortinet-008": {},
+    "fortinet-021": {
+      "srcip": "10.1.100.11",
+      "srcport": 44258,
+      "dstip": "185.244.31.158",
+      "dstport": 80
+    },
+    "fortinet-024": {
+      "srcip": "10.1.100.22",
+      "srcport": 46810,
+      "dstip": "172.16.200.55",
+      "dstport": 80
+    },
+    "meraki_mr_flows_allow": {
+      "srcip": "192.168.111.253",
+      "srcport": 54252,
+      "dstip": "192.168.111.5",
+      "dstport": 80
+    },
+    "meraki_mx_flows_pattern": {
+      "srcip": "192.168.1.186",
+      "srcport": 55719,
+      "dstip": "8.8.8.8",
+      "dstport": 53
+    },
+    "meraki_mx_gp_firewall": {
+      "srcip": "10.203.1.19",
+      "srcport": 48915,
+      "dstip": "23.111.186.186",
+      "dstport": 123
+    },
+    "sophos_sfw_antivirus_ftp": {
+      "srcip": "10.146.13.49",
+      "srcport": 39910,
+      "dstip": "10.8.142.181",
+      "dstport": 21
+    },
+    "arcsight_cef_basic_v0": {
+      "srcip": "10.0.0.1",
+      "srcport": 1232,
+      "dstip": "2.1.2.2"
+    },
+    "arcsight_cef_escaped_header_pipe": {
+      "srcip": "10.0.0.1",
+      "dstip": "1.1.1.1"
+    },
+    "arcsight_cef_escaped_equals": {
+      "srcip": "10.0.0.1",
+      "dstip": "1.1.1.1"
+    }
+  }
+}

@@ -27,6 +27,7 @@ const loadCases = (path: string) => (JSON.parse(readFileSync(resolve(path), 'utf
 // Publisher-documented examples only. PROJECT_SYNTHETIC cases are never counted here.
 const corpusFiles = (JSON.parse(readFileSync(resolve('evals/golden-corpus/corpus-files.v1.json'), 'utf8')) as { files: string[] }).files;
 const vendorCases = corpusFiles.flatMap(loadCases).filter(item => item.sampleClass.startsWith('VENDOR_DOCUMENTED'));
+const endpointGoldens = (JSON.parse(readFileSync(resolve('evals/golden-corpus/stellar70-endpoint-goldens.v1.json'), 'utf8')) as { cases: Record<string, Record<string,string|number>> }).cases;
 const RUNNER = resolve('scripts/verification/ruby-golden-event-runner.rb');
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -36,6 +37,8 @@ for (const vendorCase of vendorCases) {
   test('golden vendor log executes to the documented values · ' + vendorCase.id, async ({ page }) => {
     test.skip(!process.env.PARSER_STUDIO_BROWSER_BACKEND,
       'Needs the real compile backend; the exact-head browser shards provide it.');
+    const expectedDestinations = endpointGoldens[vendorCase.id];
+    expect(expectedDestinations, vendorCase.id + ' independent endpoint disposition').toBeDefined();
     const required = vendorCase.desiredFields.split(',').map(item => item.trim()).filter(Boolean);
     expect(vendorCase.goldenSourceValues.length).toBeGreaterThan(0);
 
@@ -70,7 +73,7 @@ for (const vendorCase of vendorCases) {
       vendorNamespace: !Object.prototype.hasOwnProperty.call(normalized as object, pair.target),
     }));
     const browserStage = compareEventToGolden({
-      golden: vendorCase.goldenSourceValues, rows, required,
+      golden: vendorCase.goldenSourceValues, rows, required, expectedDestinations,
       events: [{ time: null, record: normalized }],
     });
     expect(browserStage.problems, vendorCase.id + ' browser Stellar preview vs documented values').toEqual([]);
@@ -108,7 +111,7 @@ for (const vendorCase of vendorCases) {
     const out = JSON.parse(run.stdout) as { ruby: string; results: Record<string, { calls: [unknown, unknown][] }> };
     const calls = out.results[vendorCase.id]!.calls;
     const rubyStage = compareEventToGolden({
-      golden: vendorCase.goldenSourceValues, rows, required,
+      golden: vendorCase.goldenSourceValues, rows, required, expectedDestinations,
       events: calls.map(([time, record]) => ({ time, record })),
     });
     expect(rubyStage.problems, vendorCase.id + ' downloaded Ruby event (ruby ' + out.ruby + ') vs documented values').toEqual([]);

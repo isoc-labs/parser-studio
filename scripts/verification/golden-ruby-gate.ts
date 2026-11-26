@@ -29,6 +29,8 @@ interface Bundle { contract: string; id: string; raw: string; ruby: string; ruby
 // One registry for the browser spec and this gate (backend/test/golden-corpus-registry.test.ts keeps it complete).
 export const CORPUS_FILES: string[] = (JSON.parse(readFileSync(resolve('evals/golden-corpus/corpus-files.v1.json'), 'utf8')) as { files: string[] }).files;
 
+const endpointGoldens = (JSON.parse(readFileSync(resolve('evals/golden-corpus/stellar70-endpoint-goldens.v1.json'), 'utf8')) as { cases: Record<string, Record<string,string|number>> }).cases;
+
 async function corpus(): Promise<VendorCase[]> {
   const all: VendorCase[] = [];
   for (const file of CORPUS_FILES) all.push(...(JSON.parse(await readFile(resolve(file), 'utf8')) as { cases: VendorCase[] }).cases);
@@ -95,8 +97,11 @@ async function compare(dir: string, outputPath: string, expectRuby: string | und
     const bundle = bundles.get(item.id);
     const result = output.results[item.id];
     if (!bundle || !result) { problems.push('GOLDEN_NOT_EXECUTED ' + item.id); continue; }
+    if (!Object.prototype.hasOwnProperty.call(endpointGoldens, item.id)) {
+      problems.push('GOLDEN_ENDPOINT_DISPOSITION_MISSING ' + item.id); continue;
+    }
     const comparison = compareEventToGolden({
-      golden: item.goldenSourceValues, rows: bundle.rows, required: bundle.required,
+      golden: item.goldenSourceValues, rows: bundle.rows, required: bundle.required, expectedDestinations: endpointGoldens[item.id],
       events: result.calls.map(([time, record]) => ({ time, record })),
     });
     // The required list must be exactly what the corpus asks for, not what the bundle claims.

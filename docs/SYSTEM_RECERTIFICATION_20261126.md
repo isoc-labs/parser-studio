@@ -145,3 +145,27 @@ deployment remain separate gates.
 - Three mutated output records (reversed source IP, missing original log,
   wrong error stage) were all rejected by the independent mixed oracle.
 - Full CI aggregate result and the remaining vendor corpus remain open.
+
+## W5/W6/W8/W9 — independent endpoint destinations and CI repair
+
+- Exact-head CI 934ef43 (run 45731859334) exposed two missed test changes:
+  the layout spec imported stock Playwright rather than the download sink;
+  common-security-logs retained reversed ASA outbound expectations. Fixed
+  both, retained the CI guard, and verified actual Chromium 2/2.
+- The documented vendor gate previously followed the browser mapping rows
+  alone. Reversing both the mapping and emitted value could pass. Added a
+  separate hand-authored Stellar 7.0 endpoint oracle for all 14 registered
+  documented cases, 42 exact canonical IP/port fields (strict value/type).
+  The Fortinet VPN remote/local pair has no direct endpoint expectation in
+  this oracle; existing source preservation remains mandatory. No expectations
+  are generated from the implementation or downloaded artifact.
+- Real Chromium produced all 14 bundles. The first four-test invocation
+  reached the remote deadline after three bundles were recorded; the
+  subsequent 11 journeys completed successfully. Every recorded Ruby was
+  then executed in the digest-verified Ruby 2.4.9 chroot and compared by the
+  aggregate gate: 14/14 PASS, 42/42 canonical endpoint checks PASS.
+- Registry/comparison tests 25/25, aggregate gate tests 15/15 (including
+  a jointly reversed mapping and output), independent identity oracle 26
+  cases PASS, backend typecheck PASS, download-sink guard PASS (183 files).
+- This is an independent endpoint sub-oracle, not full semantic mapping
+  certification for every field, nor target import/indexing evidence.
