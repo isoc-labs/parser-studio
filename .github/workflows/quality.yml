@@ -56,6 +56,12 @@ jobs:
         with:
           pattern: parser-studio-e2e-downloads-shard-*
           path: ${{ runner.temp }}/e2e-downloads
+      - name: Mandatory real-browser journey census across all six shards
+        env:
+          PARSER_STUDIO_EXPECTED_SOURCE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node --test scripts/verification/browser-required-journeys.test.mjs
+          node scripts/verification/browser-required-journeys.mjs compare "$RUNNER_TEMP/e2e-downloads" "$PARSER_STUDIO_EXPECTED_SOURCE_HEAD"
       - name: Install backend tooling for the downloaded-artifact gate
         run: npm ci --prefix backend --no-audit --no-fund
       - name: Downloaded Ruby/.conf contract plus offline Ruby 2.4.9 structure gate
@@ -646,6 +652,7 @@ jobs:
           export PLAYWRIGHT_JSON_OUTPUT_FILE="$RUNNER_TEMP/parser-studio-browser-shard.json"
           npx playwright test --project=chromium --workers=2 --shard=${{ matrix.shard }}/6 --reporter=json
           node scripts/verification/browser-shard-report.mjs "$PLAYWRIGHT_JSON_OUTPUT_FILE"
+          node scripts/verification/browser-required-journeys.mjs prepare "$PLAYWRIGHT_JSON_OUTPUT_FILE" "$PARSER_STUDIO_E2E_ARTIFACT_DIR/browser-required-journeys.json" "$PARSER_STUDIO_EXPECTED_SOURCE_HEAD" "${{ matrix.shard }}"
       - name: Validate every file this shard downloaded against the Stellar structure contract
         run: |
           node backend/node_modules/tsx/dist/cli.mjs scripts/verification/validate-downloaded-artifacts.ts \

@@ -169,3 +169,19 @@ deployment remain separate gates.
   cases PASS, backend typecheck PASS, download-sink guard PASS (183 files).
 - This is an independent endpoint sub-oracle, not full semantic mapping
   certification for every field, nor target import/indexing evidence.
+
+## W8/W9 — mandatory journey execution receipts
+
+- Existing shard success validated aggregate stats but permitted silent skips
+  in the owner-critical subset. Added a separate 20-journey exact file/title
+  registry covering Assisted and inline recovery, mixed readable events,
+  manual and JSONata mappings, source preservation, CEF and responsive UI.
+- Each shard emits a compact exact-HEAD receipt only for one successful
+  Chromium execution of each listed case it encounters. The required release
+  eligibility job checks all six receipts, every required case exactly once,
+  no skipped/expected-failed/retried cases, and no stale or duplicate shard.
+  Existing separately scoped and legacy test dispositions are unchanged.
+- Six unit tests passed including omission, skip, expected failure, wrong
+  project, retry, stale HEAD and duplicate controls. Actual real-backend
+  JSONata mapping journey passed and its real JSON reporter produced the
+  expected receipt (1/1). Full six-shard aggregate CI remains pending.
