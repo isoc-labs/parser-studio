@@ -1,0 +1,894 @@
+{
+  "baseline": "14dcacddff48365001bfca2653c4466037d023b0",
+  "scope": "Tracked design, verification documents and contracts; inventory only, not full-text disposition",
+  "items": [
+    {
+      "path": "contracts/conformance-cases.v1.json",
+      "sha256": "bf207e6870ce1b4b6b04d4ec958de9bbec87c51f81c8dae760c762de47772794",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/executable-capability-matrix.v1.json",
+      "sha256": "0dbd4e92d699729c19fe332b199685d2be40e3cd71099b167559abca9edde1c1",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/execution-coverage.v1.json",
+      "sha256": "1cf83dd6f3b9ca425a141ab058755202f31f83a4baa2d29a7236f82922d1720c",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/generic-differential-seeds.v1.json",
+      "sha256": "50c01bdea615896be871165cfb67fc5bc8ad9b571ca4ed5082b4dd1568648afd",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/grammar-duplication-baseline.v1.json",
+      "sha256": "d84a7d49975f1a38410dae47fd3f88d45b0b4d24834af9f3e4edda34d5864d8c",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/operator-conformance.ts",
+      "sha256": "5f237d638114bc0fc01e28f4e0ba03763fb4f7cf10b38ef8911dd2553fecb85c",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/operator-conformance.v1.json",
+      "sha256": "3b7ba6122630fe48674c9cd37e54221ca349b3a10b9b45d997ed00261888e6dc",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/ruby-template-set.v1.json",
+      "sha256": "708035c961a7ae0b65096b2f40a35ecf981b119507f0f9683a0476c948392660",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/semantic-goldens.v1.json",
+      "sha256": "107aafade2e16bc4140b67671a4c36a7dbbbe23605736f67543d9e6d363d3a7d",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/semantic-identity-independent-goldens.v1.json",
+      "sha256": "49bc0ffa07da326726ff24639fa30a7618dee685cf825bb5d5076ed42efe0f8e",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/shipping-surface.v1.json",
+      "sha256": "c607b6e15fd466d3822a7dc995170df02c11ffbe357f3bf7bf4a48a13fca9b5b",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/stellar-custom-parser-structure.v1.json",
+      "sha256": "c388ebec512ac4f9877def036e42977986e805420cb6e552398ebdcaff6657eb",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/syslog-header-grammar.v1.json",
+      "sha256": "98f8143baac18f5855ad5993834f3b6afebd3ee0d51a99ebc841b92916d4292e",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "contracts/target-runtime-profiles.v1.json",
+      "sha256": "83a5981ed82b9cfa6830e6259289afea202a39aff34c0552089fa89d04488a34",
+      "kind": "contract_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/01_PRODUCT_VISION.md",
+      "sha256": "7aaa8f0b4914d97d5f449513ef87a8394bd0b168febd6676225b11426c142284",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/02_WEB_UI_SPEC.md",
+      "sha256": "e6f5d3c0a77e365dd69c1f6b8e348221d2ade7bf771f70c585051ad83c072dfa",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
+      "sha256": "70d69f91604bbb2c6732877889d0ee8522b62275bdb5ef4f6dcd10db84916f20",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/04_ARCHITECTURE.md",
+      "sha256": "49d79fa9b07af7f0c5b4ed79b656cfbf27dab40edc81c2adf233e7372d0e44f2",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/05_COMPETITOR_RESEARCH.md",
+      "sha256": "49c2800a2372dd4723b4ed49d8234331f880d600470e55b4cfe4812ecdfe7e9a",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/06_ROADMAP_AND_ACCEPTANCE.md",
+      "sha256": "59978fa47c9d220a4a0d31314994faae95287721e7e12933cf193e9dbcb74271",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/07_COMPETITOR_RESEARCH_AND_GAP.md",
+      "sha256": "2138aa6e658d2971ed3eb1aa20771e4166e994d40e7ef282da1d6f97d226308e",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/08_UI_DESIGN_DECISIONS.md",
+      "sha256": "172b19e3ec2ac06180ceaed74d7b27ed0f11b64ca3c947c4dc22f6251e2add9d",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/10_GUIDED_UI_BACKEND_HANDOFF.md",
+      "sha256": "4441508b818b44b69145912c327489f09de71f45656d6e69979b671b3fb37855",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/11_BROWSER_LOGICAL_EVENT_BOUNDARIES.md",
+      "sha256": "d465b7ded5daabd16dae63ab44c5d6bc4b7cf63221515fdadf400e2715db6d00",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/13_AUTO_PARSER_RECIPE_V02_UI_CONTRACT.md",
+      "sha256": "7368b99c5887c2d0eb88fb725078088a47efcd82061bb52fa117f09aa090e37e",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/13_UI_BACKEND_LOOPBACK_INTEGRATION.md",
+      "sha256": "44463723c175f64e5a94dde43b59509e28b589013031eb850bafc47f97d219dc",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/14_AP4_WHOLE_SAMPLE_REGRESSION.md",
+      "sha256": "c9afdc66e778d5bf9be714c2a61bea60e54d1b26a40a9eba420392c83c3d9860",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/14_AUTO_PARSER_AP1_ENVELOPES.md",
+      "sha256": "09ea717dc2b7ab6c04a4b1199963285001d332203a856f7e939815ffc937cb3c",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/14_TWO_PATH_PRODUCT_V2.md",
+      "sha256": "00170643c9a3b20be77d2da1dc8baef249fd01dbb348413ae12ec2fa7dad5b2c",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/15_AP5_OFFLINE_PATTERN_DISCOVERY.md",
+      "sha256": "03017f43b457f5452b1c30edbe44e7495b226417347c2ee8a81b4a80f796e1b1",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/15_AUTO_PARSER_AP2_THREE_STEP.md",
+      "sha256": "c16838210dbdf248738278ec874b964a77e4cb39606d10b55dd4bdbbd839e566",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/16_AP6_OFFLINE_AI_RECIPE_EXCHANGE.md",
+      "sha256": "38b00f9bdda3a3061c2398457c8884244dc09a82278c97f9a522eda2cbc536e5",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/16_DOWNLOADED_PYTHON_TEST_SENDER_20261018.md",
+      "sha256": "80e10f36aff506c5bdc19218e676cfc6357c5cdbdc176910afb77ca530f7c89d",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/17_AP7_APPROVED_PATTERNS.md",
+      "sha256": "52d5405ae087a92b53b47bc02a9338ea439cba8d515c2c0f2bfed2d3b1c27106",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/17_MAINLINE_EMBEDDED_MULTIPASS_CI_20261018.md",
+      "sha256": "7d1b0c3f48f2bfa89dde4268edd29890873b4c2eaceb5983438121f5a67d96cb",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/18_LOGICAL_BOUNDARY_REVIEW.md",
+      "sha256": "5e4be5a9090cbfd39d0b18bb6e6c4301b0bab17a474398d614a1c6e14de105c7",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/19_EXPLICIT_TCP_JSON_FRAMING.md",
+      "sha256": "236d7c5e97af60b12c6979977e6dbbb1e0b9c083e676293473aef5e9677b4304",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/19_STELLAR_EXPORT_VISUAL_PARITY.md",
+      "sha256": "08700088fef838ddf6b664d584d65d124c90564e835c0019b8786b0f369b6a53",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/20_MAINLINE_AUTHORING_BACKEND_SOURCE_20261018.md",
+      "sha256": "6f816038b11e937ed72e353e1dfa841c78d0f6e93e679cb45a42d53ccf3b7532",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/21_ENGLISH_AUTHORING_MULTILINGUAL_LOGS_20261019.md",
+      "sha256": "53a7f2ee2bae1a103a07d1f0b6712cf6a5cf25924d209360feb99f5370262c51",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/22_SOURCE_UNION_REVIEW_20261019.md",
+      "sha256": "45a34e4cf7bb451d798ae5628b6b171afa906924985905e59deb15435c514bdf",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/23_USER_MARKED_SOURCE_WRAPPER_REVIEW_20261019.md",
+      "sha256": "a919ca6397d04275d5212e87d2389bf816424dee7a61f86a9158bba4f4abbfc9",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/24_CONDITIONAL_EVENT_RELAY_BACKEND_EXPERIMENT_20261019.md",
+      "sha256": "2aaa1fb6dad63fe0bd344be7361ba6cb25341dee0278f4349389dd4ec5fb0f6f",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/25_REVIEWED_MULTI_EVENT_UI_20261019.md",
+      "sha256": "ee0ab4b259dce8e5bc56b8b7c4679c64c07922f57d7d1a37ff2bfb18e168c720",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/CANONICAL_OPERATOR_CONTRACT_V1.md",
+      "sha256": "b31e27d1af972045c10205b26b66802d18ca599081f0805bd6aa3f9e12f12144",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/H4_EXACT_HEAD_RELEASE_GATE_20261108.md",
+      "sha256": "844dca365ab3412f890fa34b4392f6218ee164ee3353a7e7f23502fd04fc7b26",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/INDEPENDENT_ORACLE_H3.md",
+      "sha256": "9499c51afd8d60c097adeed340351397b05d0b78888f72d665e875f6c9e52cbd",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/ISSUE232_SEMANTIC_MAPPING_ACCEPTANCE.md",
+      "sha256": "1dc4cd4eddc027eee2af83888a677e990f1656ad0322ef852775b1dde5e8d5fc",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/MAPPING_CORRECTNESS_V2.md",
+      "sha256": "263aa96e1a145b35897f0af0fb7ccf89022a4813d14e317dfdb3d9cb548108ff",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/NATIVE_EXECUTABLE_EVIDENCE_V1.md",
+      "sha256": "f283a9125c3df2f9919b861defadc4400f19e28d2477ade9c1dbef4c696620a9",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/PARSER_CORRECTNESS_ARCHITECTURE_HARDENING.md",
+      "sha256": "dd5752f9f4096e2294a9e91fbef0481df898d86868cf3188222996806208c27e",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/PARSER_EXECUTABLE_CONTRACT_HARDENING.md",
+      "sha256": "0e8df249998d88e8d814660d218ddc175d2bd00e780fcb80c921024d02ff1fc8",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/QUALITY_CONFORMANCE.md",
+      "sha256": "1aea7f07d93658a782a50c85d7620dd8a494e7ed88605b7e65cfea2bbb22eca7",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/SECURITY_MAPPING_E2E_20261106.md",
+      "sha256": "a190dbd334e830f579e6a174d01c8a02cd7d9481952b53c2357f49b2baf82c28",
+      "kind": "design_candidate",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-advanced-original-source-compiler-gate.md",
+      "sha256": "fcf0311f86aa552b67c190be6efc69de18a8ec5f2bff38620c02f4b849516149",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-audit-cri-docker-implementation.md",
+      "sha256": "d7138cd97b2cc1b18336bffec07d4e7cf0c92c1148c4185dbb626d7bb4052119",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-explicit-multi-log-type-input.md",
+      "sha256": "433db28439ed2081ef442026a1c049438a2eedf652af44948a552ff5afb94200",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-mixed-original-container-gate.md",
+      "sha256": "3ce314134a7deb17172214ddc107e14423557f2c74f9a8c00674a459c92cd582",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-named-log-physical-boundary-regression.md",
+      "sha256": "47ea1f44ec74426c89960393c3cac3d5bd7fd656b2e2d3fb56b7584628488f0c",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-named-type-plus-source-framing-integration.md",
+      "sha256": "6087871bc636f755a7988c9be3ae9df60f5f7ffc2f10b1a66e0d969b69281b08",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-novice-playwright-security-logs.md",
+      "sha256": "83cd75c6d7cf93bf1d05d1577767fb5f1a8caf7ef516ef495dfe6291b7fbe62d",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-novice-source-vs-parser-draft-review.md",
+      "sha256": "d3a43713e72a29805ea07dffc562ea8402ec6828a643f070b6d8ea70706722c0",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-poc-coverage-novice-web-e2e.md",
+      "sha256": "fae03879e2425c07552e4092a9e9997b8df6533aa356dbe8e5b6279f5c50eda2",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-python-test-sender-single-pass-regression.md",
+      "sha256": "13f210898cdfc616f3a34ea17f83bea773f404674477a184a35df5e23a6bb414",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261019-rfc5424-msg-and-31-review-triage.md",
+      "sha256": "89cfcb309504eb1aa6459f697f2855807ce455f866b06a7f28c8575de4b33696",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-auto-python-sender-csv-query-and-quote-fidelity.md",
+      "sha256": "a82faa4fdee090863a3c4eefa23147c3fb64a143190591c33e299e8b3a9bf1cf",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-combined-beta-fixes-candidate.md",
+      "sha256": "5cc5fa48b23b0fcbe23c0e2e8da1d539cdae641afe04c4ef851e743dbd2b41e3",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-csv-kv-embedded-query-structural-precedence.md",
+      "sha256": "79a258b90bb853405abbb11afa398b81aec2483bb95cc9128c4fbbfb1aec04ff",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-full-local-history-restore-preservation.md",
+      "sha256": "2231680a2406050a0a504815106449a175d980431083d6e299d3fd3c0905457e",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-local-versions-unverified-record-recovery.md",
+      "sha256": "cb1e4e6ae477daec2ca76aac0bd5d19e7fe3de6e70df6497b9505c3a3aebfdd7",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-quoted-two-column-csv-guided-review.md",
+      "sha256": "1723ec4bc5cad8204eabdec275fe74c7d9dc17b71be93189cf85168c4bc07a3f",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-rfc3164-freeform-content-source-fidelity.md",
+      "sha256": "0401d2a43b86a2c617fadc848c4b3f6cfd850e050ade07d72e970b991857b214",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-strict-csv-envelope-lexical-fidelity.md",
+      "sha256": "2682b833143346a5ef03fdcc2019d84c918a1949f8f96b93c1f074022961a677",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-two-profile-beta-user-journeys.md",
+      "sha256": "72302ad91b558c7b33e954764361de4ba19c2ab4f95549f60ae56d1aaaca00d6",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261020-vendor-normalization-field-type-scope.md",
+      "sha256": "d585ed872c5037d2a4a1b86de48ed028af29523a3c8f692d2b415be0fe9a2f28",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-chatgpt-solution-multitype-favicon-final-audit.md",
+      "sha256": "b8656f19e16da0528fd7bd488f4f7f804eff11e3962e6061aa0cb7bf8857cad4",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-gelf-jsonseq-source-framing-identity.md",
+      "sha256": "7d5a713a8f9c2ea8cc345c4bd4b425442ce2237b0aa98bf0fb9b3566cb860eae",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-generic-json-duplicate-source-parity.md",
+      "sha256": "9c3aac35a796d9aa7a6c646065564f523261832fde6e79314480f87f679b2133",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-json-duplicate-source-native-parity.md",
+      "sha256": "54c1a691ea1fbd6670ec47ea51426a847e9267c3c9fccffa3ee67e08255d57b4",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-kv-duplicate-census-parity.md",
+      "sha256": "3e925e97902491fbc97c715c68dd593dbceec7ea5e706b862a10aad68e753b32",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-listener-port-default-6801.md",
+      "sha256": "adae78e7876b21046a5d4e997ebe0853bdc6f4ff1b135c85eb18b6ece2e775cc",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-rickmodular-customized-parser-structure.md",
+      "sha256": "86eed5cd88b30fa9a07b888196bf06f1bf38d14789abea28b5ebcdec174f3a54",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-stellar7-manual-semantic-runtime-parity.md",
+      "sha256": "c1db5a6efc9b5353da7559b3bc3a36fd2752f0c0c5893c5ef08e6e5064bb0beb",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-stellar7-normalization-integrity.md",
+      "sha256": "1c08d1e9c68084404d4e4a1d1544ca06bb14d82587e12afff290539ed6b429cf",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-stellar7-scoped-event-family-mappings.md",
+      "sha256": "ded7e494a5f368d8df1a28f8ccb01811f701bb5612e390e2f829ff9f1fc775da",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261021-syslog-json-boundary-source-integrity.md",
+      "sha256": "0aab282e86513133ec09fea3f79db7f1c394ad7bd1af555c5b28097e4c14a3dc",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261023-chatgpt-vendor-mapping-comparison.md",
+      "sha256": "d507c2dc6ad7499a28a1edf37e5295643f01dddd9046627c3b7e82229c8cd0ef",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261023-diverse-security-log-public-e2e-and-json-envelope.md",
+      "sha256": "71d8dc419192b50e8c85a10b218512a1c7f4e7f4a03e7d64b89675513daea516",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261023-full-user-ai-prompt-evidence-matrix.md",
+      "sha256": "9a26602379b29033b15ac3afeed05045146c2b0993fdc3a5a1dbc43231844919",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261023-post-release-full-regression-and-initial-scan.md",
+      "sha256": "9a078b979cb350b4b7e9bf00b879960d3aa5857c10e469ce3ae963cc35bf038a",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261023-real-browser-beginner-ux-simplification.md",
+      "sha256": "66f27e81cd3305a69c5441c2965b3b3a72d5e2fe894e1fd701a3936aabc0eb8f",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261024-adaptive-chatgpt-single-sample-repair.md",
+      "sha256": "54d8a79e26b296415be5349f5cb4091d8b8b05054dd3f079b7320e60a2fba62a",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261024-chatgpt-prompt-copy-contract.md",
+      "sha256": "8bfbca84a291ccfd2a545692a5b3498783d1f92dcdde3f86d8c87193e838b849",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261024-loghub-irregular-recipe-evidence.md",
+      "sha256": "861eaab3d965f31f69b6d8594a19a9c8802e683518478acd5c96de3346b506d8",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261024-official-publisher-evidence.md",
+      "sha256": "377962378c364bc18e24a06b1cf0381beab2da36712516688687974f4c03223d",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261024-security-ai-first-response-ab-and-native.md",
+      "sha256": "fa23f261c2fee3c71a31eb52bbc9f8c9e979d9c72b427f8d6e4bdeabe5ae3574",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261024-security-product-event-coverage.md",
+      "sha256": "4b4f76d64b7559d851afc3b0cc1ba11f643bf9f48274016c09b54b9c3f4edb56",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261025-expanded-security-78-real-ui-native-e2e.md",
+      "sha256": "1adfdeeeec0ad290113ffe730cc3f96e2f3acb865a7de98cb0061427bbf64acc",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261025-external-chatgpt-api-evaluation.md",
+      "sha256": "a65736e5302a22d998cdf3f17ba11ba544d01bea81ce3c1d7bc15d5259d710f7",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261025-independent-normalization-target-collision-holdout.md",
+      "sha256": "b4e6a82c5529d63b8cbbf94a25265d2d2cb1794a3359ef41b049383a51110b79",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261025-samechat-gpt6-user-e2e.md",
+      "sha256": "5901e0a577c94c56ab6dc1a70c929344fdd2308f333fb40439fadecb988410e2",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261026-remaining-security-novice-cross-holdout.md",
+      "sha256": "eb67de50e4fcec632e2f0193b361d7a75a2bcbd4031f54dc8c4a773f936cd039",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261103-issue197-sd-parity.md",
+      "sha256": "0b27906bc2b3dd7f717241ddcccc7d5f97c2d14786fc2b3e1b84ebfaf4439ab6",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261104-chatgpt-jsonata-mapping.md",
+      "sha256": "987b0d2c857e639269b01dc4ea676f0869a9a1b6b861123d674d4f3149b3920f",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261104-five-reaudit-correctness-fixes.md",
+      "sha256": "f88db7e22895847ef74de6035d334d4dff66cf3f30b32a3fcccd799e3dc9127d",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261104-independent-audit-remediation.md",
+      "sha256": "5c4c48fb5403e4d15cc54dc52ac83e8614dcd2e029de28e64e6a0d3c29347697",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261104-juniper-sd-stellar7-field-audit.md",
+      "sha256": "5a9d1e1b3e31435b29353c1f474adb02c05fd3b801692da4fcaed7ec18b4bd54",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261104-published-scenario-mapping-e2e.md",
+      "sha256": "a541f78c9009e5722e87164c850f5c8cb5079dcd030779bf4b78c71690dd49f3",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261105-issue210-browser-native-parity.md",
+      "sha256": "f63544a474098eb3b2116f514c6948bc8cd7bbe20f7fa81d1c4098c8916769dd",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261108-executable-contract-completion.md",
+      "sha256": "5e856ae20f57c83ad06cdeddb64357d1408ef15c78cc0aaeb95f9ce1e6aee7ef",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261113-final-independent-audit.md",
+      "sha256": "3c2e58c45108a040786a76ca8503b6ae4d0d48aff98e0496bb15744f58a73d03",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261113-owner-template-approval.md",
+      "sha256": "38be76dc45120c883e34f9158e2f6c9aeb920bfcb2937c637721d9c9ad025600",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261116-accuracy-after-311.md",
+      "sha256": "f2b3011fa2079e21fb95cbc02ec46266405d8ab41b7a1d1dcc67a593990f4821",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261116-owner-template-approval.md",
+      "sha256": "c1999db89b1ce3ddbbfae04d42209caa1c5a995b6b3b96be09f652070f9dc279",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261116-template-changes-json-number-blank-value.md",
+      "sha256": "3b016aa56cafef75632a76d331315a25b925028e4892c1f2c9112be97237a1e5",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261117-lossless-first-baseline.md",
+      "sha256": "c24b7420043b2356c0c06c6cadf2a68ddc6f1d68351b955653cdeb6f64e84a89",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261117-lossless-first-mapping-ux-roadmap.md",
+      "sha256": "2ffd17c6cd1578b0968c210bec8225b4a5fc740465b4d93054a586095dd919ec",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261117-owner-template-approval.md",
+      "sha256": "c8fd2bb78511b9f40ad1856dd47139054557523d1a75cf5f63105b85c260493c",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261118-lossless-accounting-mapping-safety.md",
+      "sha256": "57af6f52c373d3d00e476728120bf92093f065b1e191c212e46e5e412943967e",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261118-lossless-first-host-qualification.md",
+      "sha256": "5dc20e3d51ae87abe4117b8a08bac8641075bca8a922eb6bb97ebf51b57ca493",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261119-codex-lossless-accounting-increment.md",
+      "sha256": "e78df8ba3ac69f37cf749450c83608dd499b74f310612c2d1153082ec550b327",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261119-final-local-acceptance.md",
+      "sha256": "7022a82e8852e02a305b39707d5ff6b7685f8fea3de8272fcc4fac4f11bdeda8",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261119-lossless-first-host-qualification-v2.md",
+      "sha256": "1ee1fd46e489bf19ef749e061c6d8e6fabd3d86dac3c607fad95219e79a7457f",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261119-lossless-local-closure.md",
+      "sha256": "0a74e992b9a0e34f89b006362fcd32294565ce521ceaf232b182294af0432bcc",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261121-phase2-false-declines-independent-audit.md",
+      "sha256": "9a575dfaead1c2a04cea94486448f64580ee722843b99a76a1dd61a8b9038b4b",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261121-phase3-independent-audit-714d272-7a255a6.md",
+      "sha256": "91f7d6fd6ee5ac006feb9a33cf4e8fa9a6849e3c00cd57387eeb61f1d03bed16",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261121-takeover-prototype-keys-mapping-recall.md",
+      "sha256": "32f54ba1fa62532933bed86ec702499895208207783ff74589111b02f63e0780",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261122-phase3-independent-audit2-b117e05-88c0768.md",
+      "sha256": "97771c4cfe2ea7bb9d54f485c2eb9a55618a24d2e58272977c31085b84e0a0c6",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261122-phase3-p2-per-event-baseline.md",
+      "sha256": "0690e25a1671bb12449175c8099f129608a89b5c385ee07f0c0a01a237db2247",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261123-phase3-independent-audit3-272bd90-e1af64d.md",
+      "sha256": "e29b10b13f578750033dd1c80594b85f43adbcfcde7b5ae4e50e5fac2e1c2f5a",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261123-phase3-p3-chatgpt-parsing-prompt.md",
+      "sha256": "f26cf55b4552b93303c87715a9b7f5f8f2b7db2480209a369beff407c519125f",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261123-phase3-p3-family-scoped-chatgpt.md",
+      "sha256": "c10cd3f45e27408e97fe737eb54759b312e9740d3c7ae560e403d58885389284",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261123-phase3-p4-mapping-fallback.md",
+      "sha256": "f0837c6ba376d889caab7ff61fd28780a8804ba82448854a96c9d0f7617bab91",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261123-phase3-p5-vendor-e2e.md",
+      "sha256": "3b50de7fd79baacefcf0bee0a1e6e4e51ca96a4dc2d5b5ba479f8196d6b42fda",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261123-phase3-residual-g-items.md",
+      "sha256": "c352fe78a460c8acba06746b0ddf40519a030d4f5f4e8d2b264c32408fd2aa82",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261124-phase3-accuracy-final-stabilization.md",
+      "sha256": "58904c088f82d1a8966b2afc3a5848f7b22495da43b0976b25e912b71b3f031c",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261124-phase3-final-stabilization.md",
+      "sha256": "c98f1c3f20472fc304ae98dd694548fcf1ecd1b55b0efb40e6f06c1748ab029a",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261124-phase3-q31-unmapped-fields-fortinet-cef.md",
+      "sha256": "705873615e76edc43738a30f4a8b8a475dee1d5c8f7aa63fdfc3d2eb574600b7",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261125-final-remaining-work.md",
+      "sha256": "51a4a8751b1608da768ab8c707ed0531b41f56196faa09ff664c2ae0ecbd8657",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261125-final-root-cause-review.md",
+      "sha256": "005c3e8f066065fa31874c8a486d15b250dcb695544c61846b838c2df88548a5",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261125-h2-d2-pri-cef-g5.md",
+      "sha256": "9277c78c55bec60ae5efb1be185f122a914166b08ed7d6f2d632d780119f90e4",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261125-isoc-single-service.md",
+      "sha256": "284edc3bbf451aa2dc9032e2566bd673e2918850ae16bd508f8c8aa5cb5d0c8e",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261125-owner-template-approval.md",
+      "sha256": "cf66acabbb6be7b1f888821fa5a954a068e3cabccd3f16ec03f6d34d0fb743c2",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/20261125-release-preparation.md",
+      "sha256": "ddf76fac0c83c4c83d072aa6f99f5f751ddf523770a5d41d6d55ae7891bd7b29",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/desktop-novice-first-entry-20261021.md",
+      "sha256": "e1ec8de64fca1d087676841a6b73584634ae0477c8e654d8362bbd7a4199d8f3",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/grammar-contract-and-semantic-oracle.md",
+      "sha256": "97e5371153c319eea81f99c65e59cf81cedc9d83bffe24f235308cd1565db905",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/mixed-generic-profiles-20261020.md",
+      "sha256": "680818ae58b22efbe8f20e79244abe22f0e5b907cf1bcf19785c0d3673d9698d",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    },
+    {
+      "path": "docs/verification/roadmap-followup-20261020.md",
+      "sha256": "65dadcd381ee9bca649bbbd04add94d97c9e16de881c50e0fbd853cb59192f43",
+      "kind": "historical_evidence",
+      "disposition": "UNREVIEWED"
+    }
+  ]
+}
