@@ -1,0 +1,130 @@
+{
+  "contract": "parserstudio.stellar70-semantic-goldens.v1",
+  "provenance": "Independent explicit protocol, disposition, application, policy, MAC, user, VLAN and file values from the registered publisher examples. Types and field meanings follow the Stellar 7.0 metadata dictionary. Empty arrays do not authorize arbitrary or lossy mappings; all source-value checks remain mandatory.",
+  "dictionary": "https://docs.stellarcyber.ai/7.0.xs/Common/Metadata-Dictionary.htm",
+  "cases": {
+    "fortinet_fortios_traffic": [
+      {
+        "source": "proto",
+        "target": "proto",
+        "value": 6
+      },
+      {
+        "source": "policyid",
+        "target": "fw_policy_id",
+        "value": "1"
+      },
+      {
+        "source": "appid",
+        "target": "appid",
+        "value": 34050
+      },
+      {
+        "source": "srcmac",
+        "target": "srcmac",
+        "value": "a2:e9:00:ec:40:01"
+      }
+    ],
+    "fortinet_fortios_system": [],
+    "suricata_eve_alert": [
+      {
+        "source": "proto",
+        "target": "proto_name",
+        "value": "TCP"
+      },
+      {
+        "source": "alert.action",
+        "target": "action",
+        "value": "allowed"
+      }
+    ],
+    "aws_cloudtrail_consolelogin": [
+      {
+        "source": "userIdentity.userName",
+        "target": "username",
+        "value": "John"
+      }
+    ],
+    "fortinet-008": [],
+    "fortinet-021": [
+      {
+        "source": "proto",
+        "target": "proto",
+        "value": 6
+      },
+      {
+        "source": "action",
+        "target": "action",
+        "value": "blocked"
+      },
+      {
+        "source": "policyid",
+        "target": "fw_policy_id",
+        "value": "1"
+      }
+    ],
+    "fortinet-024": [
+      {
+        "source": "proto",
+        "target": "proto",
+        "value": 6
+      },
+      {
+        "source": "action",
+        "target": "action",
+        "value": "dropped"
+      },
+      {
+        "source": "policyid",
+        "target": "fw_policy_id",
+        "value": "1"
+      }
+    ],
+    "meraki_mr_flows_allow": [
+      {
+        "source": "protocol",
+        "target": "proto_name",
+        "value": "tcp"
+      }
+    ],
+    "meraki_mx_flows_pattern": [
+      {
+        "source": "protocol",
+        "target": "proto_name",
+        "value": "udp"
+      }
+    ],
+    "meraki_mx_gp_firewall": [
+      {
+        "source": "protocol",
+        "target": "proto_name",
+        "value": "udp"
+      },
+      {
+        "source": "vlan",
+        "target": "vlan",
+        "value": 1
+      }
+    ],
+    "sophos_sfw_antivirus_ftp": [
+      {
+        "source": "protocol",
+        "target": "proto_name",
+        "value": "TCP"
+      },
+      {
+        "source": "file_size",
+        "target": "file_size",
+        "value": 0
+      },
+      {
+        "source": "file_path",
+        "target": "file_path",
+        "value": "/var/www//home/ftp-user/ta_test_file_1ta-cl1-46"
+      }
+    ],
+    "arcsight_cef_basic_v0": [],
+    "arcsight_cef_escaped_header_pipe": [],
+    "arcsight_cef_escaped_equals": []
+  }
+}

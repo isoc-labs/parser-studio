@@ -65,3 +65,26 @@ test('every documented case has a separately authored endpoint disposition', () 
   }
   assert.deepEqual(Object.keys(endpoints.cases).filter(id=>!Object.keys(endpoints.cases[id]!).length),['fortinet-008']);
 });
+
+test('independent non-endpoint semantic entries cover every registered case and cite literal values', () => {
+  const file=resolve(root,'evals/golden-corpus/stellar70-semantic-goldens.v1.json');
+  const semantic=JSON.parse(readFileSync(file,'utf8')) as {
+    contract:string; cases:Record<string,{source:string;target:string;value:string|number}[]>;
+  };
+  assert.equal(semantic.contract,'parserstudio.stellar70-semantic-goldens.v1');
+  const all=registry.files.flatMap(file=>(JSON.parse(readFileSync(resolve(root,file),'utf8')) as {
+    cases:{id:string;sampleClass:string;rawSample:string}[]
+  }).cases).filter(c=>c.sampleClass.startsWith('VENDOR_DOCUMENTED'));
+  assert.deepEqual(Object.keys(semantic.cases).sort(),all.map(c=>c.id).sort());
+  const integerTargets=new Set(['proto','appid','vlan','file_size']);
+  const stringTargets=new Set(['proto_name','fw_policy_id','srcmac','username','action','file_path']);
+  let count=0;
+  for(const c of all)for(const entry of semantic.cases[c.id]!){
+    assert.ok(entry.source);
+    assert.ok(c.rawSample.includes(String(entry.value)),c.id+' '+entry.source);
+    assert.ok(integerTargets.has(entry.target)?Number.isInteger(entry.value):
+      stringTargets.has(entry.target)&&typeof entry.value==='string',entry.target);
+    count++;
+  }
+  assert.equal(count,20);
+});

@@ -6,6 +6,7 @@
 // with the code that names that thing. It needs no Ruby and no browser: the gate's
 // job is the bookkeeping between corpus, bundles, recorded downloads and executed
 // events, and that is what is attacked here.
+import {loadGoldenDestinationExpectations} from '../src/golden-destination-expectations.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -30,7 +31,7 @@ const cases: Case[] = registry.files
   .flatMap(file => (JSON.parse(readFileSync(resolve(root, file), 'utf8')) as { cases: Case[] }).cases)
   .filter(item => item.sampleClass.startsWith('VENDOR_DOCUMENTED'));
 
-const endpointGoldens = (JSON.parse(readFileSync(resolve(root, 'evals/golden-corpus/stellar70-endpoint-goldens.v1.json'), 'utf8')) as { cases: Record<string, Record<string,string|number>> }).cases;
+const endpointGoldens = loadGoldenDestinationExpectations(root);
 
 const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
@@ -148,3 +149,10 @@ attack('mapping and emitted endpoint roles agree with each other but are reverse
   [record.srcip, record.dstip] = [record.dstip, record.srcip];
   f.results[first] = {calls: [[call[0], record]]};
 }, 'compare', 'GOLDEN_CANONICAL_DESTINATION_MISMATCH ' + first);
+
+attack('a correct source value but incorrect official protocol type', f => {
+  const call=f.results[first]!.calls[0]!;
+  const record={...(call[1] as Record<string,unknown>)};
+  record.proto='6'; // exact official wire type must be integer
+  f.results[first]={calls:[[call[0],record]]};
+}, 'compare', 'GOLDEN_CANONICAL_DESTINATION_MISMATCH '+first);

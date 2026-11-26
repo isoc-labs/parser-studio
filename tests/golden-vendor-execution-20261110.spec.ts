@@ -11,6 +11,7 @@
 //
 // Scope: Parser Studio output only. This is not a Stellar Cyber import, Syslog
 // reception or indexing result.
+import {loadGoldenDestinationExpectations} from '../backend/src/golden-destination-expectations';
 import { test, expect } from './support/downloadSink';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -27,7 +28,7 @@ const loadCases = (path: string) => (JSON.parse(readFileSync(resolve(path), 'utf
 // Publisher-documented examples only. PROJECT_SYNTHETIC cases are never counted here.
 const corpusFiles = (JSON.parse(readFileSync(resolve('evals/golden-corpus/corpus-files.v1.json'), 'utf8')) as { files: string[] }).files;
 const vendorCases = corpusFiles.flatMap(loadCases).filter(item => item.sampleClass.startsWith('VENDOR_DOCUMENTED'));
-const endpointGoldens = (JSON.parse(readFileSync(resolve('evals/golden-corpus/stellar70-endpoint-goldens.v1.json'), 'utf8')) as { cases: Record<string, Record<string,string|number>> }).cases;
+const endpointGoldens = loadGoldenDestinationExpectations();
 const RUNNER = resolve('scripts/verification/ruby-golden-event-runner.rb');
 
 const isObject = (value: unknown): value is Record<string, unknown> =>

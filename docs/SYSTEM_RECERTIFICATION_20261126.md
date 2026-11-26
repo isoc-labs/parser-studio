@@ -227,3 +227,22 @@ deployment remain separate gates.
   Automated coverage and reference existence check passed (27/27).
 - Full individual disposition of the baseline 148-file inventory and
   independent proof of each active requirement are still open.
+
+## W5/W6/W10 — expanded independent semantic destination truth
+
+- Added 20 explicit non-endpoint expectations across the same 14 registered
+  publisher cases: L4 protocol numbers/names, dispositions, application ID,
+  firewall policy, MAC, username, VLAN and file fields. A common loader
+  combines these with the 42 endpoint expectations for browser and Native
+  gates. Source values were read from the corpus, with types from the
+  Stellar 7.0 catalog; no runtime-derived expectations.
+- Registry checks 4/4, focused gate tests 3/3, backend typecheck PASS.
+  The actual existing 14 vendor downloads pass all 62 independent
+  destination values/types. Mutation of numeric proto into a string fails.
+- Local aggregate gate on previously captured actual downloads passed:
+  14 vendor + 6 Assisted Regex + 4 mixed ASA + 15 mapping events = 39.
+  Ruby version 2.4.9; this reuses prior evidence, not a newly executed
+  exact-HEAD six-shard browser run or proprietary target verification.
+- Remaining: current full CI, original corpus beyond these 14 registered
+  examples, complete independent semantic truth across all fields,
+  document-by-document disposition, and independent final acceptance.

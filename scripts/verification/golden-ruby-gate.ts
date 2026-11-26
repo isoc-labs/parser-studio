@@ -16,6 +16,7 @@
 //
 //   golden-ruby-gate.ts prepare <downloads-dir> <runner-input.json>
 //   golden-ruby-gate.ts compare <downloads-dir> <runner-output.json> [--expect-ruby 2.4.9]
+import {loadGoldenDestinationExpectations} from '../../backend/src/golden-destination-expectations.js';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
@@ -29,7 +30,7 @@ interface Bundle { contract: string; id: string; raw: string; ruby: string; ruby
 // One registry for the browser spec and this gate (backend/test/golden-corpus-registry.test.ts keeps it complete).
 export const CORPUS_FILES: string[] = (JSON.parse(readFileSync(resolve('evals/golden-corpus/corpus-files.v1.json'), 'utf8')) as { files: string[] }).files;
 
-const endpointGoldens = (JSON.parse(readFileSync(resolve('evals/golden-corpus/stellar70-endpoint-goldens.v1.json'), 'utf8')) as { cases: Record<string, Record<string,string|number>> }).cases;
+const endpointGoldens = loadGoldenDestinationExpectations();
 
 async function corpus(): Promise<VendorCase[]> {
   const all: VendorCase[] = [];
