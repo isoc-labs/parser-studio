@@ -120,3 +120,16 @@ deployment remain separate gates.
 - Remaining W5: independent truth audit across the rest of the corpus;
   W6 mapping audit, W7 layout and W8-W11 remain open. No actual Stellar
   sensor import or indexed event has been verified.
+
+## W7 responsive recovery and mapping
+
+- RED: real Chromium at 1920px showed the recovery explanation and action
+  competing in one horizontal flex row instead of sequential presentation.
+- GREEN: recovery warnings now stack content and actions; mapping uses
+  available container width, not viewport width. Fields, metadata, actions,
+  identity cards and long values have bounded grid tracks and local wrapping.
+- Real Chromium recovery, field review, mapping and create-parser navigation
+  at 1024, 1280, 1440 and 1920px: 4/4 PASS, with overlap and containment
+  assertions. Language and multilingual/Unicode regression: 15/15 PASS.
+- Scope: these four tested desktop layouts; independent visual review and
+  other UI journeys remain open.
