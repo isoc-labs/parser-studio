@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page} from './support/downloadSink';
 import {mkdirSync,writeFileSync} from 'node:fs';
 
@@ -57,6 +58,7 @@ async function journey(page:Page,baseURL:string,name:string){
   });
   page.on('response',response=>{if(response.status()>=500)serverErrors.push(response.status()+' '+response.url());});
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const listener=page.getByRole('spinbutton',{name:'Parser listener port'}).first();
   await expect(listener).toHaveValue('6801');
   if(item.port!==null)await listener.fill(String(item.port));
