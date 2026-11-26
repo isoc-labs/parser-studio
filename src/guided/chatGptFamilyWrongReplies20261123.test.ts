@@ -115,7 +115,7 @@ describe('wrong ChatGPT replies for one event type are blocked before anything c
     ['an unbounded Regex',()=>edit(recipe=>{recipe.sourceFormat='regex';recipe.bodyFormat='regex';
       const at=recipe.stages.findIndex(stage=>stage.op==='parse_generic_structural');
       recipe.stages[at]={op:'parse_regex',pattern:'^(?<msg>(a+)+)$'};}),
-      ['import:UNTRUSTED_RECIPE','import:INVALID_JSON','proposal:UNSUPPORTED_OPERATOR_CHANGE','proposal:UNSUPPORTED_RECIPE']],
+      ['import:REGEX_PREVIEW_UNSUPPORTED']],
     ['a Recipe contract violation',()=>edit(recipe=>{recipe.contract='parser-studio.recipe.v0.3';}),
       ['import:UNTRUSTED_RECIPE','import:INVALID_JSON']],
     ['prose instead of a recipe',()=>'Sure! Here is how I would parse these logs: split on spaces and map src to srcip.',

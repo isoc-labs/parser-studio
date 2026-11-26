@@ -3,6 +3,7 @@ import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {TextDecoder} from "node:util";
 import {BACKEND_CAPABILITIES} from "./capabilities.js";
+import {parserExportIdentityIssue} from "./parser-export-identity.js";
 import {compilePair} from "./compiler.js";
 import {validateProject,MAX_PROJECT_BYTES} from "./validate.js";
 import {inspectPair,MAX_IMPORT_BYTES,PairInspectionError} from "./import.js";
@@ -222,6 +223,9 @@ async function handleOfflineRequest(req:IncomingMessage,res:ServerResponse):Prom
         send(res,200,{ok:true,issues:[],compilerMode:"V01_EQUIVALENT_SUBSET",
           nativeUserParserVerified:false,targetImportVerified:false});return;
       }
+      const project=(input as {legacyProject:{vendor:string;product:string}}).legacyProject;
+      const identityIssue=parserExportIdentityIssue(project.vendor,project.product);
+      if(identityIssue){send(res,422,{error:identityIssue.code,issues:[identityIssue]});return;}
       send(res,200,compileRecipePair(input));
     }catch(error){requestError(error,res,"RECIPE_GENERATION_FAILED");}
     return;
@@ -278,6 +282,9 @@ async function handleOfflineRequest(req:IncomingMessage,res:ServerResponse):Prom
         message:ruby24RegexRefusalDetail((input as {extraction?:{pattern?:unknown}})?.extraction?.pattern),
       }]});return;
     }
+    const project=input as {vendor:string;product:string};
+    const identityIssue=parserExportIdentityIssue(project.vendor,project.product);
+    if(identityIssue){send(res,422,{error:identityIssue.code,issues:[identityIssue]});return;}
     send(res,200,compilePair(input));
   }catch(error){requestError(error,res,"GENERATION_ERROR");}
 }

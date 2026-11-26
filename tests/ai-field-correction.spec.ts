@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect,type Page} from '@playwright/test';
 
 const source=[
@@ -14,6 +15,7 @@ type Recipe={projectId:string;stages:Array<{
 
 async function prepareManualSource(page:Page):Promise<Recipe>{
   await page.goto('/?workspace=chatgpt');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('ChatGPT local sample logs').fill(source);
   await expect(page.getByLabel('ChatGPT redacted examples')).toHaveCount(0);
   await expect(page.getByRole('alert')

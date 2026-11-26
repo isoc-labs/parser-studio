@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {mkdirSync,writeFileSync} from 'node:fs';
@@ -43,6 +44,7 @@ test.skip(
 test('key=value text with a bare token is not reported as parsed; Fix with ChatGPT gives a parser with stable fields',async({page})=>{
   test.setTimeout(240_000);
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(SAMPLE);
   await page.getByRole('button',{name:'Analyze Logs'}).click();
   const summary=page.getByLabel('Beginner analysis summary');

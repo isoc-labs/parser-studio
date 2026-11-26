@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {createHash} from 'node:crypto';
 import {test,expect,type Page} from './support/downloadSink';
 
@@ -15,6 +16,7 @@ const dockerErr=JSON.stringify({
 
 async function named(page:Page,groups:readonly {name:string;source:string}[]){
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByRole('button',{name:'Add Another Log Type'}).click();
   for(let i=0;i<groups.length;i++){
     if(i>1)await page.getByLabel('Named log type samples')

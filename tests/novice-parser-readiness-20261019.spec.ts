@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 const cases=[
  {id:'Repeated KV occurrences',raw:'<134>Oct 19 09:25:01 fw action=allow action=deny src=192.0.2.3 dst=198.51.100.2'},
@@ -8,6 +9,7 @@ for(const item of cases){
  test(item.id+' honest source-only compilation block',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const source=page.getByLabel('Auto Parser raw logs');
   await source.fill(item.raw);
   await page.getByRole('button',{name:'Analyze Logs'}).click();
@@ -49,6 +51,7 @@ for(const item of cases){
 }
 test('qualified JSON normal workflow still reaches field mapping',async({page})=>{
  await page.goto('/');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('Auto Parser raw logs').fill('{"action":"deny","src_ip":"192.0.2.10","username":"tester"}');
  await page.getByRole('button',{name:'Analyze Logs'}).click();
  await expect(page.getByLabel('Beginner analysis summary')).toBeVisible();

@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {expandZipDownload} from '../backend/src/downloaded-artifact-validation';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
@@ -41,6 +42,7 @@ test.skip(
 test('Auto Parser applies a lossless ChatGPT recovery across multi-token residual regions and refuses lossy ones (H-2)',async({page})=>{
   test.setTimeout(240_000);
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(SAMPLE);
   await page.getByRole('button',{name:'Analyze Logs'}).click();
   const problem=page.getByLabel('Parse problem inspector');
@@ -54,6 +56,10 @@ test('Auto Parser applies a lossless ChatGPT recovery across multi-token residua
     if(!await attest.isChecked())await attest.check();
     await ai.getByRole('button',{name:'Test Proposed Fix'}).click();
   }
+  await test_('^(?<field>(a+)+)$');
+  await expect(status.filter({hasText:'ChatGPT result rejected'})).toContainText('REGEX_PREVIEW_UNSUPPORTED');
+  await expect(status.filter({hasText:'ChatGPT result rejected'})).toContainText(/unsupported or potentially expensive|nested repetition/i);
+  await expect(ai.getByRole('button',{name:'Apply Verified Fix'})).toHaveCount(0);
   // Lossy replies: the HIER_ prefix, the TCP_ prefix and the decimal point of the time read as literal pattern text
   // (independent audit A-1: a decimal point is part of the value unless an enclosing capture keeps it).
   for(const lossy of [PATTERN.replace(' (?<hierarchy>[A-Z_]+)/',' HIER_(?<hierarchy>[A-Z_]+)/'),
@@ -97,9 +103,14 @@ test('Auto Parser applies a lossless ChatGPT recovery across multi-token residua
 test('independent ChatGPT Assisted journey exports a statically accepted Regex with real backend',async({page})=>{
   test.setTimeout(120_000);
   await page.goto('/?workspace=chatgpt');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('ChatGPT local sample logs').fill(SAMPLE);
   await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();
   await expect(page.getByLabel('ChatGPT copyable prompt')).toBeVisible();
+  await page.getByLabel('ChatGPT result JSON').fill(reply('^(?<field>(a+)+)$'));
+  await page.getByRole('button',{name:'Check ChatGPT Result'}).click();
+  await expect(page.getByRole('status').filter({hasText:'ChatGPT result rejected'})).toContainText('REGEX_PREVIEW_UNSUPPORTED');
+  await expect(page.getByLabel('ChatGPT created parser files')).toHaveCount(0);
   await page.getByLabel('ChatGPT result JSON').fill(reply(PATTERN));
   await page.getByRole('button',{name:'Check ChatGPT Result'}).click();
   await expect(page.getByLabel('ChatGPT result ready for testing')).toContainText('accepted for testing');

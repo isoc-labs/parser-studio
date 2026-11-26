@@ -132,7 +132,7 @@ test("shipping module graph excludes all legacy target-capable HTTP handlers",as
     // It exposes no disk, network, target or dynamic execution capability.
     "canonical-operator-contract.ts",
     // Pure manufacturer namespace predicate; no runtime capabilities.
-    "vendor-namespace.ts",
+    "vendor-namespace.ts","parser-export-identity.ts",
     "canonical-value-contract.ts","unicode-case-map.v1.json",
     "target-runtime-export.ts",
     // Static pinned Stellar 7.0 scalar catalog; no executable/HTTP-capable module.
@@ -204,5 +204,23 @@ test("standalone shipping endpoints retain the exact bounded offline compiler co
     const generated=await post(base,"/api/v1/parser-pairs/recipe/v0.2/generate",request);
     assert.equal(generated.status,200);
     assert.equal((await generated.json() as {manifest:{status:string}}).manifest.status,"DRAFT");
+  });
+});
+
+test("placeholder product identity cannot generate a pair through either shipping route",async()=>{
+  const {recipeFromLegacyProject}=await import("../src/parser-recipe-v02.js");
+  await withServer(async base=>{
+    for(const [vendor,product] of [["Demo Local Draft","Firewall"],["demo local draft","Firewall"],
+      ["Synthetic","Untitled parser"],["Synthetic"," untitled parser "]] as const){
+      const project={...sampleProject(),vendor,product,projectId:"draft-synthetic_recipe"};
+      project.classification.rules=project.classification.rules.filter(rule=>rule.operator==="equals");
+      const recipe=recipeFromLegacyProject(project,"b".repeat(64),2);
+      const reply=await post(base,"/api/v1/parser-pairs/generate",project);
+      assert.equal(reply.status,422);
+      assert.equal((await reply.json() as any).error,"PARSER_IDENTITY_REQUIRED");
+      const staged=await post(base,"/api/v1/parser-pairs/recipe/v0.2/generate",{recipe,legacyProject:project});
+      assert.equal(staged.status,422);
+      assert.equal((await staged.json() as any).error,"PARSER_IDENTITY_REQUIRED");
+    }
   });
 });

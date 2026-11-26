@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -10,6 +11,7 @@ const sha=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex'
 
 test('new source identity displays editable CONF port before log analysis',async({page})=>{
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const stage=page.getByLabel('Add Logs stage');
   const listener=stage.getByRole('spinbutton',{name:'Parser listener port'});
   await expect(listener).toHaveValue('6801');
@@ -26,6 +28,7 @@ test('new source identity displays editable CONF port before log analysis',async
 
 test('Auto and ChatGPT Assisted use one editable port before logs are supplied',async({page})=>{
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await expect(page.getByLabel('Parser listener port')).toHaveValue('6801');
   await page.getByRole('button',{name:'ChatGPT Assisted Parser',exact:true}).click();
   const input=page.getByLabel('ChatGPT preparation').getByLabel('Parser listener port');
@@ -44,6 +47,7 @@ test.describe('real source-to-backend DRAFT generation, without DP/sensor operat
   for(const port of [6801,6819]){
     test(`generated Ruby/CONF files use explicitly selected ${port} on actual backend`,async({page})=>{
       await page.goto('/');
+      await enterSyntheticParserIdentity(page);
       const listener=page.getByRole('spinbutton',{name:'Parser listener port'});
       await expect(listener).toHaveValue('6801');
       if(port!==6801)await listener.fill(String(port));

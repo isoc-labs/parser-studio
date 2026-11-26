@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 
@@ -17,6 +18,7 @@ test('novice explicitly reviews 7.0 type-specific suggestions and downloads one 
   const errors:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   const raw=page.getByLabel('Auto Parser raw logs');
   await raw.fill(source);
   await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();

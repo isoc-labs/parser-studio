@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {mkdirSync,writeFileSync} from 'node:fs';
@@ -34,6 +35,7 @@ test.skip(
 test('ChatGPT Assisted refuses wrong replies and keeps the column a reply leaves unmapped (Q3-1)',async({page})=>{
   test.setTimeout(120_000);
   await page.goto('/?workspace=chatgpt');
+  await enterSyntheticParserIdentity(page);
   await expect(page.getByRole('main',{name:'ChatGPT Assisted Parser'})).toBeVisible();
   await page.getByLabel('ChatGPT local sample logs').fill(SAMPLE);
   await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();

@@ -13,13 +13,14 @@ import {lookupFieldValue} from '../fieldPaths';
 import {defaultGuidedOptions} from './contract';
 import {sha256Utf8Hex} from '../sha256';
 import {selectDraftFormat} from './draftFormatTransition';
+import {validatePreviewRegexPattern} from '../regexSafety';
 import {regexReadsUncapturedText} from './regexSourceCoverage';
 
 const MAX_RECIPE_BYTES=32*1024;
 export type AIExchangeReason='SOURCE_LIMIT'|'UNTRUSTED_PREVIEW'|
  'PROJECT_UNSUPPORTED'|'CURRENT_RECIPE_UNAVAILABLE'|'INPUT_TOO_LARGE'|
  'INVALID_JSON'|'UNTRUSTED_RECIPE'|'SOURCE_IDENTITY_MISMATCH'|
- 'FORMAT_MISMATCH'|'UNSUPPORTED_OPERATION'|'UNCAPTURED_SOURCE_TEXT';
+ 'FORMAT_MISMATCH'|'UNSUPPORTED_OPERATION'|'UNCAPTURED_SOURCE_TEXT'|'REGEX_PREVIEW_UNSUPPORTED';
 export type AIPromptResult=
  | {ok:true;prompt:string;sampleSha256:string;sourceCount:number;
      currentProjectImportReady:boolean;rawLogsIncluded:false;automaticUpload:false}
@@ -30,8 +31,23 @@ export type AIImportResult=
        status:'REVIEW_ONLY';mode:'BASELINE_EDIT'|'FULL_RECOVERY';changedStageCount:number;addedMappings:number;
        removedMappings:number;sampleEvents:number;backendCompilerAvailable:false;
        userApprovalRequired:true;rawLogsIncluded:false}}
- | {ok:false;reason:AIExchangeReason};
+ | {ok:false;reason:AIExchangeReason;detail?:string};
 
+/** Retain the existing schema gate and report a specific local Regex refusal
+ * instead of hiding it behind a generic recipe-format error. */
+function rejectedRecipe(value:unknown):Extract<AIImportResult,{ok:false}>{
+ if(value&&typeof value==='object'&&!Array.isArray(value)){
+  const stages=(value as {stages?:unknown}).stages;
+  if(Array.isArray(stages)&&stages.length<=125)for(const stage of stages){
+   if(stage&&typeof stage==='object'&&!Array.isArray(stage)&&stage.op==='parse_regex'&&
+      typeof stage.pattern==='string'){
+    const detail=validatePreviewRegexPattern(stage.pattern);
+    if(detail)return {ok:false,reason:'REGEX_PREVIEW_UNSUPPORTED',detail};
+   }
+  }
+ }
+ return {ok:false,reason:'UNTRUSTED_RECIPE'};
+}
 async function digest(text:string):Promise<string>{return sha256Utf8Hex(text);}
 /** A returned parse_regex stage may not read text of the line that no field keeps (regexSourceCoverage.ts). */
 function dropsSourceText(recipe:ParserRecipeV2):boolean{
@@ -98,7 +114,7 @@ export async function importReviewOnlyAIRecipe(
  if(!verified(source,suite))return {ok:false,reason:'UNTRUSTED_PREVIEW'};
  let value:unknown;
  try{value=JSON.parse(text) as unknown;}catch{return {ok:false,reason:'INVALID_JSON'};}
- if(!validateReviewableRecipe(value))return {ok:false,reason:'UNTRUSTED_RECIPE'};
+ if(!validateReviewableRecipe(value))return rejectedRecipe(value);
  if(dropsSourceText(value))return {ok:false,reason:'UNCAPTURED_SOURCE_TEXT'};
  const current=await buildReviewableRecipe(source,draft,suite);
  if(!current.ok)return {ok:false,reason:'CURRENT_RECIPE_UNAVAILABLE'};
@@ -140,7 +156,7 @@ export async function importRecoveryAIRecipe(
  if(!verified(source,suite))return {ok:false,reason:'UNTRUSTED_PREVIEW'};
  let value:unknown;
  try{value=JSON.parse(text) as unknown;}catch{return {ok:false,reason:'INVALID_JSON'};}
- if(!validateReviewableRecipe(value))return {ok:false,reason:'UNTRUSTED_RECIPE'};
+ if(!validateReviewableRecipe(value))return rejectedRecipe(value);
  if(dropsSourceText(value))return {ok:false,reason:'UNCAPTURED_SOURCE_TEXT'};
  const imported=value as ParserRecipeV2;
  const opts=draft.guided??defaultGuidedOptions();

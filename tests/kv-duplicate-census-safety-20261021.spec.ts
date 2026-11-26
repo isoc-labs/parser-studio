@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from '@playwright/test';
 
 const malformed=[
@@ -20,6 +21,7 @@ test('novice event accounting refuses duplicate KV sources before generating a D
   page.on('pageerror',error=>errors.push(error.message));
   for(const raw of malformed){
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     const source=page.getByLabel('Auto Parser raw logs');
     await source.fill(raw);
     await expect(page.getByLabel('Automatic event accounting')).toContainText('1/1 events checked');
@@ -38,6 +40,7 @@ test('novice event accounting refuses duplicate KV sources before generating a D
 test('quotes, distinct case-sensitive names and legitimate KV events do not trigger duplicate warning',async({page})=>{
   for(const raw of valid){
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     const source=page.getByLabel('Auto Parser raw logs');
     await source.fill(raw);
     await expect(page.getByLabel('Automatic event accounting')).toContainText('1/1 events checked');

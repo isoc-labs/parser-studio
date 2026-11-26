@@ -42,12 +42,19 @@ class MappingNativeGateTests(unittest.TestCase):
     def test_source_value_loss_and_unauthorized_mapping_are_detected(self):
         output = fake_output()
         record = output["results"]["mapping-assisted-unmapped-0"]["calls"][0][1]
-        del record["Demo Local Draft"]["src_ip"]
+        del record["Demo"]["src_ip"]
         with self.assertRaisesRegex(ValueError, "MAPPING_NATIVE_VALUE"):
             self.check(output)
         output = fake_output()
         output["results"]["mapping-assisted-unmapped-0"]["calls"][0][1]["srcip"] = "198.51.100.10"
         with self.assertRaisesRegex(ValueError, "MAPPING_NATIVE_UNAPPROVED_FIELD"):
+            self.check(output)
+
+    def test_placeholder_namespace_is_rejected(self):
+        output = fake_output()
+        record = output["results"]["mapping-assisted-unmapped-0"]["calls"][0][1]
+        record["Demo Local Draft"] = {"unexpected": "value"}
+        with self.assertRaisesRegex(ValueError, "MAPPING_NATIVE_PLACEHOLDER_NAMESPACE"):
             self.check(output)
 
     def test_cross_event_scope_and_port_type_are_detected(self):

@@ -35,7 +35,7 @@ Auto Parser follows Add Logs → Review Fields → Map Fields → Create Parser.
 3. **Map Fields** — review suggested Stellar Cyber mappings, resolve collision/type
    problems, use optional reviewed AI assistance, and correct mappings manually.
 4. **Create Parser** — validate the reviewed source and mappings, create the
-   matching Ruby/CONF pair only when eligible, and expose verified artifact
+   matching Ruby/CONF pair only when eligible and actual manufacturer and product have been entered, and expose verified artifact
    downloads without implying live target compatibility.
 
 Errors, unsupported structures, pending checks and unverified runtime evidence

@@ -15,7 +15,7 @@ def case(raw, required, absent=()):
     return {"raw": raw, "required": required, "absent": list(absent)}
 
 def vendor(**fields):
-    return {"Demo Local Draft/" + name: value for name, value in fields.items()}
+    return {"Demo/" + name: value for name, value in fields.items()}
 
 def endpoint(src, dst, sport, dport, action):
     return {"srcip": src, "dstip": dst, "srcport": sport, "dstport": dport, "action": action}
@@ -40,19 +40,19 @@ SCENARIOS = {
         "cases": [
             case('<134>Nov 25 09:10:01 gw-a fwd: srcip=10.44.7.21 dstip=198.51.100.77 srcport=51522 dstport=8443 action=permit',
                  {**endpoint("10.44.7.21", "198.51.100.77", 51522, 8443, "permit"),
-                  "parserstudio_event_family": "rfc3164_kv"}, ["Demo Local Draft/sensor_bytes"]),
+                  "parserstudio_event_family": "rfc3164_kv"}, ["Demo/sensor_bytes"]),
             case('{"ts":"2026-11-25T09:10:04Z","sensor":"brisa-3","src_ip":"10.9.8.7","dst_ip":"203.0.113.40","bytes":1820}',
                  {"srcip":"203.0.113.40", **vendor(src_ip="10.9.8.7",sensor="brisa-3",sensor_bytes="1820"),
-                  "parserstudio_event_family":"json"}, ["dstip","Demo Local Draft/bytes"]),
+                  "parserstudio_event_family":"json"}, ["dstip","Demo/bytes"]),
             case('CEF:0|Tavora|Sentinel|4.2|1007|Policy hit|6|src=10.3.3.3 dst=203.0.113.9 spt=40112 dpt=22 act=blocked',
                  {**endpoint("10.3.3.3","203.0.113.9",40112,22,"blocked"),
-                  "parserstudio_event_family":"cef"}, ["Demo Local Draft/sensor_bytes"]),
+                  "parserstudio_event_family":"cef"}, ["Demo/sensor_bytes"]),
             case('{"ts":"2026-11-25T09:11:00Z","sensor":"brisa-4","src_ip":"2001:db8::7","dst_ip":"2001:db8::40","bytes":7}',
                  {"srcip":"2001:db8::40", **vendor(src_ip="2001:db8::7",sensor="brisa-4",sensor_bytes="7"),
-                  "parserstudio_event_family":"json"}, ["dstip","Demo Local Draft/bytes"]),
+                  "parserstudio_event_family":"json"}, ["dstip","Demo/bytes"]),
             case('CEF:0|Tavora|Sentinel|4.2|1008|Policy miss|3|src=10.3.3.4 dst=203.0.113.10 spt=40113 dpt=443 act=allowed',
                  {**endpoint("10.3.3.4","203.0.113.10",40113,443,"allowed"),
-                  "parserstudio_event_family":"cef"}, ["Demo Local Draft/sensor_bytes"]),
+                  "parserstudio_event_family":"cef"}, ["Demo/sensor_bytes"]),
         ],
     },
     "jsonata-event": {
@@ -66,7 +66,7 @@ SCENARIOS = {
         ] + [
             case(raw, {**endpoint(ip,"10.0.0.8",51234,443,"allow"),"event_name":"Login",
                        "parserstudio_source/generic/source_raw":raw,
-                       "parserstudio_event_family":"structured_family_cef"}, ["Demo Local Draft/cef_name"])
+                       "parserstudio_event_family":"structured_family_cef"}, ["Demo/cef_name"])
             for raw,ip in [(CEF,"10.0.0.7"),(CEF.replace("10.0.0.7","10.0.0.9"),"10.0.0.9")]
         ],
     },
@@ -104,6 +104,7 @@ def compare(path):
             require(len(calls)==1, f"MAPPING_NATIVE_EVENT_COUNT {name}")
             record=calls[0][1]
             require(isinstance(record,dict) and "parser_err_msg" not in record, f"MAPPING_NATIVE_PARSE_ERROR {name}")
+            require("Demo Local Draft" not in record, f"MAPPING_NATIVE_PLACEHOLDER_NAMESPACE {name}")
             for field,expected in c["required"].items():
                 actual=get(record,field)
                 require(type(actual) is type(expected) and actual==expected, f"MAPPING_NATIVE_VALUE {name} {field}")

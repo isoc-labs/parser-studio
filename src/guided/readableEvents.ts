@@ -6,7 +6,8 @@
  * named with their kind and their number and never shown as parsed. At run time the generated parser marks
  * such an event as not parsed (parser_err_msg, backend/templates/canonical-operators.rb.tpl) and keeps its
  * complete original text in parser_raw_msg, the Stellar Cyber 7.0 dictionary field for the raw message of a
- * parsing error (owner decision of 2026-11-22), so the parser never drops the event.
+ * parsing error (owner decision of 2026-11-22), when it returns an error record. Target delivery or retention
+ * is not verified.
  *
  * The split uses the verdicts the Auto Parser goes on with. With the automatic draft these are the server analysis
  * (every event SOURCE_PARSED) and the first scan (every event RECOGNIZED); the browser preview alone is not enough.

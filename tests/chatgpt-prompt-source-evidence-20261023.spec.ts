@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
 
@@ -22,6 +23,7 @@ for(const item of fixtures){
     const js:string[]=[],outside:string[]=[];
     page.on('pageerror',err=>js.push(err.message));
     await page.goto('/');
+    await enterSyntheticParserIdentity(page);
     page.on('request',req=>{if(/^https?:/.test(req.url())&&!req.url().startsWith(new URL(page.url()).origin+'/'))outside.push(req.url())});
     await page.getByLabel('Auto Parser raw logs').fill(item.source);
     await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
@@ -53,6 +55,7 @@ for(const item of fixtures){
 test('normal JSON prompt contains local grammar evidence, and unchanged baseline does not claim untested holdout',async({page})=>{
   const raw='{"timestamp":"2026-10-23T12:11:13Z","src_ip":"192.0.2.10","action":"deny"}';
   await page.goto('/?workspace=chatgpt');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('ChatGPT local sample logs').fill(raw);
   await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();
   const input=page.getByLabel('ChatGPT copyable prompt');
@@ -78,6 +81,7 @@ test('normal JSON prompt contains local grammar evidence, and unchanged baseline
 test('unsupported freeform Snort syntax stays unrecognized instead of making up grammar',async({page})=>{
   const snort='10/23-12:11:13 [**] [1:1000:0] Snort Alert [**] {TCP} 192.0.2.10:5123 -> 198.51.100.5:443';
   await page.goto('/?workspace=chatgpt');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('ChatGPT local sample logs').fill(snort);
   await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();
   const prompt=page.getByLabel('ChatGPT copyable prompt');

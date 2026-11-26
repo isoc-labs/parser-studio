@@ -40,13 +40,13 @@ export function validatePreviewRegexPattern(pattern: string): string | null {
   // These forms can yield exponential backtracking even with short input:
   // repeated groups containing quantifiers, optional terms or alternatives.
   if (/\((?:[^()]|\\.)*[+*?](?:[^()]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/.test(pattern)) {
-    return unsupported;
+    return unsupported+': nested repetition';
   }
   if (/\((?:\?:)?[^()]*\|[^()]*\)(?:[+*]|\{\d+(?:,\d*)?\})/.test(pattern)) {
-    return unsupported;
+    return unsupported+': repeated alternation';
   }
-  if (hasRepeatedChoice(ast.ast)) return unsupported;
-  if (hasAdjacentQuantifiedCaptures(pattern)) return unsupported;
+  if (hasRepeatedChoice(ast.ast)) return unsupported+': repeated group contains a choice or repetition';
+  if (hasAdjacentQuantifiedCaptures(pattern)) return unsupported+': adjacent quantified captures require a separator';
 
   // Adjacent repetitions of the identical literal character are ambiguous.
   if (/([A-Za-z0-9])(?:[*+])\1(?:[*+])/.test(pattern)) return unsupported;
@@ -56,7 +56,7 @@ export function validatePreviewRegexPattern(pattern: string): string | null {
   for (const match of pattern.matchAll(/\{(\d{1,8})(?:,(\d{0,8}))?\}/g)) {
     const low = Number(match[1]);
     const high = match[2] === undefined || match[2] === '' ? low : Number(match[2]);
-    if (low > 128 || high > 128) return unsupported;
+    if (low > 128 || high > 128) return unsupported+': repetition exceeds the supported bound of 128';
   }
   return null;
 }

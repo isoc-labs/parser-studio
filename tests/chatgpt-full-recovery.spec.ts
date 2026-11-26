@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -26,6 +27,7 @@ test.skip(
 );
 test('RAW_ONLY ChatGPT recovery reaches verified DRAFT Ruby and CONF through the real backend',async({page})=>{
  await page.goto('/?workspace=chatgpt');
+ await enterSyntheticParserIdentity(page);
  await expect(page.getByRole('main',{name:'ChatGPT Assisted Parser'})).toBeVisible();
  await expect(page.getByLabel('Parser listener port')).toHaveValue('6801');
  await page.getByLabel('Parser listener port').fill('6819');

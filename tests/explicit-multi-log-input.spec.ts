@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 
 const threat='{"event_type":"threat","src_ip":"192.0.2.20","action":"deny","message":"탐지"}';
@@ -6,6 +7,7 @@ const asset='{"event_type":"asset","hostname":"fw01","action":"discovered"}';
 
 async function enterNamed(page:import('@playwright/test').Page){
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByRole('button',{name:'Add Another Log Type'}).click();
   await page.getByLabel('Log type name 1').fill('Threat');
   await page.getByLabel('Log type sample 1').fill(threat);
@@ -70,6 +72,7 @@ test('novice adds three named types and creates one reviewed conditional DRAFT',
 
 test('invalid, empty or duplicate named groups fail closed and preserve source',async({page})=>{
   await page.goto('/');
+  await enterSyntheticParserIdentity(page);
   await page.getByLabel('Auto Parser raw logs').fill(threat);
   await page.getByRole('button',{name:'Add Another Log Type'}).click();
   await expect(page.getByLabel('Log type sample 1')).toHaveValue(threat);

@@ -15,11 +15,11 @@
     },
     "docs/02_WEB_UI_SPEC.md": {
       "status": "active",
-      "sha256": "d507a57303281942dd9511031a78cf4a45481b3fab7f672b8abe21f80b68b0a6"
+      "sha256": "4c572e05e1814eba718d0ba6949b846c3056679b92636a4669f482c9e1b90ab8"
     },
     "docs/03_FUNCTIONAL_REQUIREMENTS.md": {
       "status": "active",
-      "sha256": "16e38242273e805ed3a0e657794eb2276338a10dae89f46685710fe862faa72e"
+      "sha256": "a4f006d593bc08e6afbb51b7080f3467ddc9b970bf072edc83a8c8f515579507"
     },
     "docs/04_ARCHITECTURE.md": {
       "status": "supporting",
@@ -171,7 +171,7 @@
     },
     "docs/SYSTEM_RECERTIFICATION_20261126.md": {
       "status": "supporting",
-      "sha256": "61b95b943dcf2d320ce3e46293882f9af6943165ad8241e6aa9fe79d3ba1835b"
+      "sha256": "d051e21045d29ecb47246edcd6f677b8b1e42c0112d964eed053155ceef79437"
     },
     "docs/verification/20261019-advanced-original-source-compiler-gate.md": {
       "status": "historical",
@@ -756,7 +756,7 @@
       "state": "implemented",
       "source": {
         "path": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
-        "contains": "Parsed fields without an approved official mapping stay in the vendor namespace with their original values."
+        "contains": "Parsed fields without an approved official mapping stay in the actual manufacturer namespace with their original names and values."
       },
       "implementation": [
         {
@@ -772,6 +772,10 @@
         {
           "path": "src/guided/chatGptAssistedQ31.test.ts",
           "contains": "keeps the captures the reply left unmapped, in the sample and at run time, each event FULL"
+        },
+        {
+          "path": "backend/test/mainline-authoring-server.test.ts",
+          "contains": "placeholder product identity cannot generate a pair through either shipping route"
         }
       ]
     },

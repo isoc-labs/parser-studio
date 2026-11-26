@@ -17,13 +17,13 @@ The default parser listener port is 6801; a reviewed user override must reach th
 Use the Stellar Cyber 7.0 dictionary only; never infer official fields from another release or unsupported semantics. Preserve type, timestamp unit and timezone, IP validity, port range and protocol evidence; reject invalid or conflicting official destinations.
 
 <!-- requirement: PS-009 -->
-Parsed fields without an approved official mapping stay in the vendor namespace with their original values. Do not fabricate official field meanings or silently discard a value simply because no official mapping was found. Explicitly unsupported/non-emittable values and residuals remain visible as such; distinguish reviewed omission from loss.
+Parsed fields without an approved official mapping stay in the actual manufacturer namespace with their original names and values. Demo placeholders must never be exported; actual manufacturer and product are required before generating files. Do not fabricate official field meanings or silently discard a value simply because no official mapping was found. Explicitly unsupported/non-emittable values and residuals remain visible as such; distinguish reviewed omission from loss.
 
 <!-- requirement: PS-010 -->
 Offer evidence-backed automatic mapping, optional reviewed ChatGPT mapping, and manual correction as fallback; manual or approved mapping is never overwritten by automatic suggestions. Manual edits in a multi-type parser affect the selected event type unless the rule is shared; collisions are blocked and other types remain intact.
 
 <!-- requirement: PS-011 -->
-Parsing correctness and source-value accounting precede mapping success. Preserve original UTF-8 source, exact event boundaries and unresolved spans; do not report FULL or verified output from a partial match or absent evidence. Independent byte/value accounting must distinguish missing evidence from actual loss. When a format cannot be parsed safely, expose the recovery route or preserve the complete raw event as an error record; never invent a parser rule or force automatic mapping merely to reach 100 percent.
+Parsing correctness and source-value accounting precede mapping success. Preserve original UTF-8 source, exact event boundaries and unresolved spans; do not report FULL or verified output from a partial match or absent evidence. Independent byte/value accounting must distinguish missing evidence from actual loss. When a format cannot be parsed safely, expose the recovery route or return the complete raw event as an error record where supported (target delivery and retention are unverified); never invent a parser rule or force automatic mapping merely to reach 100 percent.
 
 <!-- requirement: PS-012 -->
 The pinned Stellar 7.0 native target profile is Ruby 2.4.9 with Fluentd 1.7.4; browser preview, native synthetic execution and actual proprietary DP import/indexing are distinct verification levels. Do not claim target import or live listener proof from a browser or synthetic test. Ruby/CONF generation is subject to the executable capability and regex safety contract.

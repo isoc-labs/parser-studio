@@ -34,11 +34,13 @@ describe('ChatGPT Assisted Parser placeholder identity',()=>{
     await acceptBaselineRecipe();
     const warning=await waitFor(()=>screen.getByRole('note',{name:/placeholder/i}));
     expect(warning).toHaveTextContent('Demo Local Draft');
-    expect(warning).toHaveTextContent(/downloaded files/i);
+    expect(warning).toHaveTextContent(/downloaded files are blocked/i);
+    expect((screen.getByRole('button',{name:'Apply Fix & Create Parser Files'}) as HTMLButtonElement).disabled).toBe(true);
   });
   it('shows no placeholder warning once real names are entered',async()=>{
     renderAssist({...createDraft(),format:'kv' as const,vendor:'Fortinet',name:'FortiGate'});
     await acceptBaselineRecipe();
     expect(screen.queryByRole('note',{name:/placeholder/i})).toBeNull();
+    expect((screen.getByRole('button',{name:'Apply Fix & Create Parser Files'}) as HTMLButtonElement).disabled).toBe(false);
   });
 });

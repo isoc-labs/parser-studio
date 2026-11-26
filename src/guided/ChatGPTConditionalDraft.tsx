@@ -1,3 +1,4 @@
+import {parserExportIdentityIssue} from './parserIdentity';
 import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import type {Dispatch,SetStateAction} from 'react';
 import type {ParserDraft,SuiteResult} from '../model';
@@ -66,7 +67,7 @@ export default function ChatGPTConditionalDraft({
     result.events.length===result.counts.total&&
     result.events.every(event=>event.extracted&&event.normalizedOk);
   const generate=async()=>{
-    if(busy||pending||!supported||!draft.eventProfiles||!sample.trim())return;
+    if(busy||pending||!supported||!draft.eventProfiles||!sample.trim()||parserExportIdentityIssue(draft.vendor,draft.name))return;
     const token=++epoch.current;
     setBusy(true);setGenerated(null);setNotice('');
     try{
@@ -132,8 +133,9 @@ export default function ChatGPTConditionalDraft({
       <p>Unknown event types are rejected. Generate with the validated backend,
         not the single-profile ChatGPT Recipe v0.2 importer, which cannot represent
         event-specific routing rules.</p>
+      {parserExportIdentityIssue(draft.vendor,draft.name)&&<p role="note">{parserExportIdentityIssue(draft.vendor,draft.name)?.message}</p>}
       <button type="button" className="auto-parser-primary"
-        disabled={busy||pending||!supported}
+        disabled={busy||pending||!supported||!!parserExportIdentityIssue(draft.vendor,draft.name)}
         onClick={()=>{void generate();}}>
         {busy?'Validating all log types…':'Validate & Generate One Multi-Type Parser'}
       </button>

@@ -5,7 +5,7 @@ import {ArrowLeft,ArrowRight,CheckCircle2,Download,FileText,
 import {createDraft,type ParserDraft,type SuiteResult} from '../model';
 import {toBackendProject} from './backendAdapter';
 import {describeAdapterIssues} from './adapterIssueMessage';
-import {missingParserIdentityMessage,placeholderParserIdentityParts} from './parserIdentity';
+import {missingParserIdentityMessage,placeholderParserIdentityParts,parserExportIdentityIssue} from './parserIdentity';
 import {describeCsvColumnNameProblem} from './csvColumnNames';
 import {fetchBackendCapabilities,assertBackendProjectSupported,
   type BackendCapabilities} from './backendCapabilities';
@@ -441,7 +441,7 @@ export default function AutoParser({
  const canReview=Boolean(sample.trim())&&!pending&&!!suite&&
    report.complete&&report.sourceCount>0&&!busy&&!currentReviewBlock&&
    csvApproved&&(advanced||beginnerResolved)&&namedLogReady;
- const canGenerate=step===3&&!originalContainerGate&&namedLogReady&&
+ const canGenerate=!parserExportIdentityIssue(draft.vendor,draft.name)&&step===3&&!originalContainerGate&&namedLogReady&&
    !!currentReview&&!currentReviewBlock&&!!suite&&!pending&&
    !busy&&(assessment.status==='DRAFT_COMPILABLE'||explicitDraftCompilable);
  const confirmed=()=>{
@@ -751,9 +751,9 @@ export default function AutoParser({
      <p>{parserSetOrigin.sourceCount-parserSetOrigin.groupCount} event
        {parserSetOrigin.sourceCount-parserSetOrigin.groupCount===1?'':'s'} could not be read and
        {parserSetOrigin.sourceCount-parserSetOrigin.groupCount===1?' is':' are'} not parsed by this parser:
-       {' '}{describeExcluded(parserSetOrigin.excluded)}. They are not shown as parsed. When the generated parser
-       receives such an event it extracts nothing and invents nothing: it marks the event as not parsed
-       (parser_err_msg) and keeps its complete original text in parser_raw_msg, so the event is not dropped.
+       {' '}{describeExcluded(parserSetOrigin.excluded)}. They are not shown as parsed. If a generated parser
+       cannot parse an event, it may return an error record (parser_err_msg and parser_raw_msg).
+       Delivery or retention by the receiving system is not verified; these events may be lost at the target.
        For a parser that reads these events, use ChatGPT Assisted Parser.</p>
      <button type="button" onClick={restoreParserSetSource}>
        Return to all {parserSetOrigin.sourceCount} logs

@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
@@ -78,6 +79,7 @@ const recovery=()=>({
 
 test('controlled Full Recovery CSV candidate undergoes independent holdout and explicit approval',async({page})=>{
  await page.goto('/?workspace=chatgpt');
+ await enterSyntheticParserIdentity(page);
  await page.getByLabel('ChatGPT local sample logs').fill(csvSource);
  await page.getByRole('button',{name:'Prepare ChatGPT Prompt'}).click();
  await expect(page.getByLabel('ChatGPT copyable prompt')).toContainText('FULL_RECOVERY');

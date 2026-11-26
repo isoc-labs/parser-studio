@@ -24,6 +24,7 @@ export function describeNonJsonReply(text:string):{diagnostic:'REVIEW_REQUIRED'|
 const REJECTED_REASON_TEXT:Record<string,string>={
   SOURCE_IDENTITY_MISMATCH:'This answer was written for different log lines or a different prompt. Copy the current prompt again, paste it into a new ChatGPT message, and paste the new answer here',
   INVALID_JSON:'The answer is not valid JSON',
+  REGEX_PREVIEW_UNSUPPORTED:'The regular expression is outside the supported safe preview subset',
   UNTRUSTED_RECIPE:'The answer does not follow the Parser Studio recipe format',
   FORMAT_MISMATCH:'The answer was made for a different log format than the one in your sample',
   UNSUPPORTED_OPERATION:'The answer uses a parsing step Parser Studio does not support',
@@ -36,13 +37,13 @@ const REJECTED_REASON_TEXT:Record<string,string>={
   UNCAPTURED_SOURCE_TEXT:'The answer reads part of each log line without keeping it in a field, so that text would be lost',
 };
 
-export function describeRejectedReason(reason:string):string{
+export function describeRejectedReason(reason:string,detail?:string):string{
   const plain=REJECTED_REASON_TEXT[reason];
-  return plain?plain+' ('+reason+')':reason;
+  return (plain?plain+' ('+reason+')':reason)+(detail?': '+detail:'');
 }
 
-export function describeRejectedReply(reason:string):string{
-  const base='ChatGPT result rejected: '+describeRejectedReason(reason)+'. No parser rules changed.';
+export function describeRejectedReply(reason:string,detail?:string):string{
+  const base='ChatGPT result rejected: '+describeRejectedReason(reason,detail)+'. No parser rules changed.';
   return reason==='INVALID_JSON'?base+' '+COPY_DAMAGE_HINT:base;
 }
 

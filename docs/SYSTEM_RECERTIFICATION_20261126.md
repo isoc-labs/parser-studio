@@ -8,8 +8,10 @@ No production or release changes authorized by this work packet.
 
 - W0: inventory and requirement traceability, with explicit supersession.
 - W1: shared Regex safety prerequisite; do not remove UI denial until safety tests pass.
-- NEXT_CHAT_START: read this file and the W0–W11 roadmap, verify actual branch/HEAD,
-  then continue the earliest unfinished work and any independent safe work.
+- NEXT_CHAT_START: owner narrowed this candidate to three closure defects only.
+  Verify current HEAD and exact-HEAD CI, resolve regressions of these three changes,
+  and stop scope expansion. Do not resume the broader W0–W11 architecture roadmap
+  without a new owner decision. See the final scoped closure checkpoint below.
 - Baseline CI 10/10 is historical; current recertification is OPEN.
 - Do not treat a PASS at one layer as proof of a complete user journey.
 
@@ -331,3 +333,38 @@ deployment remain separate gates.
   invalidation change is committed.
 - Current template digest still requires explicit owner review; no approval
   constant, release or deployment has been changed.
+
+
+## Owner-scoped closure — three audit defects only
+
+Owner direction following independent audit of 6ef834d: do not redesign the
+engine, widen Regex or format coverage, or change Fluentd receiving behavior.
+The observed native manufacturer namespace remains part of PS-009; its
+placeholder identity is not a valid exported product identity.
+
+- F-02: require actual manufacturer/product before Auto, Assisted and
+  conditional generation; both shipping generate endpoints refuse demo
+  identity. Keep original field names and the established actual-manufacturer
+  native namespace. Preview and recipe preparation remain available.
+  Real browser negative control blocks the initial placeholder, then generates
+  successfully after explicit product identity input.
+- F-03: keep the existing Regex safety subset, but propagate the specific
+  preview refusal from both AI import paths. Both actual browser paths reject
+  a risky response before applying any rules, then export the accepted Regex.
+- F-01 wording only: excluded events are not parsed; a fragment may return an
+  error record, but delivery/retention at the target is not verified. No
+  receiver/runtime/template modification. Previously observed Fluentd
+  nonmatch behavior is a known limitation, not a verified retention feature.
+- Tests: focused unit/language 36/36, shipping HTTP 6/6, five affected real
+  browser journeys, mapping oracle negative controls 5/5, specification
+  navigation 9/9, manifest and executable contract PASS, build PASS.
+  Full frontend first run 2585/2586: the single obsolete rejection-code
+  expectation was corrected and its entire 11-test file passed afterward.
+  Existing export tests now provide explicit synthetic product identity
+  instead of relying on demo placeholders; no catalogue case removed.
+  Full current-HEAD CI remains required; no release or deployment.
+- Template set 6384710b9af630de6a4ceee86a344e12f7ecb9fddef1a72e7f284fcbec93f00f
+  remains unchanged and approved (4/4). No further template approval needed.
+- Other Claude findings, automatic coverage gaps, distinct runtime constraints
+  and broader W0–W11 work remain known limitations/unverified, not claimed
+  resolved by these three changes. No new architecture work authorized.

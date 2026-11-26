@@ -1,3 +1,4 @@
+import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -10,6 +11,7 @@ for(const [id,status] of Object.entries(dispositions)){
     test.setTimeout(60000);
     const raw=readFileSync(join(root,id,'raw.log'),'utf8').replace(/\n+$/u,'');
     await page.goto('/');
+    if(id!=='h_checkpoint_logexporter')await enterSyntheticParserIdentity(page);
     const input=page.getByLabel('Auto Parser raw logs');
     await input.fill(raw);
     await page.getByRole('button',{name:'Analyze Logs',exact:true}).click();
@@ -19,7 +21,15 @@ for(const [id,status] of Object.entries(dispositions)){
       await review.click();
       await page.getByLabel('Review Fields stage').getByRole('button',{name:'Map Fields'}).click();
       await page.getByLabel('Map Fields stage').getByRole('button',{name:'Create Parser'}).click();
-      await page.getByRole('button',{name:'Create Parser Files'}).click();
+      const create=page.getByRole('button',{name:'Create Parser Files'});
+      if(id==='h_checkpoint_logexporter'){
+        await expect(create).toBeDisabled();
+        await expect(page.getByLabel('Placeholder parser name')).toContainText('Downloaded files are blocked');
+        await expect(page.getByLabel('Generated parser files')).toHaveCount(0);
+        await enterSyntheticParserIdentity(page);
+        await expect(create).toBeEnabled({timeout:20000});
+      }
+      await create.click();
       const files=page.getByLabel('Generated parser files');
       await expect(files).toContainText('Parser files created successfully',{timeout:20000});
       const download=page.waitForEvent('download');

@@ -1,3 +1,4 @@
+import {parserExportIdentityIssue} from './parserIdentity';
 import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {extractRecipeJson} from './aiReplyExtract';
 import {describeNonJsonReply,describeRejectedReply,describeFailedCheck,COPY_DAMAGE_HINT} from './chatGptResultNotice';
@@ -240,7 +241,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
           (result.reason==='INVALID_JSON'||result.reason==='UNTRUSTED_RECIPE')
             ?'SCHEMA_REJECTED':'RECIPE_UNSUPPORTED';
         setRetryFailure({failure,diagnostic:result.reason});
-        setNotice(describeRejectedReply(result.reason));
+        setNotice(describeRejectedReply(result.reason,result.detail));
       }else if(result.report.mode==='FULL_RECOVERY')
         setNotice('ChatGPT result is ready for testing. No parser changes have been applied yet.'+
           (extracted.ignoredText?' Text around the JSON recipe was ignored.':''));
@@ -382,7 +383,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
     }finally{if(token===epoch.current)setBusy(false);}
   }
   async function generateVerifiedDraft(){
-    if(!context||context.sample!==sample||!review?.ok||pending||busy||draft.eventProfiles)return;
+    if(!context||context.sample!==sample||!review?.ok||pending||busy||draft.eventProfiles||parserExportIdentityIssue(draft.vendor,draft.name))return;
     const token=++epoch.current;
     setBusy(true);setGenerated(null);setNotice('');
     try{
@@ -597,7 +598,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
               :'I reviewed the test result and approve applying this fix.'}
           </label>}
           <button type="button" className="auto-parser-primary"
-            disabled={busy||pending||
+            disabled={busy||pending||!!parserExportIdentityIssue(draft.vendor,draft.name)||
               (!baselineUnchanged&&(!comparison?.qualified||!candidateApproval))}
             onClick={()=>{void generateVerifiedDraft();}}>
             {busy?'Creating parser files…':'Apply Fix & Create Parser Files'} <ArrowRight size={15}/>
