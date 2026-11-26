@@ -2,7 +2,7 @@
 # Mandatory CI gate: the Ruby Fragments the browser golden spec downloaded are
 # executed on the pinned Ruby 2.4.9 target image (no network, no mounts, read-only
 # root) and their events are compared with the publisher-documented values from
-# the Golden Corpus. Synthetic input is never used here. This is not a Stellar
+# the Golden Corpus. The Assisted journey adds a separately labelled synthetic source oracle. This is not a Stellar
 # Cyber import, Syslog reception or indexing result.
 #
 #   ruby-golden-container-gate.sh <downloads-dir>            # Ruby 2.4.9 container
@@ -15,10 +15,12 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 chmod 700 "$work"
 node "$tsx" scripts/verification/golden-ruby-gate.ts prepare "$dir" "$work/input.json"
+python3 scripts/verification/assisted-regex-native-gate.py prepare "$dir" "$work/input.json"
 runner=$(cat scripts/verification/ruby-golden-event-runner.rb)
 if [ "$mode" = "--local" ]; then
   "${PARSER_RUBY_BIN:-ruby}" -e "$runner" < "$work/input.json" > "$work/output.json"
   node "$tsx" scripts/verification/golden-ruby-gate.ts compare "$dir" "$work/output.json"
+  python3 scripts/verification/assisted-regex-native-gate.py compare "$work/output.json"
   exit 0
 fi
 for binary in docker timeout node; do
@@ -35,4 +37,5 @@ timeout --kill-after=5s 90s docker run --rm -i --platform linux/amd64 \
   --user 65532:65532 \
   "$target_image" ruby -e "$runner" < "$work/input.json" > "$work/output.json"
 node "$tsx" scripts/verification/golden-ruby-gate.ts compare "$dir" "$work/output.json" --expect-ruby 2.4.9
+python3 scripts/verification/assisted-regex-native-gate.py compare "$work/output.json"
 echo GOLDEN_RUBY_CONTAINER_GATE_PASS
