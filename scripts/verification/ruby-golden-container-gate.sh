@@ -18,6 +18,7 @@ node "$tsx" scripts/verification/golden-ruby-gate.ts prepare "$dir" "$work/input
 python3 scripts/verification/assisted-regex-native-gate.py prepare "$dir" "$work/input.json"
 python3 scripts/verification/mixed-asa-native-gate.py prepare "$dir" "$work/input.json"
 python3 scripts/verification/mapping-native-gate.py prepare "$dir" "$work/input.json"
+python3 scripts/verification/vendor-holdout-native-gate.py prepare "$dir" "$work/input.json"
 runner=$(cat scripts/verification/ruby-golden-event-runner.rb)
 if [ "$mode" = "--local" ]; then
   "${PARSER_RUBY_BIN:-ruby}" -e "$runner" < "$work/input.json" > "$work/output.json"
@@ -25,6 +26,7 @@ if [ "$mode" = "--local" ]; then
   python3 scripts/verification/assisted-regex-native-gate.py compare "$work/output.json"
   python3 scripts/verification/mixed-asa-native-gate.py compare "$work/output.json"
   python3 scripts/verification/mapping-native-gate.py compare "$work/output.json"
+  python3 scripts/verification/vendor-holdout-native-gate.py compare "$work/output.json"
   exit 0
 fi
 for binary in docker timeout node; do
@@ -44,4 +46,5 @@ node "$tsx" scripts/verification/golden-ruby-gate.ts compare "$dir" "$work/outpu
 python3 scripts/verification/assisted-regex-native-gate.py compare "$work/output.json"
 python3 scripts/verification/mixed-asa-native-gate.py compare "$work/output.json"
 python3 scripts/verification/mapping-native-gate.py compare "$work/output.json"
+  python3 scripts/verification/vendor-holdout-native-gate.py compare "$work/output.json"
 echo GOLDEN_RUBY_CONTAINER_GATE_PASS

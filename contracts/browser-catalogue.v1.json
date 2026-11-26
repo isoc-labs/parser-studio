@@ -2629,6 +2629,126 @@
       "file": "tests/usable-beta-repair-warning.spec.ts",
       "title": "unresolved logs warn before manual copying without requiring a separate masking approval",
       "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_checkpoint_logexporter",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_cloudtrail_line",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_fortigate_mixed",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_fortigate_webfilter",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_imperva_cef",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_okta_system_log",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_panos_threat_url",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_panos_traffic",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_sonicwall_fw",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_sophos_xg_fw",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_srx_sd_close_deny",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_stormshield_filter",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_suricata_rfc5424",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_trendmicro_ds_leef",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout actual parser download h_zeek_conn_json",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout explicit incomplete outcome h_cisco_asa_mixed",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout explicit incomplete outcome h_cisco_ftd_430003",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout explicit incomplete outcome h_cloudflare_http",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout explicit incomplete outcome h_meraki_urls_flows",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout explicit incomplete outcome h_nginx_combined",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout explicit incomplete outcome h_pfsense_filterlog",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout explicit incomplete outcome h_sshd_auth",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout explicit incomplete outcome h_vpcflow_v2",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/vendor-holdout-native-20261126.spec.ts",
+      "title": "holdout explicit incomplete outcome h_win4625_nxlog_json",
+      "disposition": "REQUIRED"
     }
   ]
 }

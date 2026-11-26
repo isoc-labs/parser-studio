@@ -284,3 +284,30 @@ deployment remain separate gates.
   with a visible alert and existing loose pair; real browser fault tests 2/2.
 - Full exact-HEAD CI remains required; catalogue disposition does not imply
   independent vendor semantic verification.
+
+## W5/W6/W9/W10 — independent vendor holdout and actual downloads
+- Reconciled all 24 pre-existing vendor-grammar fixtures to explicit outcomes:
+  15 automatic downloads, 5 review-required, 2 precision refusals, and 2
+  open compiler gaps (FTD 430003 and Meraki quoted URLs/Flows).
+  All 24 Chromium cases passed their respective assertions; this does not
+  mean 24 generators succeeded. Refused cases preserve the source.
+- Executed 27 events using the actual 15 downloaded parsers in Ruby 2.4.9:
+  27/27 oracle checks, 102/126 canonical mappings, remaining 24 values
+  preserved under their exact source names/structure. No wrong canonical
+  values, prohibited mappings, or source loss in those events.
+- Mutation checks detected swapped endpoint values, missing source port,
+  and truncated composite endpoint. The gate checks actual download SHA,
+  fixture SHA, event count, required values, and forbidden mappings.
+- Expanded mandatory Chromium catalogue to 547 cases, 534 required and
+  13 previously documented exclusions. The Native aggregation now includes
+  the vendor holdout. Local aggregate 66/66 Native events passed, using
+  captured artifacts from multiple candidate commits (not exact-HEAD
+  release evidence).
+- Full TypeScript semantic oracle PASS: 6,438 main cases, 3,021 family
+  cases, 2,110 CSV cases, 2,616 JSON cases; 57/57 mutations detected.
+  Python three-way comparisons showed zero differences in the completed
+  comparison phase, but the full Python mutation run reached its 180s
+  deadline; do not count it as complete.
+- Remaining work: review-required and compiler-gap coverage, additional
+  automatic mapping recall without guessing, independent review, current
+  exact-HEAD CI, and explicit owner approval of the changed template set.
