@@ -85,3 +85,31 @@ test('a sample that cannot go on and has no readable event still says so',async(
   await expect(page.getByText('Resolve the events marked above before continuing')).toBeVisible();
   await expect(page.getByRole('button',{name:'Review Fields',exact:true}).last()).toBeDisabled();
 });
+
+// Synthetic mixed firewall events: the first event has an existing bounded
+// compiler route although the initial envelope scanner does not recognize it.
+test('bounded compiler candidate remains usable beside unsupported events',async({page})=>{
+  test.setTimeout(120_000);
+  const supported='<166>Nov 26 2026 09:12:01 fw01 : %ASA-6-302013: Built outbound TCP connection 7345 for outside:203.0.113.10/443 (203.0.113.10/443) to inside:10.1.1.5/52044 (198.51.100.7/61012)';
+  const unsupported='kernel panic - not syncing: fatal exception in interrupt';
+  const source=[supported,unsupported].join('\n');
+  await analyze(page,[supported,unsupported]);
+  const offer=page.getByLabel('Readable events',{exact:true});
+  await expect(offer).toContainText('1 of 2 events were read completely',{timeout:5000});
+  await offer.getByRole('button',{name:'Continue with readable events'}).click();
+  await expect(page.getByLabel('Auto Parser raw logs')).toHaveValue(supported);
+  const context=page.getByLabel('Events not covered by this parser');
+  await expect(context).toContainText('This parser covers 1 of your 2 events');
+  const review=page.getByRole('button',{name:'Review Fields',exact:true}).last();
+  await expect(review).toBeEnabled({timeout:20000});
+  await review.click();
+  await page.getByRole('button',{name:'Map Fields',exact:true}).last().click();
+  await page.getByRole('button',{name:'Create Parser',exact:true}).last().click();
+  await page.getByText(/Run Final Test/).first().click();
+  const download=page.getByText(/Download parser logic/).first();
+  await expect(download).toBeVisible({timeout:30000});
+  const [file]=await Promise.all([page.waitForEvent('download'),download.click()]);
+  expect((await readFile(await file.path(),'utf8')).length).toBeGreaterThan(1000);
+  await context.getByRole('button',{name:'Return to all 2 logs'}).click();
+  await expect(page.getByLabel('Auto Parser raw logs')).toHaveValue(source);
+});

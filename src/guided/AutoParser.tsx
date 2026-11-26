@@ -13,7 +13,7 @@ import {fetchBackendSchemaGuide} from './backendSchemaGuide';
 import {validateBackendProject,assertBackendValidationAllowsExport,generateBackendPair,type GeneratedPair} from './backendClient';
 import {verifyGeneratedPair,packageGeneratedPair} from './artifactPackageClient';
 import {analyzeLogEnvelopes,assessEnvelopeCompilation} from './autoParserEnvelope';
-import {describeExcluded,readableEvents,type ExcludedEvents} from './readableEvents';
+import {describeExcluded,readableEvents,readableEventsWithBoundedCandidate,type ExcludedEvents} from './readableEvents';
 import {prepareAutoParserDraft} from './autoParserDraft';
 import {selectDraftFormat} from './draftFormatTransition';
 import {buildReviewableRecipe} from './parserRecipeV2';
@@ -425,9 +425,8 @@ export default function AutoParser({
    if(advanced||parserSetOrigin||report.boundary!=='single-line')return null;
    if(draft.format!=='auto')return readableEvents(sample,suite,report.events);
    if(multiPass?.raw!==sample)return null;
-   return readableEvents(sample,suite,report.events,
-     multiPass.events.map(event=>event.preview.status==='SOURCE_PARSED'));
- },[advanced,parserSetOrigin,report,sample,suite,draft.format,multiPass]);
+   return readableEventsWithBoundedCandidate(sample,draft,suite,report.events,multiPass);
+ },[advanced,parserSetOrigin,report,sample,suite,draft,multiPass]);
  const analyzeReadableEvents=useRef(false);
  useEffect(()=>{
    if(!analyzeReadableEvents.current||!parserSetOrigin?.excluded||sample!==parserSetOrigin.groupSource)return;
@@ -628,6 +627,7 @@ export default function AutoParser({
      fingerprint:'readable-events',groupCount:readable.count,groupSource:readable.source,excluded:readable.excluded};
    parserSetOriginRef.current=origin;setParserSetOrigin(origin);
    setSample(readable.source);
+   if(readable.candidate)setDraft(readable.candidate);
    setDatasetName((datasetName||'Logs')+' \u00b7 Readable events');
    setStep(0);setSelected(0);setMultiPass(null);setMultiPassEvent(0);
    setSelectedMultiPass(null);setMultiPassNotice('');setMessage('');

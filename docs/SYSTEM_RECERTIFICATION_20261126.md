@@ -62,3 +62,28 @@ deployment remain separate gates.
   command deadline, no PASS claimed. Full CI and independent verification open.
 - Frontend legacy blanket denial remains until W2/W3 changes and required
   positive/negative shipping journey tests are verified.
+
+## W2/W3 checkpoint
+
+- Shared backend export verdict and reason codes implemented in 53f721d.
+- Real Chromium Assisted positive and negative journeys passed (2/2).
+- f1576ff adds independent source-value verification of the actual browser
+  download to the existing native CI gate. Local Ruby 2.4.9: 6/6 events
+  passed; deliberately wrong source IP correctly rejected.
+- Full CI and complete export-journey census remain open.
+
+## W4 checkpoint
+
+- RED: actual Chromium mixed ASA structured connection plus unsupported
+  free text had no readable-event continuation offer.
+- GREEN: exact source-frame correspondence, the existing bounded adoption
+  contract and one jointly validated candidate now allow the supported subset.
+  The original sample is retained for restoration. No scanner or native
+  safety guard was removed; generic whole-message capture alone is not
+  considered additional structured coverage.
+- Actual Chromium: new journey through download and original sample restore
+  PASS; previous mixed-event and unsupported-event journeys 5/5 PASS.
+  Focused unit regression 29/29 PASS.
+- Remaining: broader combinations, source accounting in actual native
+  execution including excluded events, and independent semantic direction
+  oracle (W5/W10). This is not certification of ASA source/destination.
