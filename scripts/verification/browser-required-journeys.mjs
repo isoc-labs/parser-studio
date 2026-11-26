@@ -6,6 +6,8 @@ import {validateBrowserShardReport} from './browser-shard-report.mjs';
 // This is the owner-facing recertification subset of the real-backend catalogue.
 // Other intentionally scoped or historical suites have their own CI dispositions.
 const requiredByFile={
+  'tests/chatgpt-event-profile-scope-20261123.spec.ts':['ChatGPT Assisted improves one event type of a multi-type parser and generates one parser'],
+  'tests/first-time-complete-auto-journey-20261023.spec.ts':['a first-time desktop user saves logs, generates actual files, and restores the source'],
   'tests/chatgpt-h2-residuals-20261125.spec.ts':[
     'Auto Parser applies a lossless ChatGPT recovery across multi-token residual regions and refuses lossy ones (H-2)',
     'independent ChatGPT Assisted journey exports a statically accepted Regex with real backend',

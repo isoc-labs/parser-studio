@@ -8,7 +8,7 @@ const report=(items)=>JSON.stringify({stats:{expected:1,unexpected:0,flaky:0},er
 const all=()=>Array.from({length:6},(_,i)=>receiptFromReport(report(REQUIRED_JOURNEYS.filter((_,j)=>j%6===i)),HEAD,i+1));
 test('every mandatory browser journey is seen exactly once on the exact head',()=>{
   assert.deepEqual(verifyReceipts(all(),HEAD),{shards:6,journeys:REQUIRED_JOURNEYS.length});
-  assert.equal(REQUIRED_JOURNEYS.length,20);
+  assert.equal(REQUIRED_JOURNEYS.length,22);
 });
 test('skipping a required case cannot hide behind other successful tests',()=>{
   const r=JSON.parse(report([REQUIRED_JOURNEYS[0]]));

@@ -1,3 +1,4 @@
+import {expandZipDownload} from '../backend/src/downloaded-artifact-validation';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {mkdirSync,writeFileSync} from 'node:fs';
@@ -77,6 +78,14 @@ test('Auto Parser applies a lossless ChatGPT recovery across multi-token residua
   const [file]=await Promise.all([page.waitForEvent('download'),download.click()]);
   const ruby=await readFile(await file.path(),'utf8');
   expect(ruby.length).toBeGreaterThan(1000);
+  const [conf]=await Promise.all([page.waitForEvent('download'),page.getByText(/Download listener configuration/).first().click()]);
+  const confText=await readFile(await conf.path(),'utf8');
+  const [archive]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download Parser Package'}).click()]);
+  const expanded=expandZipDownload(await readFile(await archive.path()));
+  expect(expanded.problems).toEqual([]);
+  expect(expanded.entries.find(e=>e.name===file.suggestedFilename())?.content).toBe(ruby);
+  expect(expanded.entries.find(e=>e.name===conf.suggestedFilename())?.content).toBe(confText);
+
   if(process.env.H2_CHATGPT_OUT){
     mkdirSync(process.env.H2_CHATGPT_OUT,{recursive:true});
     writeFileSync(process.env.H2_CHATGPT_OUT+'/parser.rb',ruby);
@@ -110,7 +119,14 @@ test('independent ChatGPT Assisted journey exports a statically accepted Regex w
   expect(ruby).toContain('def parserstudio_regex_cost_proven?');
   const [conf]=await Promise.all([page.waitForEvent('download'),
     generated.getByRole('button',{name:'Download customized_demo_firewall.conf'}).click()]);
-  expect(await readFile(await conf.path(),'utf8')).toMatch(/^\s+port 6801$/m);
+  const confText=await readFile(await conf.path(),'utf8');
+  expect(confText).toMatch(/^\s+port 6801$/m);
+  const [archive]=await Promise.all([page.waitForEvent('download'),
+    generated.getByRole('button',{name:'Download Parser Package'}).click()]);
+  const expanded=expandZipDownload(await readFile(await archive.path()));
+  expect(expanded.problems).toEqual([]);
+  expect(expanded.entries.find(e=>e.name===file.suggestedFilename())?.content).toBe(ruby);
+  expect(expanded.entries.find(e=>e.name===conf.suggestedFilename())?.content).toBe(confText);
   if(process.env.H2_ASSISTED_OUT){
     mkdirSync(process.env.H2_ASSISTED_OUT,{recursive:true});
     writeFileSync(process.env.H2_ASSISTED_OUT+'/parser.rb',ruby);

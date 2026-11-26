@@ -6,6 +6,7 @@ import {fetchBackendCapabilities,assertBackendProjectSupported} from './backendC
 import {toBackendProject} from './backendAdapter';
 import {validateBackendProject,assertBackendValidationAllowsExport,generateBackendPair,type GeneratedPair} from './backendClient';
 import {verifyGeneratedPair} from './artifactPackageClient';
+import ReviewedPairPackage from './ReviewedPairPackage';
 import ReviewedEventProfilesPanel from './ReviewedEventProfilesPanel';
 import {validateNamedLogs,type NamedLogType} from './namedLogTypes';
 import {checkNamedParserCoverage} from './chatGptSourceContext';
@@ -32,7 +33,7 @@ export default function ChatGPTConditionalDraft({
   const [availability,setAvailability]=useState<'CHECKING'|'READY'|'UNAVAILABLE'>('CHECKING');
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState('');
-  const [generated,setGenerated]=useState<{identity:string;pair:GeneratedPair}|null>(null);
+  const [generated,setGenerated]=useState<{identity:string;pair:GeneratedPair;port:number}|null>(null);
   const identity=useMemo(()=>JSON.stringify([sample,draft,namedLogTypes]),
     [sample,draft,namedLogTypes]);
   useEffect(()=>{
@@ -86,7 +87,7 @@ export default function ChatGPTConditionalDraft({
       assertBackendValidationAllowsExport(checked,adapted.project);
       const pair=await generateBackendPair(adapted.project);
       await verifyGeneratedPair(pair);
-      setGenerated({identity,pair});
+      setGenerated({identity,pair,port:adapted.project.receiver.port});
       setNotice('One reviewed conditional parser DRAFT is ready. No target installation or log transmission occurred.');
     }catch(error){
       setNotice(error instanceof Error?error.message:'The conditional parser was not generated.');
@@ -131,6 +132,7 @@ export default function ChatGPTConditionalDraft({
           and sensor ingestion remain unverified.</p>
         {generated.pair.files.map(file=><button type="button" key={file.name}
           onClick={()=>download(file.name,file.content)}>Download {file.name}</button>)}
+        {capability&&<ReviewedPairPackage key={identity} pair={generated.pair} capabilities={capability.value} port={generated.port}/>}
       </div>}
     </div>}
     {notice&&<p role="status">{notice}</p>}

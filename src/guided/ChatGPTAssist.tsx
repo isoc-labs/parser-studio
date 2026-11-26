@@ -13,9 +13,10 @@ import {analyzeLogEnvelopes,assessEnvelopeCompilation} from './autoParserEnvelop
 import {prepareAutoParserDraft} from './autoParserDraft';
 import {buildReviewableRecipe} from './parserRecipeV2';
 import {toBackendProject} from './backendAdapter';
-import {fetchBackendCapabilities,assertBackendProjectSupported} from './backendCapabilities';
+import {fetchBackendCapabilities,assertBackendProjectSupported,type BackendCapabilities} from './backendCapabilities';
 import {validateBackendProject,assertBackendValidationAllowsExport,generateBackendPair,type GeneratedPair} from './backendClient';
 import {verifyGeneratedPair} from './artifactPackageClient';
+import ReviewedPairPackage from './ReviewedPairPackage';
 import {compileReviewedRecipeV02,canonicalJson} from './recipeV2BackendClient';
 import {HelpTip,StageGuide} from './BeginnerHelp';
 import ParserIdentityCard from './ParserIdentityCard';
@@ -89,7 +90,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
     sample:string;draft:ParserDraft;suite:SuiteResult;basePrompt:string;
   }|null>(null);
   const [generated,setGenerated]=useState<{
-    pair:GeneratedPair;draft:ParserDraft;evidence:'SAMPLE_ONLY'|'INDEPENDENT'|'UNCHANGED';
+    pair:GeneratedPair;draft:ParserDraft;sourceKey:string;goal:string;capabilities:BackendCapabilities;port:number;evidence:'SAMPLE_ONLY'|'INDEPENDENT'|'UNCHANGED';
   }|null>(null);
   const sourceKey=useMemo(()=>JSON.stringify([sample,draft,namedLogTypes]),
     [sample,draft,namedLogTypes]);
@@ -404,7 +405,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       await compileReviewedRecipeV02({
         recipe:review.candidate,legacyProject:adapted.project,
       },pair);
-      setGenerated({pair,draft:candidate,
+      setGenerated({pair,draft:candidate,sourceKey,goal,capabilities:cap,port:adapted.project.receiver.port,
         evidence:unchanged?'UNCHANGED':comparison!.evidence});
       setNotice('DRAFT parser files created after local checks. No deployment or target compatibility is implied.');
     }catch(error){
@@ -568,7 +569,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
             onClick={()=>{void generateVerifiedDraft();}}>
             {busy?'Creating parser files…':'Apply Fix & Create Parser Files'} <ArrowRight size={15}/>
           </button>
-          {generated&&<div className="auto-parser-download"
+          {generated?.sourceKey===sourceKey&&generated.goal===goal&&<div className="auto-parser-download"
              aria-label="ChatGPT created parser files">
             <strong>Parser files created successfully</strong>
             <span>{generated.evidence==='UNCHANGED'
@@ -583,6 +584,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
             {generated.pair.files.map(file=><button type="button" className="auto-parser-secondary" key={file.name}
               onClick={()=>download(file.name,file.content)}>
               <FileText size={15}/> Download {file.name}</button>)}
+            <ReviewedPairPackage key={generated.sourceKey+generated.goal} pair={generated.pair} capabilities={generated.capabilities} port={generated.port}/>
             {familyScope
               ?<button type="button" className="auto-parser-primary"
                 onClick={()=>familyScope.onApply(generated.draft)}>
