@@ -7,8 +7,10 @@ the retired Wizard/Workbench UI design; the original design is preserved in
 
 ## Navigation and first use
 
+<!-- requirement: PS-001 -->
 The only creation methods are Auto Parser and ChatGPT Assisted Parser.
 
+<!-- requirement: PS-002 -->
 Auto Parser follows Add Logs → Review Fields → Map Fields → Create Parser.
 
 - Auto Parser is the default. Paste/upload representative raw logs before optional

@@ -27,6 +27,7 @@ Existing Parser import in the public navigation.
 
 ## Privacy and AI proposal boundary
 
+<!-- requirement: PS-004 -->
 Typing and browser previews stay in the browser; explicit Analyze Logs sends the original sample to the same Parser Studio server for Multi-Pass analysis. No automatic source transfer to ChatGPT.
 
 ChatGPT Assisted prepares a manually copied prompt containing the exact
@@ -47,16 +48,18 @@ compiler artifacts must agree on the exact approved backend candidate and
 corresponding output hashes. Unrecognized raw
 formats, unsafe regex, arbitrary Ruby/JSONata or arbitrary stage edits cannot
 fabricate a deployable parser. Use a bounded, reviewed compiler subset, not
-arbitrary code execution. Changing the source invalidates the prepared prompt.
+arbitrary code execution. For the Stellar 7.0 Ruby 2.4.9 target, a regex export requires the pinned static cost proof; supported safe regex is not universally banned, and an unproven regex must not generate target files. Changing the source invalidates the prepared prompt.
 
 ## Results and excluded target operations
 
+<!-- requirement: PS-003 -->
 The current product excludes server-operated Test Lab recovery/evidence, DP parser upload/apply, sensor replay/sending and Interflow lookup/verification.
 
 Retain optional browser-local versions and offline Python test sender as specified
 below. Removed prototypes are historical, not public features to restore.
 Test Lab/Interflow/sensor endpoints must not create user-visible or unauthorized
 target actions. The separate generated Python sender is run manually by the user.
+<!-- requirement: PS-005 -->
 The optional browser-only synthetic replay preview never sends logs to a sensor or starts a server session.
 Expose it after a generated DRAFT pair; validate the complete reviewed single-line
 sample before generating synthetic events. Mixed or multiline recipes disable
@@ -114,7 +117,7 @@ unchanged and are explicitly disclosed.
 Only the downloaded Python script, running under user's control on
 their machine, sends logs; Parser Studio/browser/backend never
 connects to a sensor as a side effect of this feature. The script may
-contain user-provided logs in plain text, so show a privacy warning.
+embed the complete original sample in base64 (not encryption), so show a privacy warning.
 This scoped opt-in user utility is distinct from the excluded
 server-operated sensor sender, DP parser upload and ingest checking.
 

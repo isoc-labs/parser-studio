@@ -1,13 +1,33 @@
 {
-  "version": 1,
+  "version": 2,
   "documents": {
+    "AGENTS.md": {
+      "status": "supporting",
+      "sha256": "0c0e57073e3e37745b40016b42c484c46086422e42cf5d77e8f657d15461c27a"
+    },
+    "README.md": {
+      "status": "supporting",
+      "sha256": "af7ba591aa0ded05bf19b0ad1c1a75c9ac2b201b3ea549cb41d10bec6c3aed94"
+    },
+    "docs/01_PRODUCT_VISION.md": {
+      "status": "supporting",
+      "sha256": "7cfd88021dc8adbed97510d11ea68067e83db9d3e958e8ac8fe6737a3a6a63bf"
+    },
     "docs/02_WEB_UI_SPEC.md": {
       "status": "active",
-      "sha256": "aaf7e48ef54ba4a791ad85fd7afa367029202da7e29ed5696ccf385df6870c8d"
+      "sha256": "d507a57303281942dd9511031a78cf4a45481b3fab7f672b8abe21f80b68b0a6"
+    },
+    "docs/03_FUNCTIONAL_REQUIREMENTS.md": {
+      "status": "active",
+      "sha256": "16e38242273e805ed3a0e657794eb2276338a10dae89f46685710fe862faa72e"
+    },
+    "docs/04_ARCHITECTURE.md": {
+      "status": "supporting",
+      "sha256": "b751e9af80c9d5cce93083271826f602da86fe068f1a737bbfdd09929f7a0e38"
     },
     "docs/14_TWO_PATH_PRODUCT_V2.md": {
       "status": "active",
-      "sha256": "d054039084818b89bfaa377317af86b63c828e0fc2dbfa946a9a07cdb03da6cb"
+      "sha256": "75d03e184bb8cc35506dbcc4cd54fe6190dedd028891117ae140c5ae6ea5228b"
     }
   },
   "requirements": [
@@ -134,6 +154,200 @@
           "contains": "def test_local_replay_is_not_sensor_replay(self):"
         }
       ]
+    },
+    {
+      "id": "PS-006",
+      "state": "implemented",
+      "source": {
+        "path": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
+        "contains": "Accept multiple named log types from one product and preserve their original records and labels."
+      },
+      "implementation": [
+        {
+          "path": "src/guided/AutoParser.tsx",
+          "contains": "<NamedLogTypesPanel groups={namedLogTypes}"
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/explicit-multi-log-input.spec.ts",
+          "contains": "novice adds three named types and creates one reviewed conditional DRAFT"
+        },
+        {
+          "path": "tests/explicit-multi-log-input.spec.ts",
+          "contains": "invalid, empty or duplicate named groups fail closed and preserve source"
+        },
+        {
+          "path": "tests/explicit-multi-log-input.spec.ts",
+          "contains": "named type uploads replace only selected type and local versions restore labels"
+        }
+      ]
+    },
+    {
+      "id": "PS-007",
+      "state": "implemented",
+      "source": {
+        "path": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
+        "contains": "The default parser listener port is 6801; a reviewed user override must reach the generated CONF and the matching sensor destination."
+      },
+      "implementation": [
+        {
+          "path": "src/guided/contract.ts",
+          "contains": "export const DEFAULT_PARSER_LISTENER_PORT = 6801;"
+        },
+        {
+          "path": "src/guided/ParserListenerPortInput.tsx",
+          "contains": "Shared sensor destination and generated .conf receiving port."
+        }
+      ],
+      "tests": [
+        {
+          "path": "src/guided/parserListenerPort6801.test.tsx",
+          "contains": "starts new drafts at 6801 before any logs and sends the same value to the compiler project"
+        }
+      ]
+    },
+    {
+      "id": "PS-008",
+      "state": "implemented",
+      "source": {
+        "path": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
+        "contains": "Use the Stellar Cyber 7.0 dictionary only; never infer official fields from another release or unsupported semantics."
+      },
+      "implementation": [
+        {
+          "path": "src/guided/stellarMetadataCatalog.ts",
+          "contains": "Fixed 7.0 nested-scalar supplement; this is not a cross-version catalog."
+        }
+      ],
+      "tests": [
+        {
+          "path": "src/guided/stellar7NestedDictionary20261021.test.ts",
+          "contains": "fixed Stellar Cyber 7.0 namespace contract, no cross-version fallback"
+        }
+      ]
+    },
+    {
+      "id": "PS-009",
+      "state": "implemented",
+      "source": {
+        "path": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
+        "contains": "Parsed fields without an approved official mapping stay in the vendor namespace with their original values."
+      },
+      "implementation": [
+        {
+          "path": "src/guided/autoParserDraft.ts",
+          "contains": "draft:{...next,preserveUnmapped:true}"
+        },
+        {
+          "path": "src/guided/NormalizationMappingReview.tsx",
+          "contains": "KEPT · original name and value in the vendor fields"
+        }
+      ],
+      "tests": [
+        {
+          "path": "src/guided/chatGptAssistedQ31.test.ts",
+          "contains": "keeps the captures the reply left unmapped, in the sample and at run time, each event FULL"
+        }
+      ]
+    },
+    {
+      "id": "PS-010",
+      "state": "implemented",
+      "source": {
+        "path": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
+        "contains": "Offer evidence-backed automatic mapping, optional reviewed ChatGPT mapping, and manual correction as fallback; manual or approved mapping is never overwritten by automatic suggestions."
+      },
+      "implementation": [
+        {
+          "path": "src/guided/NormalizationMappingReview.tsx",
+          "contains": "They never replace reviewed, legacy, or manually edited intent."
+        },
+        {
+          "path": "src/guided/JsonataMappingAssistant.tsx",
+          "contains": "export default function JsonataMappingAssistant(props:Props)"
+        }
+      ],
+      "tests": [
+        {
+          "path": "src/guided/NormalizationMappingReview.test.tsx",
+          "contains": "does not bulk-refresh a user-edited mapping from automatic suggestions"
+        },
+        {
+          "path": "src/guided/NormalizationMappingReview.test.tsx",
+          "contains": "does not let an individually applied official suggestion overwrite an approved mapping"
+        },
+        {
+          "path": "tests/chatgpt-jsonata-event-profile-20261123.spec.ts",
+          "contains": "ChatGPT JSONata mapping changes one event type of a multi-type parser and the generated parser"
+        },
+        {
+          "path": "src/guided/familyMappingEdit20261125.test.ts",
+          "contains": "refuses two matches that write the same destination in one event of the type"
+        }
+      ]
+    },
+    {
+      "id": "PS-011",
+      "state": "implemented",
+      "source": {
+        "path": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
+        "contains": "Parsing correctness and source-value accounting precede mapping success."
+      },
+      "implementation": [
+        {
+          "path": "src/guided/losslessAccounting.ts",
+          "contains": "export async function accountLosslessSource"
+        },
+        {
+          "path": "src/grammar/lossGuard.ts",
+          "contains": "export function jsonTextUnaccounted"
+        }
+      ],
+      "tests": [
+        {
+          "path": "src/guided/losslessAccounting.test.ts",
+          "contains": "accounts UTF-8 multi-event source, parsed leaves, actual output and exact supplied residuals"
+        },
+        {
+          "path": "src/guided/losslessAccounting.test.ts",
+          "contains": "keeps absent proof UNKNOWN and counts only real normalized output leaves"
+        }
+      ]
+    },
+    {
+      "id": "PS-012",
+      "state": "implemented",
+      "source": {
+        "path": "docs/03_FUNCTIONAL_REQUIREMENTS.md",
+        "contains": "The pinned Stellar 7.0 native target profile is Ruby 2.4.9 with Fluentd 1.7.4; browser preview, native synthetic execution and actual proprietary DP import/indexing are distinct verification levels."
+      },
+      "implementation": [
+        {
+          "path": "contracts/target-runtime-profiles.v1.json",
+          "contains": "\"id\": \"stellar70-observed-ruby24\""
+        },
+        {
+          "path": "backend/src/ruby24-regex-cost.ts",
+          "contains": "export const RUBY24_REGEX_COST_CONTRACT='parser-studio.ruby24-regex-cost.v1'"
+        }
+      ],
+      "tests": [
+        {
+          "path": "src/guided/backendCapabilities.test.ts",
+          "contains": "rejects forged Regex support or target-verification claims"
+        },
+        {
+          "path": ".github/workflows/quality.yml",
+          "contains": "Real UDP 6801 reception through Fluentd 1.7.4 on Ruby 2.4.9"
+        }
+      ]
     }
+  ],
+  "inventory_globs": [
+    "docs/0[1-4]_*.md",
+    "docs/14_TWO_PATH_PRODUCT_V2.md",
+    "README.md",
+    "AGENTS.md"
   ]
 }

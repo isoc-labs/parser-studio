@@ -1,6 +1,6 @@
 # 04. Architecture, Version Independence and Security
 
-**Design status:** Approved boundaries; specific import/export file schemas and target runtimes remain evidence-driven until real artifacts are supplied.
+**Design status:** Conceptual component and security boundaries. Actual shipping capabilities and runtime profiles are defined by the executable contracts and current product scope (14), not by early prototypes.
 
 ## 1. Stable conceptual pipeline
 
@@ -12,7 +12,7 @@ A draft is represented internally as a **portable parser IR (intermediate repres
 
 | Module | Responsibility | Must not do |
 | --- | --- | --- |
-| Web Workbench | Editors, source highlights, live diffs, diagnostics | Claim runtime support from browser-only matching |
+| Web UI | Auto Parser and ChatGPT Assisted, source highlights, mapping review and contextual diagnostics | Claim runtime support from browser-only matching |
 | Project API/storage | Drafts, versions, fixture references, manifests | Automatically publish raw customer samples |
 | Parser IR service | Schema validation, stage ordering, deterministic transformations | Hard-code Stellar Cyber release-dependent export syntax |
 | Schema catalog | Destination names, types, allowed mapping semantics | Silently invent standard fields |
@@ -35,13 +35,13 @@ A draft is represented internally as a **portable parser IR (intermediate repres
 - target_profiles: *separate* export/runtime adapters and evidence, not intrinsic core schema.
 - run_evidence: runner build digest, plugin versions, suite hash, results, export hash.
 
-A formal JSON Schema is an M1 deliverable after inspecting owner-provided real parser samples so that round-trip semantics are not guessed.
+The executable project and recipe schemas live under backend/schema; supported compiler operations and target runtime profiles are in contracts. The conceptual list above is not a serialization schema.
 
 ## 4. What “works regardless of Stellar version” means
 
 - The Web Studio edits a stable portable project, without asking users to select a Stellar version.
 - Sample parsing, Interflow mapping and regression tests run independently of a Stellar instance.
-- Export targets are adapters: Fluentd-standard config first; Stellar legacy/modular or custom formats only after evidence.
+- The current product exports an extensionless Ruby parser and matching CONF for the supported Stellar 7.0 target profile; other target profiles need independent evidence and are not implied.
 - An export is **Verified** only if the generated artifact passes the declared runtime test and, where applicable, real target import/behavior validation.
 - A version may have a differing artifact protocol, unsupported plugin or platform restriction; such combinations remain Partial, Unsupported or Pending evidence.
 - Do **not** rename an untested version-dependent output format “Universal Parser.”
@@ -53,7 +53,7 @@ A formal JSON Schema is an M1 deliverable after inspecting owner-provided real p
 3. Refuse unsafe round-trip rewrites when semantic preservation cannot be shown.
 4. Generate a bundle containing parser artifact, mapping manifest, schema revision, compatibility profile and redacted test evidence.
 5. Never automatically upload/configure a Stellar platform in MVP.
-6. After real samples arrive, create import → IR → export → native parser comparison tests for every supported format family.
+6. Native source-to-output comparison is required for supported export families; existing parser import is not a current public workflow.
 
 ## 6. Execution design
 
@@ -66,20 +66,18 @@ A formal JSON Schema is an M1 deliverable after inspecting owner-provided real p
 
 ## 7. Security & operations decisions
 
-- Repo starts PRIVATE. Real customer logs, identifiers, IP addresses, credentials and parser exports go to a private ignored location; only anonymized synthetic fixtures belong in source control.
+- Keep real customer logs, identifiers, credentials and private parser exports out of source control and public evidence; use authorized isolated storage and anonymized or synthetic fixtures.
 - Preserve source-log confidentiality in UI, error reports, metrics and AI usage; provide masking/export-redaction modes.
 - File upload handling must guard size, compressed bombs, path traversal, malformed encodings, multi-line exhaustion and injection.
 - Do not execute arbitrary untrusted enrichment scripts in the application process; use a locked-down runner and allowlisted operations.
-- Multi-user auth, persistent service storage, secrets and backups are **not** implemented now. Introduce formal contracts before enabling them.
-- No application is yet deployed; initial repository is docs only. Production release requires separate approval, runtime qualification, browser acceptance and Full User E2E.
+- Multi-user authentication and persistent collaboration are outside current product scope; introduce formal contracts before enabling them.
+- A preview or existing service does not establish production release readiness. Production release requires separate approval, runtime qualification, browser acceptance and Full User E2E.
 
-## 8. Open design choices pending evidence
+## 8. Evidence and future-scope boundaries
 
-- Exact Stellar parser artifact and loader contracts by format family (not by UI screenshot alone).
-- Whether provided parser is raw Fluentd, proprietary legacy JSON/CONF pair or modular JSON, or another custom shape.
-- Minimal plugin set, Ruby/regex engine feature subset and target deployment safety.
-- Concrete Interflow mapping dictionary and precedence, including source tenant metadata.
-- Persistent datastore and authentication stack, if/when collaboration becomes part of the first release.
+- The current Ruby/CONF pair and observed target runtime have executable contracts; proprietary DP loader and live indexing remain a separate evidence gate.
+- Use the fixed Stellar 7.0 dictionary and canonical mapping policy, including explicit unsupported values and collisions.
+- Keep alternative artifact shapes, persistence and multi-user collaboration outside the current supported scope unless explicitly approved.
 
 ## 9. Architecture acceptance tests
 

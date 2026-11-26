@@ -4,7 +4,7 @@ Canonical Engineering System: https://github.com/datarelay-labs/engineering-syst
 
 ## First read
 
-Read this AGENTS.md and .engineering/project.yaml before substantive work. For product scope use docs/01_PRODUCT_VISION.md, for UI changes docs/02_WEB_UI_SPEC.md, and for parser or export changes docs/03_FUNCTIONAL_REQUIREMENTS.md and docs/04_ARCHITECTURE.md. Read additional standards only as the task needs them.
+Read this AGENTS.md and .engineering/project.yaml before substantive work. For product scope use docs/14_TWO_PATH_PRODUCT_V2.md and product purpose in docs/01_PRODUCT_VISION.md, for UI changes docs/02_WEB_UI_SPEC.md, and for parser or export changes docs/03_FUNCTIONAL_REQUIREMENTS.md and docs/04_ARCHITECTURE.md. The specification manifest declares the bounded current authority inventory; historical design is not a competing requirement. Read additional standards only as the task needs them.
 
 ## Execution authority
 
@@ -26,6 +26,6 @@ Continue the current highest-priority incomplete work, preserve unrelated and di
 - Never mutate production or modify credentials, permissions or release state without the required separate approval.
 - Require evidence for readiness: deterministic fixture regression first, browser user paths and Full User E2E on the same candidate before release.
 
-## Initial workstream
+## Current workstream
 
-The first remaining technical task is ingesting the owner's real sample logs and sample parsers and recording verified contracts. Do not fabricate fixtures as evidence of Stellar compatibility. Read docs/06_ROADMAP_AND_ACCEPTANCE.md for the ordered roadmap.
+Follow the current owner instruction and current repository work packet or roadmap. Read docs/06_ROADMAP_AND_ACCEPTANCE.md as a progress ledger, not normative product scope. Use the current specs and executable contracts for intended behavior; do not fabricate fixtures as evidence of Stellar compatibility.
