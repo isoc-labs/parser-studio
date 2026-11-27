@@ -105,6 +105,10 @@ export default function NormalizationMappingReview({
     return ()=>{aborted=true;};
   },[originalRawSample,suite,draft,multipassSourceSample,multipassRawEvents,multipassResiduals]);
   const [vendorListOpen,setVendorListOpen]=useState<boolean|null>(null);
+  // Which list a row is shown in follows its destination, but only between edits: the list is fixed when focus
+  // enters the row and decided again when focus leaves it. A name that becomes, or stops being, an official field
+  // while it is typed ("srcip" on the way to "srcip_host") must not move the row away from the keyboard.
+  const [editingRow,setEditingRow]=useState<{id:string;vendor:boolean}|null>(null);
   const [search,setSearch]=useState('');
   const [catalogQuery,setCatalogQuery]=useState('');
   const [activeMappingId,setActiveMappingId]=useState<string|null>(null);
@@ -536,12 +540,14 @@ export default function NormalizationMappingReview({
         {STELLAR_METADATA_CATALOG.filter(entry=>entry.mappable).map(entry=><option value={entry.name} key={entry.name}/>)}
       </datalist>
       {(()=>{
-      const renderRow=(mapping:MappingRule,index:number)=>{
+      const renderRow=(mapping:MappingRule,index:number,listedAsVendor:boolean)=>{
         const group=draft.guided?.groups[mapping.id]??'vendor_fields';
         const state=catalogState(mapping,group);
         return <article className={'normalization-map-row '+state.kind+
           (selectedSource===mapping.source?' selected-source':'')} key={mapping.id}
-          data-source-path={mapping.source} aria-label={'Field mapping '+(index+1)}>
+          data-source-path={mapping.source} aria-label={'Field mapping '+(index+1)}
+          onFocus={()=>setEditingRow(old=>old?.id===mapping.id?old:{id:mapping.id,vendor:listedAsVendor})}
+          onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node|null))setEditingRow(null);}}>
           <div className="normalization-map-status">
             {state.kind==='verified'?<CheckCircle2 size={16}/>:state.kind==='review'?<CircleAlert size={16}/>:<ShieldCheck size={16}/>}
             <span>{state.label}</span>
@@ -600,18 +606,19 @@ export default function NormalizationMappingReview({
         </article>;
       };
       const rows=draft.mappings.map((mapping,index)=>({mapping,index,
-        vendor:(draft.guided?.groups[mapping.id]??'vendor_fields')==='vendor_fields'}));
+        vendor:editingRow?.id===mapping.id?editingRow.vendor:
+          (draft.guided?.groups[mapping.id]??'vendor_fields')==='vendor_fields'}));
       const lead=rows.filter(row=>!row.vendor);
       const vendorRows=rows.filter(row=>row.vendor);
       const collapsible=lead.length>0&&vendorRows.length>VENDOR_LIST_COLLAPSE_AT;
-      if(!collapsible)return rows.map(row=>renderRow(row.mapping,row.index));
+      if(!collapsible)return rows.map(row=>renderRow(row.mapping,row.index,row.vendor));
       return <>
-        {lead.map(row=>renderRow(row.mapping,row.index))}
+        {lead.map(row=>renderRow(row.mapping,row.index,row.vendor))}
         <details className="normalization-vendor-list" open={vendorListOpen??false}
           onToggle={event=>setVendorListOpen(event.currentTarget.open)}>
           <summary>Vendor-only fields ({vendorRows.length}) · original leaf names, not matched to Stellar</summary>
           <p className="normalization-vendor-note">These fields have no Stellar standard name. Open the list to rename one or leave it out of the output; leaving them as they are is fine.</p>
-          {vendorRows.map(row=>renderRow(row.mapping,row.index))}
+          {vendorRows.map(row=>renderRow(row.mapping,row.index,row.vendor))}
         </details>
       </>;
       })()}

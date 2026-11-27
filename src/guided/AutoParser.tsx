@@ -5,7 +5,7 @@ import {ArrowLeft,ArrowRight,CheckCircle2,Download,FileText,
 import {createDraft,type ParserDraft,type SuiteResult} from '../model';
 import {toBackendProject} from './backendAdapter';
 import {describeAdapterIssues} from './adapterIssueMessage';
-import {missingParserIdentityMessage,placeholderParserIdentityParts,parserExportIdentityIssue} from './parserIdentity';
+import {missingParserIdentityMessage,parserExportIdentityIssue} from './parserIdentity';
 import {describeCsvColumnNameProblem} from './csvColumnNames';
 import {fetchBackendCapabilities,assertBackendProjectSupported,
   type BackendCapabilities} from './backendCapabilities';
@@ -1282,8 +1282,7 @@ export default function AutoParser({
        </StageGuide>
        <p>Parser Studio will test every sample again before it creates downloadable files.
          Nothing is installed in a live Stellar system from this screen.</p>
-       {placeholderParserIdentityParts(draft.vendor,draft.name).length>0&&
-         <ParserIdentityCard draft={draft} setDraft={setDraft} warnIfPlaceholder/>}
+       <ParserIdentityCard draft={draft} setDraft={setDraft} warnIfPlaceholder/>
        <div className="auto-parser-summary">
          <span>Sample logs <strong>{report.sourceCount}</strong></span>
          <span>Browser extracted <strong>{suite?.counts.matched??0}</strong></span>

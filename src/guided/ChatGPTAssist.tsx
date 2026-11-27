@@ -1,4 +1,4 @@
-import {parserExportIdentityIssue} from './parserIdentity';
+import {parserExportIdentityIssue,parserExportSettings,parsingRulesKey,withParserExportSettings} from './parserIdentity';
 import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {extractRecipeJson} from './aiReplyExtract';
 import {describeNonJsonReply,describeRejectedReply,describeFailedCheck,COPY_DAMAGE_HINT} from './chatGptResultNotice';
@@ -88,13 +88,23 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
   const [notice,setNotice]=useState('');
   const [busy,setBusy]=useState(false);
   const [context,setContext]=useState<{
-    sample:string;draft:ParserDraft;suite:SuiteResult;basePrompt:string;
+    sample:string;draft:ParserDraft;suite:SuiteResult;basePrompt:string;details:string;
   }|null>(null);
   const [generated,setGenerated]=useState<{
     pair:GeneratedPair;draft:ParserDraft;sourceKey:string;goal:string;capabilities:BackendCapabilities;port:number;evidence:'SAMPLE_ONLY'|'INDEPENDENT'|'UNCHANGED';
   }|null>(null);
   const sourceKey=useMemo(()=>JSON.stringify([sample,draft,namedLogTypes]),
     [sample,draft,namedLogTypes]);
+  // The prompt, the pasted result and its checks depend on the logs and the parsing rules. The parser details
+  // (names, version, .conf port) are applied when the files are created, so only created files depend on them.
+  const sessionKey=useMemo(()=>JSON.stringify([sample,parsingRulesKey(draft),namedLogTypes]),
+    [sample,draft,namedLogTypes]);
+  const exportKey=JSON.stringify(parserExportSettings(draft));
+  // A prompt embeds the manufacturer, product, version and project name it was prepared with, not the port.
+  // It is offered for copying only while those are current; the pasted result and its checks do not depend on it.
+  const promptDetails=JSON.stringify({...parserExportSettings(draft),port:0});
+  const promptCurrent=context?.details===promptDetails;
+  const liveSourceKey=useRef(sourceKey);liveSourceKey.current=sourceKey;
   const namedValidation=namedLogTypes?validateNamedLogs(namedLogTypes):null;
   const namedReady=!namedValidation||(namedValidation.ok&&namedLogTypes!.length>=2);
   // One source of truth across both creation methods. Untouched demo metadata
@@ -125,7 +135,14 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
     setHoldoutAttested(false);setCandidateApproval(false);
     setAttempt(1);setRetryFailure(null);setResponse('');
     return ()=>{epoch.current++;};
-  },[sourceKey,goal,familyScope?.context]);
+  },[sessionKey,goal,familyScope?.context]);
+  // Created files carry the parser details: a change makes those files out of date and nothing else.
+  useLayoutEffect(()=>{
+    if(!generated)return;
+    setGenerated(null);
+    setNotice('The parser details changed after the files were created. Create the parser files again to use the new details.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[exportKey]);
 
   async function prepare(){
     if(!suite||pending||busy||!sample.trim()||draft.eventProfiles)return;
@@ -177,7 +194,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
         sourceEvidence:buildPromptSourceEvidence(sample).text,
         eventCoverageEvidence:buildEventCoverageEvidence(sample,next,local).text,
       });
-      setContext({sample,draft:next,suite:local,basePrompt});
+      setContext({sample,draft:next,suite:local,basePrompt,details:promptDetails});
       setPrompt(basePrompt);setAttempt(1);setRetryFailure(null);
     }catch{
       if(token===epoch.current)setPromptError('Could not prepare the reviewed AI prompt. No log data was transmitted.');
@@ -190,7 +207,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
     catch{if(token===epoch.current)setPromptError('Clipboard unavailable. Select and copy the visible prompt manually.');}
   }
   async function copyImprovedPrompt(){
-    if(!context||!retryFailure||!response.trim()||pending||busy||attempt>=3)return;
+    if(!context||!promptCurrent||!retryFailure||!response.trim()||pending||busy||attempt>=3)return;
     const token=++epoch.current;
     const nextAttempt=(attempt+1) as 2|3;
     try{
@@ -399,7 +416,9 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
         setNotice('Validate the proposal on your original sample (and any independent examples) and explicitly approve the evidence level before creating a DRAFT.');
         return;
       }
-      const candidate=unchanged?context.draft:comparison!.candidate;
+      // The checked rules, under the parser details as they are now. Everything below runs on this candidate.
+      const candidate=withParserExportSettings(unchanged?context.draft:comparison!.candidate,
+        parserExportSettings(draft));
       const local=await runPreview(candidate,sample);
       if(token!==epoch.current)return;
       if(!completeSuite(local))
@@ -428,16 +447,20 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
       if(token!==epoch.current)return;
       const exact=await buildReviewableRecipe(sample,candidate,local);
       if(token!==epoch.current)return;
-      if(!exact.ok||canonicalJson(exact.recipe)!==canonicalJson(review.candidate))
+      // projectId names the project (draft-<file name>); the reviewed stages are compared and compiled unchanged.
+      const recipe={...review.candidate,projectId:adapted.project.projectId};
+      if(!exact.ok||canonicalJson(exact.recipe)!==canonicalJson(recipe))
         throw new Error('The AI proposal differs from the compiler-owned validated recipe.');
       // Restricted Recipe v0.2 excludes conditional event routing.
       // Those DRAFTs must use the separately reviewed conditional builder.
       if(candidate.eventProfiles)
         throw new Error('Conditional recipes cannot be compiled through v0.2.');
-      await compileReviewedRecipeV02({
-        recipe:review.candidate,legacyProject:adapted.project,
-      },pair);
+      await compileReviewedRecipeV02({recipe,legacyProject:adapted.project},pair);
       if(token!==epoch.current)return;
+      if(liveSourceKey.current!==sourceKey){
+        setNotice('The parser details changed while the files were being created. Create the parser files again.');
+        return;
+      }
       setGenerated({pair,draft:candidate,sourceKey,goal,capabilities:cap,port:adapted.project.receiver.port,
         evidence:unchanged?'UNCHANGED':comparison!.evidence});
       setNotice('DRAFT parser files created after local checks. No deployment or target compatibility is implied.');
@@ -519,7 +542,11 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
             Boolean(draft.eventProfiles)}
           onClick={()=>{void prepare();}}>Prepare ChatGPT Prompt</button>
         {promptError&&<p role="alert" className="auto-parser-warning">{promptError}</p>}
-        {prompt&&<div className="auto-parser-recipe" aria-label="ChatGPT prepared prompt">
+        {context&&!promptCurrent&&<p role="note" className="auto-parser-note" aria-label="ChatGPT prompt out of date">
+          The manufacturer, product or version changed after this prompt was prepared, so it is no longer offered for copying.
+          A ChatGPT result you already pasted and its checks are kept, and the created files use the new details.
+          To ask ChatGPT again with the new details, prepare the prompt again; that starts a new round.</p>}
+        {context&&promptCurrent&&<div className="auto-parser-recipe" aria-label="ChatGPT prepared prompt">
           <h3>2. Copy to ChatGPT{attempt>1?' · Attempt '+attempt+' of 3':''}</h3>
           <textarea aria-label="ChatGPT copyable prompt" rows={10} value={prompt}
             onChange={e=>{invalidateOperation();setPrompt(e.target.value);setCopied(false);setReview(null);setComparison(null);setCandidateApproval(false);setHoldoutAttested(false);setGenerated(null);setNotice('');setRetryFailure(null);}}/>
@@ -540,7 +567,7 @@ function ChatGPTAssistCore({draft,setDraft,sample,setSample,suite,
         <button type="button" disabled={!response.trim()||!context||pending||busy}
           className="auto-parser-secondary" onClick={()=>{void validate();}}>Check ChatGPT Result</button>
         {notice&&<p role="status" className="auto-parser-note">{notice}</p>}
-        {retryFailure&&attempt<3&&context&&<div className="auto-parser-recipe" aria-label="ChatGPT adaptive repair">
+        {retryFailure&&attempt<3&&context&&promptCurrent&&<div className="auto-parser-recipe" aria-label="ChatGPT adaptive repair">
           <p>Parser Studio found a problem: {describeFailedCheck(retryFailure.failure)}. The next prompt includes original logs, the previous response and local failure evidence. If additional test logs were supplied, relevant excerpts may be included. Review sensitive information before copying.</p>
           <button type="button" disabled={busy||pending}
             onClick={()=>{void copyImprovedPrompt();}}>
