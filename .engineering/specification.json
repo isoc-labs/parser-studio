@@ -15,11 +15,11 @@
     },
     "docs/02_WEB_UI_SPEC.md": {
       "status": "active",
-      "sha256": "4c572e05e1814eba718d0ba6949b846c3056679b92636a4669f482c9e1b90ab8"
+      "sha256": "04bd8dd98422e58298ab70a81bfad898089bd6e6b7fa6624a410ccc3d150d369"
     },
     "docs/03_FUNCTIONAL_REQUIREMENTS.md": {
       "status": "active",
-      "sha256": "a4f006d593bc08e6afbb51b7080f3467ddc9b970bf072edc83a8c8f515579507"
+      "sha256": "3d7f6ddfb169f50d88c2e80d16e70c6024b30575f40d526884e46263ebf7875f"
     },
     "docs/04_ARCHITECTURE.md": {
       "status": "supporting",

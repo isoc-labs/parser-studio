@@ -44,6 +44,18 @@ reversible edits. No unsupported format or ambiguous mapping may silently appear
 successful. See the product scope for privacy, native verification and excluded
 target operations; these constraints apply in both creation paths.
 
+An input control stays where it is while the user edits it. Whether and where a
+control is shown depends on the stage, on what has been prepared and on where the
+edit began, never on whether the value being typed is valid yet; validity only
+changes warnings and whether files can be created. A Map Fields row is listed
+again by its destination when focus leaves it. Manufacturer, product, version and
+listener port are parser details of the created files in both creation paths:
+changing them makes created files out of date and does not discard a pasted
+ChatGPT result, its checks or its approval. A prepared prompt embeds manufacturer,
+product and version, so it is withdrawn while they differ from what it was
+prepared with; it does not embed the port. A change of the original logs or of
+the parsing rules starts the ChatGPT Assisted round over.
+
 ## Acceptance and maintenance
 
 Verify the real rendered navigation and the ordered stage transitions against
