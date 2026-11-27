@@ -36,6 +36,25 @@ high({destination_port:65535},'destination_port','dstport','integer');
 high({spt:443,protocol:'tcp'},'spt','srcport','integer');
 high({event_time:'2026-10-16T12:30:00Z'},'event_time','timestamp','timestamp');
 high({severity:100},'severity','severity','integer');
+// severity, fidelity and threat_score are 0-100 scores where higher means more. A Syslog level (0-7, 0 the most
+// severe), an IDS priority (1-4) or a CEF score (0-10) lies inside that range: a value inside 0-10 does not show
+// the 0-100 scale, whatever the vendor or the path, and the field keeps its own name.
+high({severity:11},'severity','severity','integer');
+high({threat_score:80},'threat_score','threat_score','integer');
+absent({severity:10},'severity');
+absent({severity:0},'severity');
+absent({asa:{severity:'6'}},'asa.severity');
+absent({fidelity:7},'fidelity');
+assert.equal(suggest([{severity:5},{severity:60}]).find(r=>r.source==='severity')?.confidence,'HIGH',
+  'one value above the ordinal range shows the scale of the sample');
+review({severity:'high'},'severity','severity');
+assert.equal(suggest([{severity:5},{severity:'-'}]).find(r=>r.source==='severity'),undefined,
+  'a placeholder value does not show the scale');
+assert.notEqual(row({severity:true},'severity')?.confidence,'HIGH','a non-numeric severity is never approved');
+// A translated (NAT) address is not the original endpoint, like a translated port.
+absent({nat:{srcip:'203.0.113.7'}},'nat.srcip');
+absent({snat_dst_ip:'203.0.113.8'},'snat_dst_ip');
+high({national:{src_ip:'192.0.2.9'}},'national.src_ip','srcip','ip');
 high({duration_ms:1200},'duration_ms','duration','integer');
 high({proto:6},'proto','proto','integer');
 high({protocol:'tcp'},'protocol','proto_name','string');
@@ -203,7 +222,11 @@ const sparseIcmp=suggest([{'icmp-type':8,'protocol-id':1},
 assert.equal(sparseIcmp.find(r=>r.source==='icmp-type')?.confidence,'REVIEW',
   'missing event cannot negate present ICMP evidence');
 absent({event_type:'alert',alert:{signature_id:99,severity:2}},'alert.severity');
-high({event_type:'flow',alert:{signature_id:99,severity:2}},
+// The Suricata refusal needs the alert evidence and holds for any priority; outside an alert the name is judged
+// by the scale its value shows (2 does not show the 0-100 scale, 75 does).
+absent({event_type:'alert',alert:{signature_id:99,severity:75}},'alert.severity');
+absent({event_type:'flow',alert:{signature_id:99,severity:2}},'alert.severity');
+high({event_type:'flow',alert:{signature_id:99,severity:75}},
   'alert.severity','severity','integer');
 const policyCandidate=row({'policy-name':'policy-1'},'policy-name');
 assert.equal(policyCandidate?.target,'rule.name','policy-name official alias');
@@ -493,12 +516,13 @@ assert.equal(mod.fortiGateFalseFriend('hostname',[fortiWeb]),true);
 assert.equal(mod.fortiGateFalseFriend('generic.kv.srcip',[{generic:{kv:{...fortiWeb,srcip:'192.0.2.1'}}}]),false);
 assert.equal(mod.fortiGateFalseFriend('generic.kv.hostname',[{generic:{kv:{hostname:'sensor1',type:'utm'}}}]),false);
 absent({body:{event_type:'alert',alert:{signature_id:99,severity:2}}},'body.alert.severity');
-high({body:{event_type:'flow',alert:{signature_id:99,severity:2}}},'body.alert.severity','severity','integer');
+absent({body:{event_type:'alert',alert:{signature_id:99,severity:75}}},'body.alert.severity');
+high({body:{event_type:'flow',alert:{signature_id:99,severity:75}}},'body.alert.severity','severity','integer');
 // The evidence of a record is in one container: pieces at different levels do not make a FortiGate record, and
 // a key of the same name deeper inside does not hide the alert that contains it.
 // (Still proposed, so not taken for a FortiGate false friend; a host inside an object is offered for review.)
 review({type:'alert',agent:{logid:'0316013056',vd:'root',hostname:'sensor1'}},'agent.hostname','hostname');
-absent({event_type:'alert',alert:{signature_id:99,severity:2,event_type:'x'}},'alert.severity');
+absent({event_type:'alert',alert:{signature_id:99,severity:75,event_type:'x'}},'alert.severity');
 // Imperva Cloud WAF writes the client port as cpt and uses spt for the server port: spt beside cpt is not the
 // source port. Without cpt the CEF dictionary stands (asserted above: spt with protocol tcp is srcport).
 absent({spt:443,cpt:40022,protocol:'tcp'},'spt');

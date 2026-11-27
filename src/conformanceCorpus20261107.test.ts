@@ -32,9 +32,17 @@ describe('Canonical conformance contract — deterministic browser and authored 
     expect(policy.contract).toBe('parser-studio.semantic-policy.v1');
     expect(policy.transportPortProtocols.numeric).toEqual([6,17]);
     const ids=[...corpus.portEvidence,...corpus.explicitPortAliasEvidence,
-      ...corpus.kvWhitespace,...corpus.regexSafety].map(x=>x.id);
+      ...corpus.kvWhitespace,...corpus.regexSafety,...corpus.scoreScaleEvidence].map(x=>x.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.length).toBeGreaterThanOrEqual(30);
+  });
+  // A 0-100 score field (severity) is official only when the value itself shows that scale: Syslog levels,
+  // IDS priorities and CEF scores (0-10) fit inside 0-100 and may even run the other way.
+  it.each(corpus.scoreScaleEvidence)('$id: a score is official only when the 0-100 scale is shown',entry=>{
+    const candidates=suggestNormalizationCandidates({severity:entry.severity,srcip:'192.0.2.1'},[]);
+    const official=candidates.filter(item=>item.confidence==='HIGH'&&item.safeForBulk).map(item=>item.target);
+    expect(official.includes('severity'),entry.id).toBe(entry.allow);
+    expect(official,entry.id).toContain('srcip');
   });
   it.each(corpus.portEvidence)('$id: no unsupported protocol creates automatic ports',
     entry=>{

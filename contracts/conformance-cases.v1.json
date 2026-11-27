@@ -222,5 +222,47 @@
       "srcport": null,
       "dstport": 443
     }
+  ],
+  "scoreScaleEvidence": [
+    {
+      "id": "score-level-0",
+      "severity": "0",
+      "allow": false
+    },
+    {
+      "id": "score-level-2",
+      "severity": "2",
+      "allow": false
+    },
+    {
+      "id": "score-level-6",
+      "severity": "6",
+      "allow": false
+    },
+    {
+      "id": "score-level-10",
+      "severity": "10",
+      "allow": false
+    },
+    {
+      "id": "score-shown-11",
+      "severity": "11",
+      "allow": true
+    },
+    {
+      "id": "score-shown-55",
+      "severity": "55",
+      "allow": true
+    },
+    {
+      "id": "score-shown-100",
+      "severity": "100",
+      "allow": true
+    },
+    {
+      "id": "score-out-of-range-101",
+      "severity": "101",
+      "allow": false
+    }
   ]
 }

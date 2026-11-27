@@ -132,7 +132,7 @@ function oracle(mod){
 }
 const variants=[
   ['allow NAT-derived source port',
-    'if((target===\'srcport\'||target===\'dstport\')&&sourceHasExcludedPortSegment(source))return null;',
+    'if(WHITESPACE_FREE_TARGETS.has(target)&&sourceHasExcludedPortSegment(source))return null;',
     'if(false)return null;'],
   ['allow vendor false friend',
     'if(incompatibleVendorMeaning(source,target,events))return null;',

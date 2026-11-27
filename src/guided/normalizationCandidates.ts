@@ -133,6 +133,23 @@ export function ignored(value:unknown):boolean{
 // Published 7.0 proto_name is a transport protocol, not a vendor application
 // or service label. An unknown name is still reviewable, never auto-approved.
 const DOCUMENTED_PROTO_NAMES=new Set(semanticPolicy.officialProtocolNames);
+const SCORE_SCALE_TARGETS=new Set<string>(semanticPolicy.scoreScaleEvidence.targets);
+const ORDINAL_SCALE_CEILING:number=semanticPolicy.scoreScaleEvidence.ordinalScaleCeiling;
+/** The 7.0 dictionary defines severity, fidelity and threat_score on a 0-100 scale where a higher value means
+ * more. Ordinal scales of other systems (Syslog levels 0-7 with 0 the most severe, IDS priorities 1-4, CEF and
+ * CVSS 0-10) lie inside that range, so the range check cannot tell them apart and a matching name does not show
+ * which scale a source uses. The sample has to show it: a source whose every usable value is an integer inside the
+ * ordinal range keeps its own name. No conversion between scales is attempted. */
+function scoreScaleNotShown(source:string,target:string,events:readonly Record<string,unknown>[]):boolean{
+  if(!SCORE_SCALE_TARGETS.has(target))return false;
+  const usable=events.map(fields=>lookupFieldValue(fields,source))
+    .flatMap(result=>result.found&&!ignored(result.value)?[result.value]:[]);
+  return usable.length>0&&usable.every(value=>{
+    const score=typeof value==='number'?value:
+      typeof value==='string'&&/^\d+$/u.test(value.trim())?Number(value.trim()):NaN;
+    return Number.isInteger(score)&&score>=0&&score<=ORDINAL_SCALE_CEILING;
+  });
+}
 const TRANSPORT_NUMERIC=new Set<string>(
   semanticPolicy.transportPortProtocols.numeric.map(String));
 const TRANSPORT_NAMES=new Set<string>(semanticPolicy.transportPortProtocols.names);
@@ -404,9 +421,8 @@ function incompatibleVendorMeaning(
   if(target==='srcport'&&leaf==='spt'&&events.some(fields=>
     lookupFieldValue(fields,source).found&&
     lookupFieldValue(fields,source.slice(0,source.lastIndexOf('.')+1)+'cpt').found))return true;
-  // RFC3164 PRI severity 0-7 is a Syslog facility code component, not
-  // Stellar's 0-100 security severity score. Never silently relabel it.
-  if(source.toLowerCase().endsWith('syslog.severity'))return true;
+  // A Syslog PRI severity (0-7), a device level digit and every other ordinal scale: see scoreScaleNotShown.
+  if(scoreScaleNotShown(source,target,events))return true;
   // A reviewed PAN-OS positional CSV category is not the unrelated Stellar
   // Windows-agent 'type' field, even when a structural profile names it type.
   if(leaf==='type'&&source.toLowerCase().includes('generic.fields.')&&
@@ -482,7 +498,8 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
   }
   if(atomKey!==undefined&&target&&!WHITESPACE_FREE_TARGETS.has(target))return null;
   if(!target)return null;
-  if((target==='srcport'||target==='dstport')&&sourceHasExcludedPortSegment(source))return null;
+  // A translated (NAT) port or address is not the original endpoint of the session.
+  if(WHITESPACE_FREE_TARGETS.has(target)&&sourceHasExcludedPortSegment(source))return null;
   if(incompatibleVendorMeaning(source,target,events))return null;
   // The Syslog header names the sender; a host field of the HTTP request it carries is the requested host.
   if(target==='hostname'&&hostNameUnconfirmed(source,events,formats)&&events.some(syslogHeaderHostIn))return null;
