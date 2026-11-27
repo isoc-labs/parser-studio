@@ -2329,6 +2329,21 @@
       "disposition": "REQUIRED"
     },
     {
+      "file": "tests/parser-details-lifecycle-20261127.spec.ts",
+      "title": "Auto Parser: the final-step identity card stays while its values are typed and names the created files",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/parser-details-lifecycle-20261127.spec.ts",
+      "title": "ChatGPT Assisted: parser details typed after the reply keep the reply, its test and its approval",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/parser-details-lifecycle-20261127.spec.ts",
+      "title": "Map Fields: a row stays under the keyboard while a Stellar field name is typed through other official names",
+      "disposition": "REQUIRED"
+    },
+    {
       "file": "tests/parser-listener-port-6801.spec.ts",
       "title": "Auto and ChatGPT Assisted use one editable port before logs are supplied",
       "disposition": "REQUIRED"
