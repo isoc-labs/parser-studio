@@ -16,7 +16,7 @@
 //
 //   golden-ruby-gate.ts prepare <downloads-dir> <runner-input.json>
 //   golden-ruby-gate.ts compare <downloads-dir> <runner-output.json> [--expect-ruby 2.4.9]
-import {loadGoldenDestinationExpectations} from '../../backend/src/golden-destination-expectations.js';
+import {loadGoldenDestinationExpectations,loadGoldenDeclinedDestinations} from '../../backend/src/golden-destination-expectations.js';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
@@ -31,6 +31,7 @@ interface Bundle { contract: string; id: string; raw: string; ruby: string; ruby
 export const CORPUS_FILES: string[] = (JSON.parse(readFileSync(resolve('evals/golden-corpus/corpus-files.v1.json'), 'utf8')) as { files: string[] }).files;
 
 const endpointGoldens = loadGoldenDestinationExpectations();
+const declinedGoldens = loadGoldenDeclinedDestinations();
 
 async function corpus(): Promise<VendorCase[]> {
   const all: VendorCase[] = [];
@@ -103,6 +104,7 @@ async function compare(dir: string, outputPath: string, expectRuby: string | und
     }
     const comparison = compareEventToGolden({
       golden: item.goldenSourceValues, rows: bundle.rows, required: bundle.required, expectedDestinations: endpointGoldens[item.id],
+      declinedDestinations: declinedGoldens[item.id],
       events: result.calls.map(([time, record]) => ({ time, record })),
     });
     // The required list must be exactly what the corpus asks for, not what the bundle claims.

@@ -6,7 +6,7 @@
 // with the code that names that thing. It needs no Ruby and no browser: the gate's
 // job is the bookkeeping between corpus, bundles, recorded downloads and executed
 // events, and that is what is attacked here.
-import {loadGoldenDestinationExpectations} from '../src/golden-destination-expectations.js';
+import {loadGoldenDestinationExpectations,loadGoldenDeclinedDestinations} from '../src/golden-destination-expectations.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,6 +32,7 @@ const cases: Case[] = registry.files
   .filter(item => item.sampleClass.startsWith('VENDOR_DOCUMENTED'));
 
 const endpointGoldens = loadGoldenDestinationExpectations(root);
+const declinedGoldens = loadGoldenDeclinedDestinations(root);
 
 const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
@@ -50,6 +51,8 @@ function perfect(): Fixture {
       ruby, rubySha256: sha(ruby), rows, required });
     const record: Record<string, string | number> = {...endpointGoldens[item.id]};
     item.goldenSourceValues.forEach((golden, index) => { record['f' + index] = String(golden.sourceValue); });
+    // A value whose official field the policy does not list is kept under its own (vendor) name.
+    for (const declined of declinedGoldens[item.id] ?? []) record['kept_' + declined.source] = declined.value;
     results[item.id] = { calls: [[null, record]] };
   }
   return { dir: '', bundles, recorded, results, ruby: '2.4.9' };
@@ -149,6 +152,21 @@ attack('mapping and emitted endpoint roles agree with each other but are reverse
   [record.srcip, record.dstip] = [record.dstip, record.srcip];
   f.results[first] = {calls: [[call[0], record]]};
 }, 'compare', 'GOLDEN_CANONICAL_DESTINATION_MISMATCH ' + first);
+
+// Default deny (owner decision 2026-11-28): fortinet_fortios_traffic documents policyid=1 and appid=34050; neither
+// fw_policy_id nor appid is a listed official field.
+attack('a value written to an official field the policy does not list', f => {
+  assert.equal(first, 'fortinet_fortios_traffic');
+  const call=f.results[first]!.calls[0]!;
+  f.results[first]={calls:[[call[0],{...(call[1] as Record<string,unknown>),appid:34050}]]};
+}, 'compare', 'GOLDEN_DECLINED_DESTINATION_WRITTEN '+first+' appid');
+
+attack('a documented value dropped because its official field is not listed', f => {
+  const call=f.results[first]!.calls[0]!;
+  const record={...(call[1] as Record<string,unknown>)};
+  delete record.kept_appid;
+  f.results[first]={calls:[[call[0],record]]};
+}, 'compare', 'GOLDEN_DECLINED_VALUE_LOST '+first+' appid');
 
 attack('a correct source value but incorrect official protocol type', f => {
   const call=f.results[first]!.calls[0]!;

@@ -92,10 +92,11 @@ function check(mod){
   assert.equal(entry(occupied,'src_ip').reviewReasons.includes('EXISTING_TARGET_CONFLICT'),true);
   // Both ancestor and descendant target collisions must be recognized, not
   // only exact string identity; these are independent negative cases.
-  const ancestor=m(suite({host:{ip:'192.0.2.7'}}),draft([
-    {id:'parent',source:'old',target:'host',type:'string'},
+  // rule.name is the nested official field the policy lists (default deny, 2026-11-28; host.ip is not proposed).
+  const ancestor=m(suite({rule:{name:'allow-web'}}),draft([
+    {id:'parent',source:'old',target:'rule',type:'string'},
   ],{parent:'vendor_fields'}));
-  assert.equal(entry(ancestor,'host.ip').reviewReasons.includes('EXISTING_TARGET_CONFLICT'),true);
+  assert.equal(entry(ancestor,'rule.name').reviewReasons.includes('EXISTING_TARGET_CONFLICT'),true);
   const descendant=m(suite({src_ip:'192.0.2.8'}),draft([
     {id:'child',source:'old',target:'srcip.child',type:'string'},
   ],{child:'vendor_fields'}));

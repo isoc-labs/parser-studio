@@ -18,7 +18,20 @@ function validateCanonicalPolicy(input){
   const advisory=input.advisoryOnlyAliases;
   const allowed=input.advisoryNameOnlySources;
   const types=input.advisoryTargetTypes;
-  assert.ok(Object.keys(aliases).length>=90);
+  // Default deny: every table of the policy leads to a listed field only, and every listed field carries its
+  // dictionary definition and the basis for taking a name for it. (This replaces a lower bound on the number of
+  // aliases: more aliases are not better.)
+  const listed=input.autoApprovedTargets,declined=input.autoApprovalDeclined;
+  assert.ok(Object.keys(listed).length>0);
+  for(const [name,entry] of Object.entries(listed)){
+    assert.ok(typeof entry.definition==='string'&&entry.definition.length>0,'listed field without its definition: '+name);
+    assert.ok(typeof entry.basis==='string'&&entry.basis.length>80,'listed field without a stated basis: '+name);
+    assert.ok(!Object.hasOwn(declined,name),'a field is both listed and declined: '+name);
+  }
+  for(const [name,entry] of Object.entries(declined))
+    assert.ok(typeof entry.definition==='string'&&typeof entry.reason==='string'&&entry.reason.length>20,'declined field without its reason: '+name);
+  for(const target of [...Object.values(aliases),...Object.values(advisory),...Object.values(input.explicitPortSourceAliases),
+    ...Object.keys(types)])assert.ok(Object.hasOwn(listed,target),'a policy table leads to a field that is not listed: '+target);
   for(const [source,target] of Object.entries(input.explicitPortSourceAliases)){
     assert.equal(aliases[source],target,'explicit ports must share browser semantics');
   }

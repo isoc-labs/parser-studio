@@ -1,48 +1,41 @@
+import {readFileSync} from 'node:fs';
 import {expect,type Locator} from '@playwright/test';
 
-/** Current product auto-applies verified matches during draft preparation.
- * An acceptance test must recognize both already-applied mappings and
- * outstanding recommended mappings; it must never reapply duplicates.
- */
+/** The official fields a name may be proposed for (shared Semantic Policy, default deny). */
+export const LISTED_OFFICIAL_FIELDS:readonly string[]=Object.keys((JSON.parse(readFileSync(
+  'runtime/multipass/semantic-policy.v1.json','utf8')) as {autoApprovedTargets:Record<string,unknown>}).autoApprovedTargets);
+
+/** The Stellar fields the Map Fields stage shows as official ("Matched to Stellar" rows), by source field. A row
+ * that keeps a vendor field under a name that happens to equal a Stellar field name is not one of them: the
+ * earlier check compared destination texts only and took such a row for an official mapping. */
+export async function officialMappings(map:Locator):Promise<Record<string,string>>{
+  const rows=await map.locator('article.normalization-map-row.verified').evaluateAll(nodes=>nodes.map(node=>[
+    (node.querySelector('input[aria-label^="Source field "]') as HTMLInputElement|null)?.value??'',
+    (node.querySelector('input[aria-label^="Stellar field "]') as HTMLInputElement|null)?.value??'']));
+  return Object.fromEntries(rows);
+}
+
+/** The automatic journey of a sample. `targets` are the Stellar meanings the sample holds: each one the policy
+ * lists must be official after the recommended matches are applied; each one the policy does not list must NOT be
+ * official (default deny) while its source field is still there to map with ChatGPT or by hand. Nothing else is
+ * official either. */
 export async function verifyOfficialMappings(
   map:Locator,
   targets:readonly string[],
   family:string,
 ):Promise<void>{
-  const suggestion=map.getByLabel('Recommended field matches');
-  await expect(suggestion).toBeVisible();
-  const current=()=>map.locator('input[aria-label^="Stellar field "]')
-    .evaluateAll(nodes=>nodes.map(node=>(node as HTMLInputElement).value));
-  // The pinned Stellar 7.0 catalog has a documented host.name namespace
-  // leaf. Treat its fully verified host.name -> host.name mapping as a valid
-  // hostname destination for these historical general-host acceptance cases.
-  // Never accept a vendor-local host.name or an arbitrary string alias.
-  const verifiedHostName=()=>map.locator('article.normalization-map-row.verified')
-    .evaluateAll(nodes=>nodes.some(node=>{
-      const source=node.querySelector('input[aria-label^="Source field "]') as HTMLInputElement|null;
-      const target=node.querySelector('input[aria-label^="Stellar field "]') as HTMLInputElement|null;
-      return source?.value==='host.name'&&target?.value==='host.name';
-    }));
-  const meets=(target:string,existing:readonly string[],nestedHost:boolean)=>
-    existing.includes(target)||(target==='hostname'&&nestedHost);
-  const before=await current();
-  const beforeHost=await verifiedHostName();
-  const suggested=await suggestion.innerText();
-  for(const target of targets){
-    expect(
-      meets(target,before,beforeHost)||suggested.includes(target),
-      family+' must either have a verified '+target+' mapping or expose a manual suggestion',
-    ).toBe(true);
-  }
+  await expect(map.getByLabel('Recommended field matches')).toBeVisible();
   const bulk=map.getByRole('button',{name:/Apply \d+ recommended match/});
   if(await bulk.isEnabled())await bulk.click();
-  const final=await current();
-  const finalHost=await verifiedHostName();
+  const official=Object.values(await officialMappings(map));
   for(const target of targets){
-    expect(meets(target,final,finalHost),
-      family+' should have a verified official '+target+' or an exact 7.0 host.name mapping'
-    ).toBe(true);
+    if(LISTED_OFFICIAL_FIELDS.includes(target))
+      expect(official,family+' must have an official '+target+' mapping').toContain(target);
+    else expect(official,family+': '+target+' is not a listed field and must stay a vendor field').not.toContain(target);
   }
+  expect(official.filter(target=>!LISTED_OFFICIAL_FIELDS.includes(target)),family+': official fields outside the policy').toEqual([]);
+  expect([...official].sort(),family+': official fields of the sample').toEqual(
+    targets.filter(target=>LISTED_OFFICIAL_FIELDS.includes(target)).sort());
   await expect(map.getByLabel('Field mapping checks')).toContainText(
     'All current field mappings passed the sample checks',
   );

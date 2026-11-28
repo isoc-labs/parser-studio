@@ -4,7 +4,7 @@ import {convertValue} from '../parser';
 import {canonicalIgnoreSourceValue} from '../../backend/src/canonical-operator-contract';
 import {meetsStellar7ValueConstraints} from '../stellar7ValueConstraints';
 import semanticPolicy from '../../runtime/multipass/semantic-policy.v1.json';
-import {sourceHasExcludedPortSegment,explicitPortSourceAlias} from './sourcePortPolicy';
+import {explicitPortSourceAlias} from './sourcePortPolicy';
 export {sourceHasExcludedPortSegment,explicitPortSourceAlias} from './sourcePortPolicy';
 import type {FieldGroup} from './contract';
 import {findStellarMetadataField} from './stellarMetadataCatalog';
@@ -31,20 +31,38 @@ export interface NormalizationCandidate {
 }
 
 const ALIASES:Readonly<Record<string,string>>=semanticPolicy.normalizationAliases;
+/** Default deny. The only official fields a name can be proposed for are those the shared policy lists, each
+ * with its dictionary definition and the reason a name can carry that meaning. A matching name, alias, type or
+ * range is not such a reason: any other field keeps its own name and value, and reviewed ChatGPT mapping and
+ * manual mapping remain. */
+const AUTO_APPROVED_TARGETS=new Set<string>(Object.keys(semanticPolicy.autoApprovedTargets));
 const WHITESPACE_FREE_TARGETS=new Set(['srcport','dstport','srcip','dstip']);
 /** Official fields a sparse source may be approved for when the source is named exactly like the field. */
 const SPARSE_SAFE_TARGETS=new Set(['srcip','dstip','srcport','dstport','proto','proto_name','url']);
-/** A sparse source is approved only where the name stands for the record itself: at the root, or in the
- * container the READER of the event puts the record's own pairs in. Which containers those are follows from
- * the reading (the effective format of the events that carry the source), never from the text of the path: in
- * a JSON log `fields.srcip`, `body.srcip` or `xlate.srcip` is an object of the log and names another endpoint. */
-const GENERIC_STRUCTURAL_CONTAINER=/^(?:generic\.(?:kv|fields)|watchguard(?:\.kv)?|junos_sd|body)\.[^.]+$/u;
-const SYSLOG_BODY_CONTAINER=/^body\.[^.]+$/u;
+/** A name is evidence only where it stands for the record itself: at the root, or in the container the READER
+ * of the event writes the pairs of the record into. A root-level name that has a target is always a whole path
+ * the dictionary or the alias table lists (candidateForSource), so only the containers are decided here. Which
+ * containers those are follows from the reading (the
+ * effective format of the events that carry the source), never from the text of the path: in a JSON log
+ * `fields.srcip`, `body.srcip` or `xlate.srcip` is an object of the log and names another endpoint. The table
+ * lists what the readers of this product build: the key=value, column and vendor nodes and the Syslog header of
+ * Generic Structural, the body of a Syslog record, and the SD-PARAMs of an RFC 5424 structured-data element. A
+ * container that is missing here costs a proposal; it never causes one. */
+const RECORD_CONTAINERS:Readonly<Record<string,RegExp>>={
+  generic_structural:/^(?:generic\.(?:kv|fields)|watchguard(?:\.kv)?|junos_sd|juniper|asa|syslog|body(?:\.leef_extension)?)\.[^.]+$/u,
+  syslog_rfc3164:/^body\.[^.]+$/u,
+  syslog_rfc5424:/^(?:body|syslog_sd\.[^.]+\.params)\.[^.]+$/u,
+};
 function recordLevelSource(source:string,formats:readonly (string|undefined)[]):boolean{
-  if(!source.includes('.'))return true;
-  return formats.length>0&&formats.every(format=>
-    format==='generic_structural'?GENERIC_STRUCTURAL_CONTAINER.test(source):
-    format==='syslog_rfc3164'||format==='syslog_rfc5424'?SYSLOG_BODY_CONTAINER.test(source):false);
+  return formats.length>0&&formats.every(format=>RECORD_CONTAINERS[format??'']?.test(source)===true);
+}
+// A normalized event keeps the source record under this name; its paths are the source paths one level down.
+const SOURCE_COPY='parserstudio_source.';
+/** The path a source is judged by: an atom is a slice of the key=value pair beside it. */
+function recordPathOf(source:string):string{
+  const local=source.startsWith(SOURCE_COPY)?source.slice(SOURCE_COPY.length):source;
+  const atom=/^((?:.+\.)?)atoms\.([A-Za-z0-9_]+)_001$/u.exec(local);
+  return atom?atom[1]+'kv.'+atom[2]:local;
 }
 const URL_SHAPED=/^(?:[a-z][a-z0-9+.-]*:\/\/\S+|\/\S*)$/iu;
 /** Extension keys whose meaning the format specification defines: the ArcSight CEF Implementation Standard
@@ -100,10 +118,8 @@ function specDefinedTargets(source:string,events:readonly Record<string,unknown>
   return targets;
 }
 type Looked={found:true;value:unknown}|{found:false};
-function sparseSafeSource(source:string,target:string,values:readonly Looked[],
-  formats:readonly (string|undefined)[]):boolean{
-  if(!recordLevelSource(source,formats)||sourceHasExcludedPortSegment(source))return false;
-  // The other sparse-safe fields are checked by the type of the field; a URL has no such check.
+/** The other sparse-safe fields are checked by the type of the field; a URL has no such check. */
+function sparseSafeValues(target:string,values:readonly Looked[]):boolean{
   return target!=='url'||values.every(result=>result.found&&typeof result.value==='string'&&
     URL_SHAPED.test(result.value.trim()));
 }
@@ -133,12 +149,6 @@ export function ignored(value:unknown):boolean{
 // Published 7.0 proto_name is a transport protocol, not a vendor application
 // or service label. An unknown name is still reviewable, never auto-approved.
 const DOCUMENTED_PROTO_NAMES=new Set(semanticPolicy.officialProtocolNames);
-/** The 7.0 dictionary defines severity, fidelity and threat_score on a 0-100 scale where a higher value means
- * more. A source field of the same name may use any other scale (Syslog levels 0-7 with 0 the most severe, IDS
- * priorities 1-4, CEF and CVSS 0-10, 0-20, 0-255), run the other way, or count something else. Neither the name
- * nor a value inside the range shows which, so no sample is evidence: these targets are never proposed from a
- * name. The field keeps its own name and value; reviewed ChatGPT mapping and manual mapping remain. */
-const REVIEW_ONLY_SCORE_TARGETS=new Set<string>(semanticPolicy.reviewOnlyScoreTargets);
 const TRANSPORT_NUMERIC=new Set<string>(
   semanticPolicy.transportPortProtocols.numeric.map(String));
 const TRANSPORT_NAMES=new Set<string>(semanticPolicy.transportPortProtocols.names);
@@ -276,148 +286,21 @@ export function fortiGateFalseFriend(source:string,events:readonly Record<string
 // The official action field describes enforcement/response, not arbitrary
 // event verbs such as a VPN negotiation, session close or admin login.
 const SECURITY_DISPOSITIONS=new Set(semanticPolicy.securityDispositions);
-function windowsAgentEvidence(fields:Record<string,unknown>):boolean{
-  // The published top-level Stellar "type" is Windows-agent-specific.
-  return ['provider_guid','record_number','log_name','event_data'].some(name=>
-    lookupFieldValue(fields,name).found);
-}
-// HTTP request methods (RFC 9110 section 9, and PATCH of RFC 5789), a request target (origin form or absolute
-// form, RFC 9112 section 3.2), a request line and a protocol version: what a VALUE of the record says, whatever
-// the field that holds it is called.
-const HTTP_METHOD_TOKENS=new Set(['GET','HEAD','POST','PUT','DELETE','CONNECT','OPTIONS','TRACE','PATCH']);
-const REQUEST_TARGET=/^(?:\/\S*|(?:https?|wss?):\/\/\S+)$/iu;
-const HTTP_REQUEST_LINE=/^(?:GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE|PATCH) (?:\/\S*|(?:https?|wss?):\/\/\S+)(?: HTTP\/\d(?:\.\d)?)?$/iu;
-const HTTP_VERSION=/^HTTP\/\d(?:\.\d)?$/u;
-type Leaf=readonly [path:string,text:string];
-/** Every scalar of the event, at any depth, with the path that leads to it. */
-function leavesOf(value:unknown,path:string,out:Leaf[]):void{
-  if(value!==null&&typeof value==='object'){
-    // Object.entries gives the members of an object and the items of a list alike.
-    for(const [key,child] of Object.entries(value as Record<string,unknown>))leavesOf(child,path+'.'+key,out);
-    return;
-  }
-  if(value!==null&&value!==undefined)out.push([path,String(value).trim()]);
-}
-/** The paths of the event whose value says that the event describes an HTTP request: an HTTP version, a request
- * line (with or without its version), a method as a request writes it, or a method in any case when a value of
- * the same event is a request target (`method=get uri=/index.html`; `level=trace` alone is a log level). */
-function requestEvidencePaths(leaves:readonly Leaf[]):string[]{
-  const targeted=leaves.some(([,text])=>REQUEST_TARGET.test(text));
-  return leaves.filter(([,text])=>HTTP_VERSION.test(text)||HTTP_REQUEST_LINE.test(text)||
-    HTTP_METHOD_TOKENS.has(targeted?text.toUpperCase():text)).map(([path])=>path);
-}
-// The HOSTNAME of a Syslog header: its position in the header names the sender (RFC 3164 4.1.2, RFC 5424 6.2.4).
-// These are the places where the readers of this product write it: the native Syslog readers, the Generic
-// Structural envelope, and the header object of the WatchGuard reading (src/genericStructural.ts).
-const SYSLOG_HEADER_HOST_SOURCES=['syslog_hostname','syslog.hostname','syslog.host','watchguard_header.hostname'];
-// A normalized event keeps the source record under this name; its paths are the source paths one level down.
-const SOURCE_COPY='parserstudio_source.';
-const withoutSourceCopy=(source:string):string=>source.startsWith(SOURCE_COPY)?source.slice(SOURCE_COPY.length):source;
-const syslogHeaderHostIn=(fields:Record<string,unknown>):boolean=>
-  SYSLOG_HEADER_HOST_SOURCES.some(path=>lookupFieldValue(fields,path).found||lookupFieldValue(fields,SOURCE_COPY+path).found);
-/**
- * A host field whose meaning as the official hostname (the host the record is about) is not established.
- * In a record of an HTTP request a host field is, as a rule, the host the client ASKED FOR (the Host header:
- * Zeek http.log `host`, nginx `host`, Suricata `http.hostname`, `req.headers.host`), and nothing in the record
- * tells the two apart. So a field of events that describe an HTTP request is offered for review and not
- * approved, unless events of another record family carry the same host (see hostNameUnconfirmed). Decided on what the values say, not on the names of the fields beside it: the
- * earlier rule (a field called `host` beside fields called method and uri) missed every other naming and
- * refused a device host name outright (independent audit 2026-11-21, F-05, F-06). A field that events without
- * a request carry as well (host=fw01 in the traffic, web filter and system lines of one device) is an
- * attribute of the record, and a Syslog header host is never asked. Where a Syslog header names the sender,
- * the host field of the request beside it is another host and is not proposed at all.
- */
-// The host of a URL: after the scheme and the user information, or - written without a scheme, as proxy access
-// lines write it - before the first slash.
-const URL_WITH_SCHEME=/^[a-z][a-z0-9+.-]*:\/\/(?:[^\/?#@\s]*@)?([^\/?#:\s]+)/iu;
-const URL_WITHOUT_SCHEME=/^([^\/?#:@\s]+)(?::\d+)?\/\S*$/u;
-const urlHost=(text:string):string|undefined=>
-  (URL_WITH_SCHEME.exec(text)??URL_WITHOUT_SCHEME.exec(text))?.[1]?.toLowerCase();
-/** A host value as it is compared: without regard to case and without a port (`Host: example.com:8443`). */
-const hostText=(value:unknown):string=>String(value).trim().toLowerCase().replace(/:\d+$/u,'');
-/**
- * Three further grounds (the first is above).
- * The field does not stand for the record at all: it lives inside an object of the record (`http.hostname`,
- * `req.headers.host`, `transaction.request.headers.Host`) or is written with such a prefix as a literal key
- * (`http.host`), so it is an attribute of that object, and which host an `agent`, an `observer` or a `request`
- * names is exactly what a name cannot tell.
- * A URL of the same event names this very host (`host=example.com url=https://example.com/a`): it is the host
- * that was asked for. A URL of another host says nothing about the field - an edge or proxy device logs its own
- * name beside the URL it served, and a referrer is a URL too (independent audit 2026-11-22, G-08).
- * The events that describe a request are those that carry a field which, in some event, holds request evidence:
- * the field is the method (or request line, or version) of the record family, whatever one event writes in it
- * (`PROPFIND`, `-`). A host of such events is confirmed only by an event of another family that carries the
- * same host value: host=fw01 in the web filter and in the traffic lines of one device. One event without a
- * known method does not confirm the requested hosts of the others (G-04).
- * What remains undecidable from the record itself - a request written with a path only, no method, no version,
- * no URL that names the host - is still approved; nothing in it says HTTP.
- */
-function hostNameUnconfirmed(source:string,events:readonly Record<string,unknown>[],
-  formats:readonly (string|undefined)[]):boolean{
-  const local=withoutSourceCopy(source);
-  if(SYSLOG_HEADER_HOST_SOURCES.includes(local))return false;
-  const carrierFormats=events.flatMap((fields,index)=>lookupFieldValue(fields,source).found?[formats[index]]:[]);
-  if(!recordLevelSource(local,carrierFormats))return true;
-  const carriers=events.flatMap(fields=>{
-    const held=lookupFieldValue(fields,source);
-    if(!held.found)return [];
-    const leaves:Leaf[]=[];
-    leavesOf(fields,'',leaves);
-    return [{host:hostText(held.value),leaves}];
-  });
-  if(carriers.some(({host,leaves})=>leaves.some(([,text])=>urlHost(text)===host)))return true;
-  const requestPaths=new Set(carriers.flatMap(({leaves})=>requestEvidencePaths(leaves)));
-  const ofRequest=(leaves:readonly Leaf[]):boolean=>leaves.some(([path])=>requestPaths.has(path));
-  const elsewhere=new Set(carriers.filter(({leaves})=>!ofRequest(leaves)).map(({host})=>host));
-  return carriers.some(({host,leaves})=>ofRequest(leaves)&&!elsewhere.has(host));
-}
 function incompatibleVendorMeaning(
   source:string,target:string,events:Record<string,unknown>[],
 ):boolean{
   const leaf=(source.split('.').at(-1)??source).toLowerCase();
-  // An exact dictionary field-name match cannot establish vendor semantics.
-  // event_type is an ML-job event type in the 7.0 dictionary, not the
-  // manufacturer's record family (Suricata alert, Okta session, etc.).
-  if(target==='event_type')return true;
-  // direction is "the direction of the maltrace event" in the 7.0 dictionary: a Stellar detection attribute.
-  // A vendor field of the same name (PAN-OS client-to-server / server-to-client, FortiOS inbound / outbound)
-  // describes the traffic or the attack in the vendor's terms, so the name alone never maps it.
-  if(target==='direction')return true;
-  if(target==='type'&&(!events.every(windowsAgentEvidence)||source!=='type'))return true;
-  // Vendor traffic durations commonly use seconds or unspecified units.
-  // Do not emit the official milliseconds field without explicit ms evidence.
-  if(target==='duration'&&!['duration_ms','session_duration_ms'].includes(leaf))return true;
   if(target==='action'&&events.some(fields=>{
     const result=lookupFieldValue(fields,source);
     return result.found&&!ignored(result.value)&&
       !SECURITY_DISPOSITIONS.has(String(result.value).trim().toLowerCase());
   }))return true;
-  // A Syslog level, an IDS priority, a CEF score or any other number called severity, fidelity or threat_score.
-  if(REVIEW_ONLY_SCORE_TARGETS.has(target))return true;
-  if(fortiGateFalseFriend(source,events))return true;
   // CEF names spt the source port. Imperva Cloud WAF (Incapsula) writes the client port as cpt and uses spt for the
   // SERVER port (its log file structure reference), with src still the client address: spt mapped to srcport would
   // pair the client address with the server port. A record that carries cpt beside spt follows that usage.
-  if(target==='srcport'&&leaf==='spt'&&events.some(fields=>
+  return target==='srcport'&&leaf==='spt'&&events.some(fields=>
     lookupFieldValue(fields,source).found&&
-    lookupFieldValue(fields,source.slice(0,source.lastIndexOf('.')+1)+'cpt').found))return true;
-  // A reviewed PAN-OS positional CSV category is not the unrelated Stellar
-  // Windows-agent 'type' field, even when a structural profile names it type.
-  if(leaf==='type'&&source.toLowerCase().includes('generic.fields.')&&
-    events.some(fields=>{
-      const value=lookupFieldValue(fields,source);
-      return value.found&&['TRAFFIC','THREAT','SYSTEM','CONFIG'].includes(String(value.value).toUpperCase());
-    }))return true;
-  // A zero-filled ICMP field on UDP or TCP is not evidence of ICMP semantics.
-  // The Junos structured-data reader of the Generic Structural route spells the same two names with
-  // underscores (icmp_type beside protocol_id). A field that is called icmp_type on its own is not this record.
-  if(target==='icmp_type'&&(leaf==='icmp-type'||leaf==='icmp_type'))return events.some(fields=>{
-    if(!lookupFieldValue(fields,source).found)return false;
-    const prefix=source.slice(0,source.length-leaf.length);
-    const protocol=lookupFieldValue(fields,prefix+(leaf==='icmp-type'?'protocol-id':'protocol_id'));
-    return protocol.found&&!['1','58'].includes(String(protocol.value));
-  });
-  return false;
+    lookupFieldValue(fields,source.slice(0,source.lastIndexOf('.')+1)+'cpt').found);
 }
 export function valueFitsMappingType(type:MappingRule['type'],value:unknown):boolean{
   if(ignored(value))return true;
@@ -475,12 +358,17 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
       DOCUMENTED_PROTO_NAMES.has(result.value.trim().toLowerCase())))target='proto_name';
   }
   if(atomKey!==undefined&&target&&!WHITESPACE_FREE_TARGETS.has(target))return null;
-  if(!target)return null;
-  // A translated (NAT) port or address is not the original endpoint of the session.
-  if(WHITESPACE_FREE_TARGETS.has(target)&&sourceHasExcludedPortSegment(source))return null;
+  if(!target||!AUTO_APPROVED_TARGETS.has(target))return null;
+  // A name is evidence only where it stands for the record itself: a whole path the dictionary or the alias
+  // table lists, a key the format specification defines, or a name at the level of the record. A leaf of an
+  // object of the record (xlate.srcip, file.timestamp, referrer.url) names that object, whatever it is. This is
+  // also what keeps a translated (NAT) endpoint out: no list of translated names is consulted here, and the
+  // policy may not list a whole path that contains one (defaultDenyMapping20261128.test.ts).
+  const carrierFormats=events.flatMap((fields,index)=>lookupFieldValue(fields,source).found?[formats[index]]:[]);
+  const wholePathListed=Boolean(exact?.mappable)||ALIASES[source.toLowerCase()]!==undefined||
+    specDefinedTargets(source,events,readings).includes(target);
+  if(!wholePathListed&&!recordLevelSource(recordPathOf(source),carrierFormats))return null;
   if(incompatibleVendorMeaning(source,target,events))return null;
-  // The Syslog header names the sender; a host field of the HTTP request it carries is the requested host.
-  if(target==='hostname'&&hostNameUnconfirmed(source,events,formats)&&events.some(syslogHeaderHostIn))return null;
   const catalog=findStellarMetadataField(target);
   if(!catalog?.mappable||!catalog.mappingType||!catalog.group)return null;
   const current=existing.find(rule=>rule.source===source);
@@ -513,10 +401,9 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
   // writes nothing for an event without it. Other official names (severity, type, icmp_type ...), aliases and
   // explicit port labels keep the full-coverage rule.
   const informative=informativeValues.length;
-  const carrierFormats=events.flatMap((fields,index)=>lookupFieldValue(fields,source).found?[formats[index]]:[]);
   const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&
     (leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&
-    sparseSafeSource(source,target,informativeValues,carrierFormats);
+    sparseSafeValues(target,informativeValues);
   // Unknown protocol evidence never authorizes an official port. A port that only some record families carry,
   // or an alias whose meaning depends on the protocol, needs the record itself to name TCP or UDP in every
   // event that has the port: an ICMP record of another family may name its protocol differently, or not at all.
@@ -527,10 +414,8 @@ function candidateForSource(source:string,events:Record<string,unknown>[],existi
     const value=lookupFieldValue(fields,source);
     return value.found&&!ignored(value.value)&&!transportEvidenceInEvent(fields,source);
   });
-  // The official hostname needs more than a name: see hostNameUnconfirmed.
-  const unconfirmedHost=target==='hostname'&&hostNameUnconfirmed(source,events,formats);
   const serverPort=serverPortReading(source,target,events);
-  const high=!unconfirmedHost&&!serverPort&&compatibleObserved===informative&&(values.length===events.length||namedAsTarget)&&
+  const high=!serverPort&&compatibleObserved===informative&&(values.length===events.length||namedAsTarget)&&
     informative>0&&!nonTransportPort&&!lacksTransportEvidence;
   // Auto-generated provenance is explicit; field names and IDs cannot prove
   // that a user has not edited a persisted mapping.
@@ -641,10 +526,11 @@ export function suggestNormalizationCandidatesFromSuite(
     ?reviewed.filter(candidate=>!ambiguousTargets.has(candidate.target)):reviewed;
 }
 
-/** Backward-compatible selected-event helper used by the Review Fields summary. */
+/** Single-event helper. `effectiveFormat` names the reader that produced the event: without it only a
+ * root-level name and a listed whole path stand for the record. */
 export function suggestNormalizationCandidates(
-  fields:Record<string,unknown>,existing:MappingRule[],
+  fields:Record<string,unknown>,existing:MappingRule[],effectiveFormat?:string,
 ):NormalizationCandidate[]{
-  const suite={events:[{fields}]} as unknown as SuiteResult;
+  const suite={events:[{fields,...(effectiveFormat?{effectiveFormat}:{})}]} as unknown as SuiteResult;
   return suggestNormalizationCandidatesFromSuite(suite,existing);
 }

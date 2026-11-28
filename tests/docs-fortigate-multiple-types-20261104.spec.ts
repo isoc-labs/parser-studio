@@ -26,12 +26,15 @@ test('published FortiGate traffic + web filter + IPS samples in one reviewed par
   const selected=(source:string)=>fields.find(x=>x.source===source);
   for(const [source,target] of [
     ['srcip','srcip'],['dstip','dstip'],['srcport','srcport'],
-    ['dstport','dstport'],['proto','proto'],['policyid','fw_policy_id'],
+    ['dstport','dstport'],['proto','proto'],
   ])expect(selected(source)).toMatchObject({target,official:true});
+  // Default deny (2026-11-28): the policy does not list fw_policy_id (a name does not say that the policy is a
+  // firewall policy); policyid keeps its own name.
+  expect(selected('policyid')).toMatchObject({target:'policyid',official:false});
   // Multi-type FortiOS contains traffic action=close as well as enforcement
   // dispositions. One session-end verb invalidates unconditional action mapping.
   expect(selected('action')).toMatchObject({target:'action',official:false});
-  for(const source of ['type','eventtype','duration','direction','hostname']){
+  for(const source of ['type','eventtype','duration','direction','hostname','devname']){
     if(selected(source))expect(selected(source)?.official,source+' must stay vendor-specific').toBe(false);
   }
   const summary=await map.getByLabel('Field mapping summary').innerText();

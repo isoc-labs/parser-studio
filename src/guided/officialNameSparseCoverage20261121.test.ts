@@ -29,9 +29,10 @@ describe('a source named as its official Stellar field in a sample of several re
     const wrap=(kv:Record<string,unknown>)=>({generic:{kv}});
     expect(candidateRead('generic_structural','dstport',wrap(traffic),wrap(web),wrap(system)))
       .toMatchObject({source:'generic.kv.dstport',confidence:'HIGH',safeForBulk:true});
-    // The same path in a JSON log is an object of the log, and a path alone does not say which it is.
-    expect(candidateRead('json','dstport',wrap(traffic),wrap(web),wrap(system))).toMatchObject({confidence:'REVIEW'});
-    expect(candidate('dstport',wrap(traffic),wrap(web),wrap(system))).toMatchObject({confidence:'REVIEW'});
+    // The same path in a JSON log is an object of the log, and a path alone does not say which it is: a name
+    // inside an object of the record is not proposed at all (default deny, 2026-11-28).
+    expect(candidateRead('json','dstport',wrap(traffic),wrap(web),wrap(system))).toBeUndefined();
+    expect(candidate('dstport',wrap(traffic),wrap(web),wrap(system))).toBeUndefined();
   });
 
   it('stays a review proposal when one of its values does not fit the field',()=>{
@@ -111,17 +112,20 @@ describe('official names whose meaning differs between vendors keep the full-cov
 describe('Junos structured data read with underscore names',()=>{
   const flow=(overrides:Record<string,unknown>={})=>({junos_sd:{source_address:'10.0.0.1',source_port:'37233',
     destination_address:'67.43.156.13',destination_port:'161',protocol_id:'17',icmp_type:'0',...overrides}});
+  const read=(target:string,...events:Record<string,unknown>[])=>candidateRead('generic_structural',target,...events);
   it('maps the addresses and the protocol number like the hyphenated spelling',()=>{
     const events=[flow(),flow({source_address:'10.0.0.2',protocol_id:'6'})];
-    expect(candidate('srcip',...events)).toMatchObject({source:'junos_sd.source_address',confidence:'HIGH'});
-    expect(candidate('dstip',...events)).toMatchObject({source:'junos_sd.destination_address',confidence:'HIGH'});
-    expect(candidate('proto',...events)).toMatchObject({source:'junos_sd.protocol_id',confidence:'HIGH'});
+    expect(read('srcip',...events)).toMatchObject({source:'junos_sd.source_address',confidence:'HIGH'});
+    expect(read('dstip',...events)).toMatchObject({source:'junos_sd.destination_address',confidence:'HIGH'});
+    expect(read('proto',...events)).toMatchObject({source:'junos_sd.protocol_id',confidence:'HIGH'});
+    // The same object in a JSON log is an object of the log.
+    expect(candidateRead('json','srcip',...events)).toBeUndefined();
   });
-  it('does not take a zero-filled icmp_type of a TCP or UDP session for an ICMP type',()=>{
-    expect(candidate('icmp_type',flow(),flow({protocol_id:'6'}))).toBeUndefined();
-    // On ICMP sessions the same field is the ICMP type.
-    expect(candidate('icmp_type',flow({protocol_id:'1',icmp_type:'8'}),flow({protocol_id:'1',icmp_type:'0'})))
-      .toMatchObject({source:'junos_sd.icmp_type',confidence:'HIGH'});
+  // The policy does not list icmp_type (default deny, 2026-11-28): the value means something only in an ICMP
+  // event, and the earlier check for a zero-filled value knew the protocol field of this reader only.
+  it('does not propose an ICMP type, zero-filled on a TCP or UDP session or real on an ICMP session',()=>{
+    expect(read('icmp_type',flow(),flow({protocol_id:'6'}))).toBeUndefined();
+    expect(read('icmp_type',flow({protocol_id:'1',icmp_type:'8'}),flow({protocol_id:'1',icmp_type:'0'}))).toBeUndefined();
   });
 });
 
@@ -212,85 +216,49 @@ describe('guards of the sparse rule that the re-audit found incomplete',()=>{
   });
 });
 
-// Independent audit of 2026-11-21 (F-05, F-06, F-07). The first rule compared field names (a field called `host`
-// beside fields called method and uri): it missed every other naming of an HTTP log and dropped a device host
-// name. What a record is follows from what its values say.
-describe('a host field of an HTTP request record is not confirmed as the official hostname',()=>{
-  const review=(...events:Record<string,unknown>[])=>expect(candidate('hostname',...events)).toMatchObject({confidence:'REVIEW'});
-  it('is offered for review and never approved, whatever the fields of the request are called',()=>{
-    // Zeek http.log
-    review({ts:1763719200.1,uid:'CmES5u32sYpV7JYN','id.orig_h':'192.168.1.10','id.resp_h':'93.184.216.34',method:'GET',
-      host:'example.com',uri:'/index.html',user_agent:'curl/8.5.0',status_code:200});
-    // nginx JSON: the request line is one value
-    review({time:'2026-11-21T10:00:00+09:00',remote_addr:'10.0.0.5',host:'shop.example.com',request:'GET /cart HTTP/1.1',status:200});
-    // Suricata EVE http: the field is called hostname and sits in the http object
-    review({event_type:'http',src_ip:'10.0.0.5',dest_ip:'93.184.216.34',
-      http:{hostname:'example.com',url:'/index.html',http_method:'GET',protocol:'HTTP/1.1',status:200}});
-    // A logged Host header
-    review({level:30,req:{method:'GET',url:'/index.html',headers:{host:'example.com','user-agent':'curl/8.5.0'}},res:{statusCode:200}});
-    // Other names for the method and the resource
-    review({ts:'2026-11-21T10:00:00Z',client:'10.0.0.5',host:'example.com',verb:'GET',path:'/index.html',status:200});
-    review({time:'2026-11-21T10:00:00Z',client_ip:'10.0.0.5',host:'example.com',http_method:'POST',request_url:'https://example.com/'});
-    // The method one level deeper than the host
-    review({http:{request:{method:'POST'},host:'example.com',url:'/x',status_code:200}});
-    // A field called hostname at the root of a request record
-    review({hostname:'example.com',method:'GET',uri:'/',status_code:200});
-    // A host that may well be the device (a shipper added it): still not established, so it is offered, not dropped
-    review({host:'web01',vhost:'shop.example.com',method:'GET',uri:'/cart',status_code:200});
+// Owner decision 2026-11-28 (default deny): the policy does not list hostname. A name does not say which host is
+// meant - the sender in a Syslog header, the host an HTTP request asked for, a device, an endpoint - and the 7.0
+// dictionary defines the field for one source only ("The host name (Linux Audit)."). The earlier rules decided it
+// from the values of the record (independent audits F-05, F-06, F-07, G-04, G-08, E2E T13); their samples are
+// kept here: none of them is proposed, whichever host it holds.
+describe('a host field is never proposed as the official hostname from its name',()=>{
+  const hosts=(format:string|undefined,...events:Record<string,unknown>[])=>suggestNormalizationCandidatesFromSuite(
+    {events:events.map(fields=>({fields,...(format?{effectiveFormat:format}:{})}))} as unknown as SuiteResult,[])
+    .filter(item=>item.target==='hostname'||/host/iu.test(item.source)).map(item=>[item.source,item.target]);
+  it('the host an HTTP request asked for',()=>{
+    expect(hosts('json',{ts:1763719200.1,uid:'CmES5u32sYpV7JYN',method:'GET',host:'example.com',uri:'/index.html',status_code:200})).toEqual([]);
+    expect(hosts('json',{remote_addr:'10.0.0.5',host:'shop.example.com',request:'GET /cart HTTP/1.1',status:200})).toEqual([]);
+    expect(hosts('json',{event_type:'http',http:{hostname:'example.com',url:'/index.html',http_method:'GET'}})).toEqual([]);
+    expect(hosts('json',{hostname:'example.com',method:'GET',uri:'/',status_code:200})).toEqual([]);
+    expect(hosts('json',{client:'10.0.0.5',host:'example.com',url:'http://example.com/a',status:200})).toEqual([]);
   });
-  it('is not approved without a method either, when the structure of the record says whose host it is',()=>{
-    // Inside an object of the record: the host of that object (a WAF transaction, an agent, an observer).
-    review({transaction:{client_ip:'10.0.0.5',request:{headers:{host:'shop.example.com'},uri:'/login'}},rule:942100});
-    review({agent:{hostname:'collector-7'},message:'pipeline started'});
-    // Written with the prefix of such an object as a literal key
-    review({'http.host':'example.com','http.uri':'/index.html','http.status_code':200});
-    // A proxy or web-filter record without a method: an absolute web URL beside the host
-    review({ts:'2026-11-21T10:00:00Z',client:'10.0.0.5',host:'example.com',url:'http://example.com/a',status:200,bytes:512});
-    review({time:'10:00:00',src:'10.0.0.5',hostname:'cdn.example.net',url:'https://cdn.example.net/x.js',action:'allowed'});
+  it('the name of a device or an endpoint',()=>{
+    expect(hosts('json',{host:'fw01',msg:'link up'},{host:'fw02',msg:'link down'})).toEqual([]);
+    expect(hosts('json',{hostname:'WS-FINANCE-023',user:'bob'})).toEqual([]);
+    expect(hosts('kv',{device_name:'edge-01',action:'deny'},{device_name:'edge-02',action:'allow'})).toEqual([]);
+    expect(hosts('json',{host_name:'edge-01',url:'https://shop.example.invalid/login'})).toEqual([]);
+    expect(hosts('json',{agent:{hostname:'collector-7'},message:'pipeline started'})).toEqual([]);
   });
-  it('a path beside the host is not a web URL: a device that logs an admin page keeps its host name',()=>{
-    expect(candidate('hostname',{host:'fw01',url:'/admin',action:'login'},{host:'fw02',url:'/login',action:'login'})).toMatchObject({confidence:'HIGH'});
-    expect(candidate('hostname',{host:'srv01',exe:'/usr/sbin/sshd',msg:'accepted'})).toMatchObject({confidence:'HIGH'});
-  });
-  it('a web URL in some of the events that carry the field does not decide',()=>{
-    expect(candidate('hostname',{host:'fw01',type:'traffic',action:'allow'},
-      {host:'fw01',type:'webfilter',url:'http://example.com/a',action:'block'})).toMatchObject({source:'host',confidence:'HIGH'});
-  });
-  it('is decided on every event that carries the field: one request among the records of a device does not decide',()=>{
-    expect(candidate('hostname',{host:'fw01',type:'traffic',action:'allow'},
-      {host:'fw01',type:'webfilter',method:'GET',url:'http://example.com/a',action:'allow'},
-      {host:'fw01',type:'system',msg:'admin login'})).toMatchObject({source:'host',confidence:'HIGH'});
-  });
-  it('keeps hostname for a record that says nothing of an HTTP request',()=>{
-    expect(candidate('hostname',{host:'fw01',msg:'link up'},{host:'fw02',msg:'link down'})).toMatchObject({source:'host',confidence:'HIGH'});
-    // A field called method does not make a request: the value does.
-    expect(candidate('hostname',{host:'fw01',method:'https'},{host:'fw02',method:'ssh'})).toMatchObject({confidence:'HIGH'});
-    expect(candidate('hostname',{host:'api-node-3',method:'GetUser',status_code:0,caller:'svc-a'})).toMatchObject({confidence:'HIGH'});
-    expect(candidate('hostname',{host:'bastion01',method:'publickey',user:'bob',user_agent:'OpenSSH_9.6'})).toMatchObject({confidence:'HIGH'});
-    expect(candidate('hostname',{host:'fw01',url:'/admin'},{host:'fw02',url:'/login'})).toMatchObject({confidence:'HIGH'});
-  });
-  it('never asks the host of a Syslog header, and does not propose the requested host beside it',()=>{
-    const hosts=(...events:Record<string,unknown>[])=>suggestNormalizationCandidatesFromSuite(suite(...events),[])
-      .filter(item=>item.target==='hostname').map(item=>[item.source,item.confidence]);
-    expect(hosts({syslog_hostname:'web01',body:{method:'GET',host:'example.com',uri:'/'}})).toEqual([['syslog_hostname','HIGH']]);
-    expect(hosts({syslog:{hostname:'web01'},generic:{kv:{method:'GET',host:'example.com',uri:'/'}}})).toEqual([['syslog.hostname','HIGH']]);
+  it('the host of a Syslog header',()=>{
+    expect(hosts('syslog_rfc5424',{syslog_hostname:'web01',body:{method:'GET',host:'example.com',uri:'/'}})).toEqual([]);
+    expect(hosts('generic_structural',{syslog:{hostname:'web01'},generic:{kv:{method:'GET',host:'example.com',uri:'/'}}})).toEqual([]);
+    const header={month:'May',day:'10',time:'15:19:06',hostname:'WatchGuard-Firebox',app_tag:'firewall[10]',pri:'142'};
+    expect(hosts('generic_structural',{watchguard_header:header,watchguard:{kv:{msg_id:'3000-0148',disposition:'Allow'}}})).toEqual([]);
   });
 });
 
 // Independent audit of 2026-11-21, F-03 and F-04: 714d272 looked for the protocol in the object that holds the
 // port and compared whole key names, so a literal dotted key and a structured protocol field said nothing.
 describe('protocol evidence beside a port',()=>{
-  it('is found for a literal dotted key written with the prefix of the port',()=>{
-    const events=[{'flow.src':'10.0.0.1','flow.dst':'10.0.0.2','flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'},
+  // Default deny, 2026-11-28: a literal key written with a prefix ("flow.sport") is an attribute of what the
+  // prefix names, like a member of an object; the name does not stand for the record and is not proposed.
+  it('does not propose a literal dotted key written with a prefix, whatever protocol the record names',()=>{
+    const mixed=[{'flow.src':'10.0.0.1','flow.dst':'10.0.0.2','flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'},
       {'flow.src':'10.0.0.3','flow.dst':'8.8.8.8','flow.sport':8,'flow.dport':0,'flow.proto':'icmp'}];
-    expect(candidate('srcport',...events)).toMatchObject({source:'flow.sport',confidence:'REVIEW'});
-    expect(candidate('dstport',...events)).toMatchObject({source:'flow.dport',confidence:'REVIEW'});
-    const numeric=[{'net.sport':8,'net.dport':0,'net.protocol':1}];
-    expect(candidate('srcport',...numeric)).toMatchObject({source:'net.sport',confidence:'REVIEW'});
-  });
-  it('still approves the same record when every event names TCP or UDP',()=>{
-    const events=[{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'},{'flow.sport':53001,'flow.dport':53,'flow.proto':'udp'}];
-    expect(candidate('srcport',...events)).toMatchObject({source:'flow.sport',confidence:'HIGH'});
+    const transport=[{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'},{'flow.sport':53001,'flow.dport':53,'flow.proto':'udp'}];
+    for(const events of [mixed,transport,[{'net.sport':8,'net.dport':0,'net.protocol':1}]])
+      for(const format of ['json','kv',undefined])expect(suggestNormalizationCandidatesFromSuite(
+        {events:events.map(fields=>({fields,...(format?{effectiveFormat:format}:{})}))} as unknown as SuiteResult,[])).toEqual([]);
   });
   it('reads a protocol field that holds an object or a list',()=>{
     const icmp={src:'10.0.0.1',dst:'10.0.0.2',sport:8,dport:0,protocol:{name:'icmp',number:1}};
@@ -304,75 +272,15 @@ describe('protocol evidence beside a port',()=>{
   });
 });
 
-// Independent audit of 2026-11-22 (G-04, G-07, G-08) and the browser acceptance of an edge and a proxy device.
-// 03415d1 took any absolute web URL beside a host for a request and so refused the name of the device that
-// logged it; cde614c asked every carrier for a method it knows, so one unusual event approved the requested host.
-describe('whose host a record names is decided on what a URL and the other events say',()=>{
-  const high=(...events:Record<string,unknown>[])=>expect(candidate('hostname',...events)).toMatchObject({confidence:'HIGH'});
-  const review=(...events:Record<string,unknown>[])=>expect(candidate('hostname',...events)).toMatchObject({confidence:'REVIEW'});
-  it('keeps the name of a device beside a web URL of another host',()=>{
-    high({client_ip:'192.0.2.70',action:'deny',host_name:'edge-01',url:'https://shop.example.invalid/login',severity:75},
-      {client_ip:'192.0.2.71',action:'monitor',host_name:'edge-02',url:'https://shop.example.invalid/api',severity:25});
-    high({sourceIp:'192.0.2.150',destinationIp:'198.51.100.150',action:'allowed',deviceName:'zia-01',url:'https://example.invalid/a'});
-    high({host:'fw01',referer:'https://portal.example.com/start',action:'allow'});
-    // Another host whose name merely begins with the value
-    high({host:'fw01',url:'https://fw01.example.com/a',action:'allow'});
-  });
-  it('does not approve a host that a URL of the same record names',()=>{
-    review({client:'10.0.0.5',host:'example.com:8443',url:'https://example.com:8443/a',status:200});
-    review({client:'10.0.0.5',host:'Example.COM',url:'https://bob@example.com/a',status:200});
-    // A URL written without its scheme (a proxy access line)
-    review({src:'10.0.0.5',host:'example.com',url:'example.com/a',action:'allowed'});
-    review({src:'10.0.0.5',host:'example.com',url:'example.com:8080/a',action:'allowed'});
-    // The URL one level deeper than the host
-    review({host:'example.com',request:{url:'https://example.com/a'},status:200});
-    // The same value that is not a URL says nothing
-    high({host:'fw01',peer:'fw01',action:'allow'});
-  });
-  it('is not approved because one event writes its method in an unusual way',()=>{
-    review({method:'GET',host:'a.example',uri:'/'},{method:'GET',host:'b.example',uri:'/'},{method:'PROPFIND',host:'c.example',uri:'/dav'});
-    review({method:'GET',host:'a.example',uri:'/'},{method:'-',host:'a.example',uri:'/'});
-    // The requested host of the request events and the device of another record share one field
-    review({host:'example.com',method:'GET',uri:'/'},{host:'proxy01',type:'system',msg:'started'});
-    // A device whose other records carry the same name keeps it
-    high({host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw01',type:'traffic',action:'allow'});
-    review({host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw02',type:'webfilter',method:'GET',url:'/y'},
-      {host:'fw01',type:'traffic',action:'allow'});
-  });
-  it('reads a request that is written in lower case or without a version',()=>{
-    review({method:'get',host:'example.com',uri:'/index.html',status:200});
-    review({host:'shop.example.com',request:'GET /cart',status:200});
-    review({host:'shop.example.com',request:'post https://shop.example.com/cart HTTP/2',status:200});
-  });
-  it('does not take an everyday word for a request',()=>{
-    high({host:'fw01',level:'trace',msg:'link up'},{host:'fw02',level:'debug',msg:'link down'});
-    high({host:'fw01',msg:'Connect failed'},{host:'fw01',action:'Delete file'});
-    high({host:'srv01',action:'delete',user:'bob'});
-    high({host:'srv01',msg:'GET lost'});
-  });
-});
-
-describe('protocol evidence for a literal dotted key inside an object of the event',()=>{
+describe('a literal dotted key inside the body of a Syslog record',()=>{
   const body=(kv:Record<string,unknown>)=>({syslog_hostname:'fw01',body:kv});
-  it('is read in the object that holds the key',()=>{
+  it('is not proposed either: body.flow.sport is two levels below the record',()=>{
     const icmp=body({'flow.src':'10.0.0.3','flow.dst':'8.8.8.8','flow.sport':8,'flow.dport':0,'flow.proto':'icmp'});
     const tcp=body({'flow.src':'10.0.0.1','flow.dst':'10.0.0.2','flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'});
-    expect(candidateRead('syslog_rfc3164','srcport',tcp,icmp)).toMatchObject({source:'body.flow.sport',confidence:'REVIEW'});
-    expect(candidateRead('syslog_rfc3164','srcport',tcp,tcp)).toMatchObject({source:'body.flow.sport',confidence:'HIGH'});
-  });
-});
-
-// E2E T13 (public sample p_watchguard_traffic): since 03415d1 a host inside an object of the record is not
-// approved, and the WatchGuard reader writes the HOSTNAME of the Syslog header into its own header object.
-// The header host lost its official mapping, and the requested host of a proxy event competed with it.
-describe('the Syslog header host that a reader of this product wrote',()=>{
-  const header={month:'May',day:'10',time:'15:19:06',hostname:'WatchGuard-Firebox',app_tag:'firewall[10]',pri:'142'};
-  const event=(kv:Record<string,unknown>)=>({fields:{watchguard_header:header,watchguard:{kv}},effectiveFormat:'generic_structural'});
-  const hosts=(...kv:Record<string,unknown>[])=>suggestNormalizationCandidatesFromSuite(
-    {events:kv.map(event)} as unknown as SuiteResult,[]).filter(item=>item.target==='hostname').map(item=>[item.source,item.confidence]);
-  it('is the official hostname, and the requested host of a proxy event beside it is not proposed',()=>{
-    expect(hosts({msg_id:'3000-0148',disposition:'Allow'},{msg_id:'1AFF-0024',op:'GET',host:'www.example.com',arg:'/index.html'}))
-      .toEqual([['watchguard_header.hostname','HIGH']]);
-    expect(hosts({msg_id:'3000-0148',disposition:'Allow'})).toEqual([['watchguard_header.hostname','HIGH']]);
+    expect(candidateRead('syslog_rfc3164','srcport',tcp,icmp)).toBeUndefined();
+    expect(candidateRead('syslog_rfc3164','srcport',tcp,tcp)).toBeUndefined();
+    // A name directly in the body is the record's.
+    const plain=body({sport:51234,dport:443,proto:'tcp'});
+    expect(candidateRead('syslog_rfc3164','srcport',plain,plain)).toMatchObject({source:'body.sport',confidence:'HIGH'});
   });
 });

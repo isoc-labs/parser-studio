@@ -140,7 +140,9 @@ describe('F3: the WatchGuard Traffic Monitor layout has ports for TCP and UDP on
 // Re-audit of 2026-11-23 (second independent audit, ad53b51 and e65baa6). SYNTHETIC lines from the auditor.
 describe('re-audit Q2-1: a mixed family carries a source whatever container its sample showed',()=>{
   it('keeps a root key of a JSON event and a dotted key of a key=value event',()=>{
-    const draft=journey(['{"net":{"srcip":"10.1.1.1","dstip":"10.2.2.2"}}','srcip=10.5.5.6 dstip=10.6.6.6 user=bob'].join('\n'));
+    // The JSON family has an official field of its own (src_ip): a member of its net object is no longer one
+    // (default deny, 2026-11-28), and without an official field in each family the draft is not routed by family.
+    const draft=journey(['{"net":{"srcip":"10.1.1.1","dstip":"10.2.2.2"},"src_ip":"10.1.1.1"}','srcip=10.5.5.6 dstip=10.6.6.6 user=bob'].join('\n'));
     expect(draft.eventProfiles?.discriminator).toBe(READING_FAMILY_DISCRIMINATOR);
     const events=preview(['{"net":{"srcip":"10.1.1.9","dstip":"10.2.2.9"},"user":"alice"}',
       'srcip=10.5.5.6 dstip=10.6.6.6 user=bob net.srcip=10.7.7.7'].join('\n'),draft).events;

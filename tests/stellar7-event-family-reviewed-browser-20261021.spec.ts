@@ -9,8 +9,8 @@ const records=[
   {event_type:'threat',src_ip:'192.0.2.12',action:'block',sha256:threatHash,request_status:404},
   {event_type:'user',username:'김민수',login_result:'failure',host:{ip:'198.51.100.5'}},
   {event_type:'user',username:'山田',login_result:'success',host:{ip:'198.51.100.6'}},
-  {event_type:'asset',host:{name:'asset-01'},process:{name:'agent.exe'}},
-  {event_type:'asset',host:{name:'asset-02'},process:{name:'agent2.exe'}},
+  {event_type:'asset',host:{name:'asset-01'},process:{name:'agent.exe'},rule:{name:'inventory-a'}},
+  {event_type:'asset',host:{name:'asset-02'},process:{name:'agent2.exe'},rule:{name:'inventory-b'}},
 ];
 const raw=records.map(value=>JSON.stringify(value)).join('\n');
 const digest=(data:Buffer|string)=>createHash('sha256').update(data).digest('hex');
@@ -53,10 +53,15 @@ test('novice reviews three Stellar 7.0 event families and downloads one scoped D
     const detail=panel.locator('details[aria-label="Type-specific mappings for '+family+'"]');
     await detail.locator('summary').click();
   }
+  // Default deny (owner decision 2026-11-28): inside a family too, a 7.0 field is proposed only for a field the
+  // policy lists. The hash, the login result, the host and the process get no proposal and stay vendor fields.
   for(const [family,field] of [
-    ['threat','src_ip'],['threat','action'],['threat','sha256'],
-    ['user','username'],['user','login_result'],['user','host.ip'],
-    ['asset','host.name'],['asset','process.name'],
+    ['threat','sha256'],['user','login_result'],['user','host.ip'],['asset','host.name'],['asset','process.name'],
+  ])await expect(panel.getByRole('button',{name:'Use Stellar 7.0 '+family+' '+field})).toHaveCount(0);
+  for(const [family,field] of [
+    ['threat','src_ip'],['threat','action'],
+    ['user','username'],
+    ['asset','rule.name'],
   ]){
     const button=panel.getByRole('button',{name:'Use Stellar 7.0 '+family+' '+field});
     await expect(button).toBeEnabled();
@@ -93,6 +98,7 @@ test('novice reviews three Stellar 7.0 event families and downloads one scoped D
       name:string;
       topFields:Record<string,{normalized_name:string;data_type:string}>;
       nsFields:Record<string,{normalized_name:string;data_type:string}>;
+      vendorFields:Record<string,{normalized_name:string;data_type:string}>;
     }>}}
   };
   const variants=embedded.normalization.eventProfiles.variants;
@@ -100,12 +106,18 @@ test('novice reviews three Stellar 7.0 event families and downloads one scoped D
   expect(variants.map(item=>item.name)).toEqual(['threat','user','asset']);
   expect(variants.find(item=>item.name==='threat')?.topFields.src_ip)
     .toMatchObject({normalized_name:'srcip',data_type:'ip'});
-  expect(variants.find(item=>item.name==='threat')?.topFields.sha256)
-    .toMatchObject({normalized_name:'sha256',data_type:'string'});
-  expect(variants.find(item=>item.name==='user')?.nsFields['host.ip'])
-    .toMatchObject({normalized_name:'host.ip',data_type:'ip'});
-  expect(variants.find(item=>item.name==='asset')?.nsFields['process.name'])
-    .toMatchObject({normalized_name:'process.name',data_type:'string'});
+  expect(variants.find(item=>item.name==='asset')?.nsFields['rule.name'])
+    .toMatchObject({normalized_name:'rule.name',data_type:'string'});
+  const official=(name:string)=>{
+    const variant=variants.find(item=>item.name===name)!;
+    return [...Object.keys(variant.topFields),...Object.keys(variant.nsFields)].sort();
+  };
+  expect(official('threat')).toEqual(['action','src_ip']);
+  expect(official('user')).toEqual(['username']);
+  expect(official('asset')).toEqual(['rule.name']);
+  expect(Object.keys(variants.find(item=>item.name==='threat')!.vendorFields)).toContain('sha256');
+  expect(Object.keys(variants.find(item=>item.name==='user')!.vendorFields)).toContain('host.ip');
+  expect(Object.keys(variants.find(item=>item.name==='asset')!.vendorFields)).toContain('process.name');
   expect(JSON.stringify(embedded)).not.toContain('김민수');
   expect(JSON.stringify(embedded)).not.toContain('192.0.2.11');
   for(const file of pair.files){

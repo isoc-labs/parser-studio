@@ -659,7 +659,7 @@
     },
     {
       "file": "tests/common-security-logs.spec.ts",
-      "title": "common EDR JSON gets automatic Stellar mappings instead of leaving every field vendor-only",
+      "title": "common EDR JSON: the time and the user become Stellar fields, every other field keeps its own name",
       "disposition": "REQUIRED"
     },
     {
@@ -695,6 +695,16 @@
     {
       "file": "tests/d2-pri-cef-journey-20261125.spec.ts",
       "title": "a bare PRI before CEF (<189>CEF:0| and <189>CEF: 0|) is read as CEF with the PRI",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/default-deny-mapping-20261128.spec.ts",
+      "title": "default deny: only listed fields become official, on the screen and in the downloaded Ruby",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/default-deny-mapping-20261128.spec.ts",
+      "title": "default deny: a field that is not listed is mapped only by ChatGPT with the user's confirmation or by hand",
       "disposition": "REQUIRED"
     },
     {
@@ -2597,7 +2607,7 @@
     },
     {
       "file": "tests/stellar7-normalization-safety-20261021.spec.ts",
-      "title": "fixed Stellar 7.0 Dictionary: official nested process, file, host and user fields require proper types",
+      "title": "fixed Stellar 7.0 Dictionary: a nested name that equals a dictionary name is kept as a vendor field",
       "disposition": "REQUIRED"
     },
     {

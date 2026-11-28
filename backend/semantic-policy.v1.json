@@ -48,7 +48,7 @@
     13,
     32
   ],
-  "notes": "Transport evidence is permitted only when a source record identifies a known L4 carrier. Unknown protocol evidence never authorizes automatic official port mapping. No-protocol logs retain existing source-specific review policy; raw bytes are never discarded. Explicitly labeled source-port/destination-port fields are eligible for owner-requested integer mapping to srcport/dstport after range validation; on ICMP the numeric value may be a vendor identifier, not a transport port. Ambiguous alias names remain subject to protocol evidence. NAT/translated ancestor tokens are blocked across dot, underscore, hyphen and camelCase source path spellings before any explicit port identity approval. The same translated-segment tokens keep a NAT address out of srcip/dstip in the browser mapping proposals. reviewOnlyScoreTargets: the listed targets are documented on a 0-100 scale where a higher value means more. Neither a matching name nor a value inside that range shows the scale, the direction or the meaning of a source field (Syslog levels 0-7 with 0 the most severe, IDS priorities 1-4, CEF and CVSS 0-10, 0-20 and 0-255 scales, counts and percentages all fit), so these targets are never approved automatically from a name. The source field keeps its name and value; a reviewed ChatGPT mapping the user confirms or a manual mapping may still write the target. No conversion between scales is applied.",
+  "notes": "Transport evidence is permitted only when a source record identifies a known L4 carrier. Unknown protocol evidence never authorizes automatic official port mapping. No-protocol logs retain existing source-specific review policy; raw bytes are never discarded. Explicitly labeled source-port/destination-port fields are eligible for owner-requested integer mapping to srcport/dstport after range validation; on ICMP the numeric value may be a vendor identifier, not a transport port. Ambiguous alias names remain subject to protocol evidence. NAT/translated ancestor tokens are blocked across dot, underscore, hyphen and camelCase source path spellings before any explicit port identity approval. The same translated-segment tokens keep a NAT address out of srcip/dstip in the browser mapping proposals. autoApprovedTargets: default deny. An official field is proposed automatically only when it is listed here, and then only under the protections above (type and range, translated endpoints, transport evidence, closed vocabularies) and only from a source that stands for the record itself: a root-level name, a name in the container the reader of the event writes the pairs of the record into, a whole path that normalizationAliases lists, or a key the format specification defines. Each entry quotes the 7.0 dictionary definition and states why a name can carry that meaning. A matching name, alias, type or range is not a reason by itself: a field joins the list only with such a basis. Every other source keeps its own name and value; a ChatGPT mapping the user confirms or a manual mapping may still write any mappable field. autoApprovalDeclined records the fields that were reviewed and left out, with the reason, so that the reason is seen before one of them is proposed again.",
   "explicitPortSourceAliases": {
     "source-port": "srcport",
     "destination-port": "dstport"
@@ -66,11 +66,130 @@
     "natted",
     "network-address-translation"
   ],
-  "reviewOnlyScoreTargets": [
-    "severity",
-    "fidelity",
-    "threat_score"
-  ],
+  "autoApprovedTargets": {
+    "srcip": {
+      "definition": "Source IP address of the session.",
+      "basis": "The side a session comes from is one role in every log format: CEF src (sourceAddress), LEEF src, ECS source.ip and client.ip, Zeek id.orig_h. The value must be an IP address. A translated (NAT) address is never taken, and a name inside an object of the record names that object, not the session."
+    },
+    "dstip": {
+      "definition": "Destination IP address of the session.",
+      "basis": "The side a session goes to is one role in every log format: CEF dst (destinationAddress), LEEF dst, ECS destination.ip and server.ip, Zeek id.resp_h. The value must be an IP address. A translated (NAT) address is never taken, and a name inside an object of the record names that object, not the session."
+    },
+    "srcport": {
+      "definition": "Layer 4 source port.",
+      "basis": "CEF spt (sourcePort), LEEF srcPort, ECS source.port and Zeek id.orig_p define the same role. The value must be an integer from 0 to 65535. A record that states a protocol other than TCP or UDP, a translated port, and sport without a destination port beside it are not taken."
+    },
+    "dstport": {
+      "definition": "Layer 4 destination port.",
+      "basis": "CEF dpt (destinationPort), LEEF dstPort, ECS destination.port and Zeek id.resp_p define the same role. The value must be an integer from 0 to 65535. A record that states a protocol other than TCP or UDP and a translated port are not taken."
+    },
+    "proto": {
+      "definition": "IP header protocol type 1 \u2014ICMP 2 \u2014IGMP 6 \u2014TCP 17 \u2014UDP",
+      "basis": "The protocol number of the IP header comes from one registry (IANA Assigned Internet Protocol Numbers), so a number is the same number in every log. The value must be an integer from 0 to 255; a field whose values are protocol names is proto_name."
+    },
+    "proto_name": {
+      "definition": "Layer 4 protocol name. Can be TCP, UDP, ICMP, or IGMP.",
+      "basis": "The definition is a closed list. Only a field whose every value is one of officialProtocolNames is taken; an application or service name keeps the vendor name."
+    },
+    "url": {
+      "definition": "The URL that is a reference to a web resource.",
+      "basis": "CEF request (requestUrl) and LEEF url define the same thing. The definition has no qualifier a name leaves open (no unit, scale, side or identifier space). A field only some events carry must hold a value shaped like a URL."
+    },
+    "action": {
+      "definition": "The action to be taken. Examples are allow or block .",
+      "basis": "CEF act (deviceAction) is the action the device took. Every observed value must be one of securityDispositions, the enforcement outcomes the definition gives as examples; an event verb (login, close, negotiate) keeps the vendor name."
+    },
+    "timestamp": {
+      "definition": "Time of an action, such as start of session, time of update, etc.",
+      "basis": "The definition covers any time a record states for its event. Only an ISO 8601 text with an explicit time zone is taken, so no unit, epoch or zone is assumed. Two fields that both qualify are not chosen between automatically."
+    },
+    "username": {
+      "definition": "The user name.",
+      "basis": "The definition has no qualifier (no role, format or identifier space), so a field the record itself calls username holds what the definition says."
+    },
+    "srcmac": {
+      "definition": "Source MAC address.",
+      "basis": "Only a source that is itself named srcmac is taken (there is no alias). The name states the kind of address and the side; the definition adds no qualifier."
+    },
+    "vlan": {
+      "definition": "VLAN ID.",
+      "basis": "Only a source that is itself named vlan is taken (there is no alias), and only with integer values: the IEEE 802.1Q VLAN identifier. A VLAN name is not an integer and keeps the vendor name."
+    },
+    "rule.name": {
+      "definition": "Security rule name.",
+      "basis": "ECS rule.name is the name of the rule or signature that generated the event, and the alias policy-name is the name of the security policy a firewall session matched. The definition has no qualifier a name leaves open."
+    }
+  },
+  "autoApprovalDeclined": {
+    "appid": {
+      "definition": "The ID of an application identified by the DPI engine.",
+      "reason": "The identifier space is that of the Stellar DPI engine; an application id of another product is another numbering."
+    },
+    "command": {
+      "definition": "The command that was run in a system.",
+      "reason": "A source called command also holds protocol verbs (FTP, SMTP, SQL), and nothing in the value tells them from a command run on a system."
+    },
+    "duration": {
+      "definition": "Session duration in milliseconds.",
+      "reason": "A name states neither the unit nor what was timed (a session, a request, a scan); duration_ms states the unit only."
+    },
+    "file_path": {
+      "definition": "Directory holding the fileName on the endpoint.",
+      "reason": "The definition is the directory; a file path of a source normally includes the file name."
+    },
+    "file_size": {
+      "definition": "File size in bytes.",
+      "reason": "A name does not state the unit (bytes, kilobytes, blocks)."
+    },
+    "fw_policy_id": {
+      "definition": "The rule or policy that the firewall checks against.",
+      "reason": "policyid names a policy of any product (firewall, DLP, anti-virus); the name does not say which."
+    },
+    "hostip": {
+      "definition": "The host IP address of the endpoint.",
+      "reason": "A name does not say which host is meant (the endpoint, the sensor, the local end of a tunnel)."
+    },
+    "hostname": {
+      "definition": "The host name (Linux Audit).",
+      "reason": "A name does not say which host is meant: the sender in a Syslog header, the host an HTTP request asked for, a DHCP client, a queried DNS name. Three earlier defects mapped the wrong host here, and the definition itself names one source only."
+    },
+    "icmp_type": {
+      "definition": "The ICMP message type.",
+      "reason": "The value means something only in an ICMP event; records write a zero-filled value in TCP and UDP events, and the check for that knew the protocol field of one product only."
+    },
+    "parent_proc_name": {
+      "definition": "The parent process of the running process.",
+      "reason": "A source may hold a name, a path or a process id; nothing in the value tells which."
+    },
+    "process_name": {
+      "definition": "On an agent sensor, the name of the process that opened the connection. The process is correlated with the network connection.",
+      "reason": "The definition is specific to the agent sensor and to a network connection."
+    },
+    "severity": {
+      "definition": "Severity of the event. From 0\u2013100, with a higher value indicating higher severity.",
+      "reason": "Neither a name nor a value inside the range shows the scale, the direction or the meaning of a source score (Syslog levels 0-7 with 0 the most severe, IDS priorities 1-4, CEF and CVSS 0-10, 0-20 and 0-255 scales, counts and percentages all fit). No conversion between scales is applied."
+    },
+    "fidelity": {
+      "definition": "Machine Learning confidence that an attack is happening. From 0\u2013100, with a higher value indicating higher confidence.",
+      "reason": "A value Stellar computes; for a source score see severity."
+    },
+    "threat_score": {
+      "definition": "Threat score (0\u2013100).",
+      "reason": "For a source score see severity."
+    },
+    "event_type": {
+      "definition": "The event type for the Machine Learning job.",
+      "reason": "Not the record family of a vendor (alert, traffic, session)."
+    },
+    "direction": {
+      "definition": "The direction of the maltrace event.",
+      "reason": "A Stellar detection attribute; a vendor direction describes traffic in the terms of the vendor."
+    },
+    "type": {
+      "definition": "Top-level field from Windows agent, parsed from Windows events",
+      "reason": "Specific to the Windows agent; a vendor record category is another thing."
+    }
+  },
   "normalizationAliases": {
     "src": "srcip",
     "src_ip": "srcip",
@@ -88,9 +207,6 @@
     "client.ip": "srcip",
     "client.ipaddress": "srcip",
     "httprequest.clientip": "srcip",
-    "body.src": "srcip",
-    "body.src_ip": "srcip",
-    "body.source_ip": "srcip",
     "dst": "dstip",
     "dst_ip": "dstip",
     "destination_ip": "dstip",
@@ -105,9 +221,6 @@
     "destination-address": "dstip",
     "server_ip": "dstip",
     "server.ip": "dstip",
-    "body.dst": "dstip",
-    "body.dst_ip": "dstip",
-    "body.destination_ip": "dstip",
     "spt": "srcport",
     "sport": "srcport",
     "src_port": "srcport",
@@ -117,9 +230,6 @@
     "source.port": "srcport",
     "client_port": "srcport",
     "source-port": "srcport",
-    "body.spt": "srcport",
-    "body.srcport": "srcport",
-    "body.src_port": "srcport",
     "dpt": "dstport",
     "dport": "dstport",
     "dst_port": "dstport",
@@ -131,15 +241,10 @@
     "destination.port": "dstport",
     "server_port": "dstport",
     "destination-port": "dstport",
-    "body.dpt": "dstport",
-    "body.dstport": "dstport",
-    "body.dst_port": "dstport",
     "act": "action",
     "event_action": "action",
     "eventaction": "action",
     "event.action": "action",
-    "body.act": "action",
-    "body.action": "action",
     "event_time": "timestamp",
     "eventtime": "timestamp",
     "event.time": "timestamp",
@@ -148,30 +253,12 @@
     "syslog_timestamp": "timestamp",
     "date_time": "timestamp",
     "time": "timestamp",
-    "host_name": "hostname",
-    "hostname": "hostname",
-    "host": "hostname",
-    "host.name": "hostname",
-    "device_name": "hostname",
-    "devicename": "hostname",
-    "device.hostname": "hostname",
-    "syslog_hostname": "hostname",
-    "unit_hostname": "hostname",
     "ip_client": "srcip",
     "protocol": "proto_name",
     "protocol-id": "proto",
     "policy-name": "rule.name",
-    "icmp-type": "icmp_type",
-    "policyid": "fw_policy_id",
-    "duration_ms": "duration",
-    "session_duration_ms": "duration",
     "uri": "url",
-    "localip": "hostip",
     "username": "username",
-    "processname": "process_name",
-    "commandline": "command",
-    "parentprocess": "parent_proc_name",
-    "eventtype": "event_type",
     "id.orig_h": "srcip",
     "id.resp_h": "dstip",
     "id.orig_p": "srcport",

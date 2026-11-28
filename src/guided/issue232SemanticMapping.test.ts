@@ -118,7 +118,7 @@ describe('Issue #232 mixed-protocol semantic normalization',()=>{
       {vendor:'Cloudflare WAF',fields:{ClientIP:'192.0.2.13',WAFAction:'block',
         RuleID:'test-rule'},
         yes:{ClientIP:'srcip'},no:['WAFAction','RuleID']},
-      {vendor:'Palo Alto category',fields:{generic:{fields:{type:'TRAFFIC',
+      {vendor:'Palo Alto category',format:'generic_structural',fields:{generic:{fields:{type:'TRAFFIC',
         src:'192.0.2.14',dst:'198.51.100.24',sport:'52311',dport:'443'}}},
         yes:{'generic.fields.src':'srcip','generic.fields.dst':'dstip',
           'generic.fields.sport':'srcport','generic.fields.dport':'dstport'},
@@ -129,7 +129,8 @@ describe('Issue #232 mixed-protocol semantic normalization',()=>{
     ] as const;
     let expectedPositive=0,actualPositive=0,falsePositive=0;
     for(const scenario of syntheticCases){
-      const suite={events:[{fields:scenario.fields}]} as unknown as import('../model').SuiteResult;
+      const format=(scenario as {format?:string}).format;
+      const suite={events:[{fields:scenario.fields,...(format?{effectiveFormat:format}:{})}]} as unknown as import('../model').SuiteResult;
       const suggestions=suggestNormalizationCandidatesFromSuite(suite,[]);
       const expected=scenario.yes as Record<string,string>;
       for(const [sourceField,target] of Object.entries(expected)){

@@ -8,8 +8,8 @@ import {toBackendProject} from './backendAdapter';
 import ReviewedEventProfilesPanel from './ReviewedEventProfilesPanel';
 
 const raw=[
-  '{"event_type":"threat","src_ip":"192.0.2.10","sha256":"'+('a'.repeat(32))+'"}',
-  '{"event_type":"threat","src_ip":"192.0.2.11","sha256":"'+('b'.repeat(32))+'"}',
+  '{"event_type":"threat","src_ip":"192.0.2.10","dst_ip":"gateway-a"}',
+  '{"event_type":"threat","src_ip":"192.0.2.11","dst_ip":"gateway-b"}',
   '{"event_type":"user","username":"山田"}',
   '{"event_type":"user","username":"김민수"}',
 ].join('\n');
@@ -43,7 +43,8 @@ describe('beginner reviewed multi-type fixed 7.0 mapping UX',()=>{
     expect(within(threat).getByText(/Stellar Cyber 7.0: src_ip → srcip/)).toBeInTheDocument();
     const selected=within(threat).getByRole('button',{name:'Use Stellar 7.0 threat src_ip'});
     expect(selected).toBeEnabled();
-    expect(within(threat).queryByRole('button',{name:'Use Stellar 7.0 threat sha256'})).toBeNull();
+    // dst_ip holds names, not addresses: the proposal is shown for review and cannot be used.
+    expect(within(threat).queryByRole('button',{name:'Use Stellar 7.0 threat dst_ip'})).toBeNull();
     expect(within(threat).getByText(/Review only/)).toBeInTheDocument();
     // A generated vendor leaf name must remain eligible for an explicit,
     // evidence-backed scoped Stellar mapping (e.g. host.ip -> host.ip).

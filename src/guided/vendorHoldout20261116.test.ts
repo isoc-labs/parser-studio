@@ -20,7 +20,10 @@ interface Meta{expect:'PARSE'|'ASSISTED';oracle:Oracle[]}
 
 /** How the automatic journey reads each sample today, and how many expected Stellar meanings it maps correctly
  * (Stellar field present with the value of the oracle). A change of a line here is a change of behaviour to
- * review; a lower number is a lost mapping, such as the automatic mappings that read nothing for CEF lines. */
+ * review; a lower number is a lost mapping, such as the automatic mappings that read nothing for CEF lines.
+ * Default deny (owner decision 2026-11-28): the automatic journey no longer writes hostname (the Syslog header
+ * host of four samples) nor a member of an object of the record (Suricata alert.action); the events keep those
+ * values under their own names, which the "lost" check below still requires. The four lower numbers are that. */
 const READING:Record<string,[string,number]>={
   h_checkpoint_logexporter:['generic',6],
   h_cloudtrail_line:['json',2],
@@ -28,13 +31,13 @@ const READING:Record<string,[string,number]>={
   h_fortigate_webfilter:['generic',12],
   h_imperva_cef:['cef',1],
   h_okta_system_log:['json',1],
-  h_panos_threat_url:['generic',5],   // THREAT columns named from the documented field order (2026-11-22)
-  h_panos_traffic:['generic',12],
+  h_panos_threat_url:['generic',4],   // THREAT columns named from the documented field order (2026-11-22); was 5 with hostname
+  h_panos_traffic:['generic',10],     // was 12 with hostname
   h_sonicwall_fw:['generic',0],
   h_sophos_xg_fw:['kv',8],
-  h_srx_sd_close_deny:['syslog_rfc5424',13],
+  h_srx_sd_close_deny:['syslog_rfc5424',11],   // was 13 with hostname
   h_stormshield_filter:['kv',6],
-  h_suricata_rfc5424:['syslog_rfc5424',10],
+  h_suricata_rfc5424:['syslog_rfc5424',8],     // was 10 with hostname and alert.action
   h_zeek_conn_json:['json',10],        // id.orig_h/id.resp_h/id.orig_p/id.resp_p are the conn.log endpoints; proto holds the name
   // Free text: a parsing rule is needed (ChatGPT Assisted Parser). Declined with a diagnosis, never guessed.
   h_cisco_asa_mixed:['declined',0],

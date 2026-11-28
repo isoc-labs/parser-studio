@@ -13,15 +13,21 @@ const unconfigured=():ParserDraft=>{
 describe('canonical source-to-destination decision plan v1',()=>{
   it('accounts for every safe field, preserves exact source path and carries no source values',()=>{
     const draft=unconfigured();
-    const source=JSON.stringify({event:{'source-port':594,'destination-port':10400},
+    const source=JSON.stringify({'source-port':594,'destination-port':10400,
       vendor:{family:'ALLOW',reason:'private user value'}});
     const plan=createCanonicalMappingPlan(preview(source,draft),draft);
     expect(plan.contract).toBe('parser-studio.mapping-plan.v1');
     expect(plan.sourceCount).toBe(4);
     expect(plan.entries.map(e=>e.source)).toEqual([
-      'event.destination-port','event.source-port','vendor.family','vendor.reason']);
+      'destination-port','source-port','vendor.family','vendor.reason']);
     expect(plan.entries.filter(e=>e.disposition==='SUGGESTED_OFFICIAL').map(e=>e.target).sort())
       .toEqual(['dstport','srcport']);
+    // Default deny, 2026-11-28: the same labels inside an object of the record (event.source-port) name that
+    // object; they are accounted for as vendor fields and no official field is suggested.
+    const nested=JSON.stringify({event:{'source-port':594,'destination-port':10400}});
+    const nestedPlan=createCanonicalMappingPlan(preview(nested,draft),draft);
+    expect(nestedPlan.entries.map(e=>[e.source,e.disposition])).toEqual([
+      ['event.destination-port','SUGGESTED_VENDOR'],['event.source-port','SUGGESTED_VENDOR']]);
     expect(plan.mappedCount).toBe(0);
     expect(JSON.stringify(plan)).not.toContain('private user value');
     expect(JSON.stringify(plan)).not.toContain('ALLOW');

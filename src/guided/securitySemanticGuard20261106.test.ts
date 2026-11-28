@@ -10,6 +10,11 @@ const candidates=(...fields:Record<string,unknown>[])=>suggestNormalizationCandi
 const official=(...fields:Record<string,unknown>[])=>candidates(...fields)
   .filter(candidate=>candidate.confidence==='HIGH'&&candidate.safeForBulk)
   .map(candidate=>[candidate.source,candidate.target]);
+/** The same for events a given reader produced (the reader decides which containers hold the record's pairs). */
+const officialRead=(format:string,...fields:Record<string,unknown>[])=>suggestNormalizationCandidatesFromSuite(
+  {events:fields.map(value=>({fields:value,effectiveFormat:format}))} as unknown as SuiteResult,[])
+  .filter(candidate=>candidate.confidence==='HIGH'&&candidate.safeForBulk)
+  .map(candidate=>[candidate.source,candidate.target]);
 
 describe('cross-vendor Stellar 7.0 semantic false-friend oracle, 2026-11-06',()=>{
   it('preserves Fortinet traffic session-close as vendor action without losing valid L4 fields',()=>{
@@ -19,9 +24,11 @@ describe('cross-vendor Stellar 7.0 semantic false-friend oracle, 2026-11-06',()=
     const mapped=official(fields);
     expect(mapped).not.toContainEqual(['action','action']);
     for(const pair of [['srcip','srcip'],['dstip','dstip'],['srcport','srcport'],
-      ['dstport','dstport'],['proto','proto'],['policyid','fw_policy_id']]){
+      ['dstport','dstport'],['proto','proto']]){
       expect(mapped).toContainEqual(pair);
     }
+    // Default deny, 2026-11-28: the policy does not list fw_policy_id (policyid names a policy of any product).
+    expect(mapped.map(pair=>pair[0])).not.toContain('policyid');
   });
   it('keeps admin-login and VPN-negotiation actions vendor scoped, but accepts blocking actions',()=>{
     for(const action of ['login','negotiate','close','Detection','user.session.start']){
@@ -47,18 +54,21 @@ describe('cross-vendor Stellar 7.0 semantic false-friend oracle, 2026-11-06',()=
     expect(official({eventType:'user.session.start',client:{ipAddress:'192.0.2.44'}}))
       .not.toContainEqual(['eventType','event_type']);
   });
-  it('does not silently treat vendor duration as milliseconds, but supports explicit ms units',()=>{
-    expect(official({parserstudio_source:{generic:{kv:{duration:'14'}}}}))
-      .not.toContainEqual(['parserstudio_source.generic.kv.duration','duration']);
-    expect(official({duration:116})).not.toContainEqual(['duration','duration']);
-    expect(official({duration_ms:14000})).toContainEqual(['duration_ms','duration']);
+  // Default deny, 2026-11-28: the policy does not list duration. A name states neither the unit nor what was
+  // timed; duration_ms states the unit only, not that a session was timed.
+  it('does not take a vendor duration for the session duration in milliseconds, with or without a unit in its name',()=>{
+    expect(official({parserstudio_source:{generic:{kv:{duration:'14'}}}})).toEqual([]);
+    expect(official({duration:116})).toEqual([]);
+    expect(official({duration_ms:14000})).toEqual([]);
+    expect(official({session_duration_ms:14000})).toEqual([]);
   });
   it('does not relabel Suricata IDS signature severity into Stellar security severity',()=>{
     const src={event_type:'alert',src_ip:'192.0.2.10',
       alert:{action:'allowed',signature_id:2018358,severity:2}};
     expect(official(src)).not.toContainEqual(['alert.severity','severity']);
-    expect(official(src)).toContainEqual(['src_ip','srcip']);
-    expect(official(src)).toContainEqual(['alert.action','action']);
+    // Default deny, 2026-11-28: a member of an object of the record (alert.action) names that object, so only
+    // the root-level address is proposed.
+    expect(official(src)).toEqual([['src_ip','srcip']]);
   });
   // The 7.0 dictionary defines severity, fidelity and threat_score on a 0-100 scale where a higher value means more.
   // A source field of the same name may use any other scale, run the other way or count something else, and no
@@ -66,7 +76,7 @@ describe('cross-vendor Stellar 7.0 semantic false-friend oracle, 2026-11-06',()=
   it('never takes a field for a 0-100 score because of its name, whatever values the sample holds',()=>{
     // The level digit of a Cisco ASA/FTD tag such as %ASA-6-302013, under the name the ASA reader gives it.
     const levels=[{asa:{severity:'6',src_ip:'10.0.0.1'}},{asa:{severity:'4',src_ip:'10.0.0.2'}}];
-    expect(official(...levels)).toEqual([['asa.src_ip','srcip']]);
+    expect(officialRead('generic_structural',...levels)).toEqual([['asa.src_ip','srcip']]);
     const samples:Record<string,unknown>[][]=[
       [{severity:3},{severity:7}],                    // Syslog level, 0 the most severe
       [{severity:15},{severity:12},{severity:18}],    // a 0-20 scale
@@ -86,8 +96,12 @@ describe('cross-vendor Stellar 7.0 semantic false-friend oracle, 2026-11-06',()=
   it('names every catalog field that the 7.0 dictionary documents on the 0-100 scale',()=>{
     const documented=STELLAR_METADATA_CATALOG.filter(entry=>entry.mappable&&
       entry.descriptions.some(text=>text.includes('0\u2013100'))).map(entry=>entry.name).sort();
-    expect([...policy.reviewOnlyScoreTargets].sort()).toEqual(documented);
     expect(documented).toEqual(['fidelity','severity','threat_score']);
+    // Default deny: none of them is a listed field, and each is recorded with the reason it was left out.
+    for(const name of documented){
+      expect(Object.keys(policy.autoApprovedTargets)).not.toContain(name);
+      expect(Object.keys(policy.autoApprovalDeclined)).toContain(name);
+    }
   });
   // A translated (NAT) address is not the original endpoint of the session. The exclusion that already keeps
   // translated ports out of srcport/dstport holds for the whole network tuple.
@@ -96,7 +110,10 @@ describe('cross-vendor Stellar 7.0 semantic false-friend oracle, 2026-11-06',()=
     expect(official({snat_src_ip:'203.0.113.7'},{snat_src_ip:'203.0.113.8'})).toEqual([]);
     const both={srcip:'10.0.0.1',translated:{srcip:'203.0.113.7'},dstip:'198.51.100.2',postNat:{dstip:'192.0.2.9'}};
     expect(official(both)).toEqual([['srcip','srcip'],['dstip','dstip']]);
-    // Names that merely contain the letters are not translated addresses.
-    expect(official({national:{src_ip:'10.0.0.1'}})).toContainEqual(['national.src_ip','srcip']);
+    // A member of any other object of the record is not the record's endpoint either (default deny, 2026-11-28):
+    // the list of translated segments is no longer what keeps xlate.srcip or national.src_ip out.
+    expect(official({national:{src_ip:'10.0.0.1'}})).toEqual([]);
+    expect(official({xlate:{srcip:'203.0.113.7'}},{xlate:{srcip:'203.0.113.8'}})).toEqual([]);
+    expect(official({mapped:{dstip:'203.0.113.7'},dstip:'198.51.100.2'})).toEqual([['dstip','dstip']]);
   });
 });

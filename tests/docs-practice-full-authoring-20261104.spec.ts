@@ -66,7 +66,8 @@ for(const item of matrix){
     if(item.file.startsWith('04-')||item.file.startsWith('05-')){
       check('srcip','srcip',true);
       check('dstip','dstip',true);
-      check('policyid','fw_policy_id',true);
+      // Default deny (2026-11-28): the policy does not list fw_policy_id; policyid keeps its own name.
+      check('policyid','policyid',false);
       check('type','',false);
       if(item.file.includes('traffic')||item.file.includes('forwarded')){
         check('duration','',false);

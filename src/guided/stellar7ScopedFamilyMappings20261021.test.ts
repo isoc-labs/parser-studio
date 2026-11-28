@@ -12,8 +12,8 @@ const raw=[
   {event_type:'threat',src_ip:'192.0.2.12',action:'block',sha256:threatHash,request_status:404},
   {event_type:'user',username:'김민수',login_result:'failure',host:{ip:'198.51.100.5'}},
   {event_type:'user',username:'山田',login_result:'success',host:{ip:'198.51.100.6'}},
-  {event_type:'asset',host:{name:'asset-01'},process:{name:'agent.exe'}},
-  {event_type:'asset',host:{name:'asset-02'},process:{name:'agent2.exe'}},
+  {event_type:'asset',host:{name:'asset-01'},process:{name:'agent.exe'},rule:{name:'inventory-a'}},
+  {event_type:'asset',host:{name:'asset-02'},process:{name:'agent2.exe'},rule:{name:'inventory-b'}},
 ].map(record=>JSON.stringify(record)).join('\n');
 const base=()=>({...createDraft(),format:'json' as const,mappings:[]});
 
@@ -32,10 +32,13 @@ describe('fixed Stellar 7.0 evidence is scoped to explicitly reviewed event-fami
       family:'user',source:'username',target:'username',confidence:'HIGH',
     }));
     expect(candidates).toContainEqual(expect.objectContaining({
-      family:'asset',source:'host.name',target:'host.name',
+      family:'asset',source:'rule.name',target:'rule.name',
       group:'ns_fields',confidence:'HIGH',
     }));
     expect(candidates.some(candidate=>candidate.source==='request_status')).toBe(false);
+    // Default deny, 2026-11-28: a name the policy does not list is not proposed inside a family either.
+    expect(candidates.filter(candidate=>['sha256','login_result','host.ip','host.name','process.name']
+      .includes(candidate.source))).toEqual([]);
     expect(JSON.stringify(candidates)).not.toContain('김민수');
     expect(JSON.stringify(candidates)).not.toContain('192.0.2.11');
     expect(draft.eventProfiles).toBeUndefined();
@@ -49,9 +52,9 @@ describe('fixed Stellar 7.0 evidence is scoped to explicitly reviewed event-fami
     let reviewed=plan.candidate;
     const proposals=proposeStellar7FamilyMappings(suite,reviewed);
     const allow=[
-      ['threat','src_ip'],['threat','action'],['threat','sha256'],
-      ['user','username'],['user','login_result'],['user','host.ip'],
-      ['asset','host.name'],['asset','process.name'],
+      ['threat','src_ip'],['threat','action'],
+      ['user','username'],
+      ['asset','rule.name'],
     ];
     for(const [family,source] of allow){
       const suggestion=proposals.find(item=>item.family===family&&item.source===source);
@@ -68,19 +71,20 @@ describe('fixed Stellar 7.0 evidence is scoped to explicitly reviewed event-fami
     const vars=compiled.project.normalization.eventProfiles?.variants??[];
     expect(vars.find(v=>v.name==='threat')?.topFields.src_ip)
       .toMatchObject({normalized_name:'srcip',data_type:'ip'});
-    expect(vars.find(v=>v.name==='user')?.nsFields['host.ip'])
-      .toMatchObject({normalized_name:'host.ip',data_type:'ip'});
-    expect(vars.find(v=>v.name==='asset')?.nsFields['process.name'])
-      .toMatchObject({normalized_name:'process.name',data_type:'string'});
+    expect(vars.find(v=>v.name==='asset')?.nsFields['rule.name'])
+      .toMatchObject({normalized_name:'rule.name',data_type:'string'});
     const result=preview(raw,reviewed);
     const goldens=[
-      {srcip:'192.0.2.11',action:'deny',sha256:threatHash},
-      {srcip:'192.0.2.12',action:'block',sha256:threatHash},
-      {username:'김민수',login_result:'failure',host:{ip:'198.51.100.5'}},
-      {username:'山田',login_result:'success',host:{ip:'198.51.100.6'}},
-      {host:{name:'asset-01'},process:{name:'agent.exe'}},
-      {host:{name:'asset-02'},process:{name:'agent2.exe'}},
+      {srcip:'192.0.2.11',action:'deny'},
+      {srcip:'192.0.2.12',action:'block'},
+      {username:'김민수'},
+      {username:'山田'},
+      {rule:{name:'inventory-a'}},
+      {rule:{name:'inventory-b'}},
     ];
+    // The fields the policy does not list keep their values in the output of their event.
+    const kept=[threatHash,threatHash,'198.51.100.5','198.51.100.6','asset-01','agent2.exe'];
+    for(const [i,value] of kept.entries())expect(JSON.stringify(result.events[i]?.normalized)).toContain(value);
     let matchedOfficialFields=0;
     for(const [i,expected] of goldens.entries()){
       expect(result.events[i]?.normalized).toMatchObject(expected);
@@ -89,9 +93,10 @@ describe('fixed Stellar 7.0 evidence is scoped to explicitly reviewed event-fami
         matchedOfficialFields++;
       }
     }
-    // Six manually-authored synthetic event goldens, 16 exact value matches.
+    // Six manually-authored synthetic event goldens, 8 exact value matches (16 before default deny, when the
+    // hash, the login result, the host and the process were written from their names).
     // This is fixture coverage, not independent manufacturer accuracy.
-    expect(matchedOfficialFields).toBe(16);
+    expect(matchedOfficialFields).toBe(8);
     expect(result.events.map(e=>e.raw)).toEqual(originalRaw);
     expect(plan.candidate).toEqual(original);
     expect(reviewed.eventProfiles?.unknown).toBe('reject');
@@ -113,8 +118,8 @@ describe('fixed Stellar 7.0 evidence is scoped to explicitly reviewed event-fami
       expect(ambiguous).toMatchObject({confidence:'REVIEW',safeForBulk:false});
       expect(applyStellar7FamilyMapping(plan.candidate,ambiguous!,suite)).toMatchObject({ok:false});
     }
-    const hash=candidates.find(c=>c.family==='threat'&&c.source==='sha256');
-    expect(hash).toMatchObject({confidence:'REVIEW',safeForBulk:false,total:2,observed:1});
+    // Not a listed field: not proposed at all (it was a review proposal).
+    expect(candidates.find(c=>c.family==='threat'&&c.source==='sha256')).toBeUndefined();
     expect(candidates.some(c=>c.family==='threat'&&c.confidence==='HIGH'&&c.target==='srcip')).toBe(false);
     expect(candidates.find(c=>c.family==='user'&&c.source==='username')).toMatchObject({confidence:'HIGH'});
   });

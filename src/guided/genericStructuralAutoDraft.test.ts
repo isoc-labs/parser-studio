@@ -96,10 +96,14 @@ describe('beginner automatic Generic Structural handoff',()=>{
     const result=buildAutomaticGenericStructuralDraft(F5_ASM_CEF,createDraft())!;
     const official=Object.fromEntries(result.draft.mappings
       .filter(mapping=>result.draft.guided!.groups[mapping.id]!=='vendor_fields').map(mapping=>[mapping.source,mapping.target]));
+    // Default deny, 2026-11-28: the policy does not list hostname, so the Syslog header host keeps its own name.
     expect(official).toEqual({'body.act':'action','body.dpt':'dstport','body.dst':'dstip','body.spt':'srcport',
-      'body.src':'srcip','syslog.hostname':'hostname'});
-    expect(result.automaticOfficialMappings).toBe(6);
-    expect(result.suite.events[0]!.normalized).toMatchObject({action:'passed',dstport:80,dstip:'10.4.1.200',
-      srcport:52963,srcip:'10.4.1.101',hostname:'bigip-4.pme-ds.f5.com'});
+      'body.src':'srcip'});
+    expect(result.automaticOfficialMappings).toBe(5);
+    const output=result.suite.events[0]!.normalized;
+    expect(output).toMatchObject({action:'passed',dstport:80,dstip:'10.4.1.200',srcport:52963,srcip:'10.4.1.101'});
+    // The header host is kept under its own name, not written as the official hostname.
+    expect(output.hostname).toBeUndefined();
+    expect(JSON.stringify(output)).toContain('bigip-4.pme-ds.f5.com');
   });
 });

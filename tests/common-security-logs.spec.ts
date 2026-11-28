@@ -1,4 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
+import {officialMappings} from './normalizationAcceptance';
 
 const PAN='<14>Oct 15 00:03:21 PA-FW01 1,2026/10/15 00:03:21,012345678901,TRAFFIC,end,2561,2026/10/15 00:03:20,10.10.20.15,8.8.8.8,203.0.113.10,8.8.8.8,allow-web,,,ssl,vsys1,trust,untrust,ethernet1/1,ethernet1/2,forward-all,2026/10/15 00:03:21,123456,1,51234,443,45001,443,0x400000,tcp,allow,1480,720,760,12,2026/10/15 00:02:55,25,any,0,0x0,10.0.0.0-10.255.255.255,United States,,6,6,tcp-fin,0,0,0,0,,PA-FW01,from-policy';
 const ASA='<166>Oct 15 2026 00:05:03 ASA-EDGE01 : %ASA-6-302013: Built outbound TCP connection 18745213 for outside:203.0.113.50/443 (203.0.113.50/443) to inside:10.1.15.27/51822 (198.51.100.15/51822)';
@@ -132,8 +133,12 @@ test('BIG-IP ASM KV maps network fields but keeps HTTPS application label vendor
 });
 
 
-test('common EDR JSON gets automatic Stellar mappings instead of leaving every field vendor-only',async({page})=>{
-  const raw=JSON.stringify({
+// Default deny (owner decision 2026-11-28): of an EDR record the time and the user are listed fields. The host, the
+// host address, the process, its parent, the command line, the hash, the severity and the detection verb keep
+// their own names in the manufacturer namespace (the policy records why each was left out). Until then this test
+// compared the text of the destination input only, which a vendor field of the same name satisfies as well.
+test('common EDR JSON: the time and the user become Stellar fields, every other field keeps its own name',async({page})=>{
+  const record={
     timestamp:'2026-10-15T00:07:33.425+09:00',
     eventType:'DetectionSummaryEvent',
     severity:80,
@@ -144,39 +149,20 @@ test('common EDR JSON gets automatic Stellar mappings instead of leaving every f
     processName:'powershell.exe',
     commandLine:'powershell.exe -NoProfile -EncodedCommand REDACTED',
     parentProcess:'WINWORD.EXE',
-    sha256:'6f5902ac237024bdd0c176cb93063dc4',
+    sha256:'6f5902ac237024bdd0c176cb93063dc46f5902ac237024bdd0c176cb93063dc4',
     tactic:'Execution',technique:'PowerShell',techniqueId:'T1059.001',
     action:'Detection',
-  });
-  await analyze(page,raw);
+  };
+  await analyze(page,JSON.stringify(record));
   await openMappings(page);
   const editor=page.getByLabel('Field mapping editor');
-  // A mapping row is identified by its canonical source path (data-source-path),
-  // the value the generated parser reads, not by the label shown to the user.
-  const expectMapping=async(source:string,target:string)=>{
-    const row=editor.locator('article.normalization-map-row[data-source-path="'+source+'"]');
-    await expect(row,'one mapping row for source '+source).toHaveCount(1);
-    await expect(row.locator('input[aria-label^="Source field "]')).toHaveValue(source);
-    await expect(row.locator('input[aria-label^="Stellar field "]')).toHaveValue(target);
-  };
-  await expectMapping('timestamp','timestamp');
-  // DetectionSummaryEvent is a vendor event family, not a Stellar ML job event_type.
-  await expectMapping('eventType','eventType');
-  await expectMapping('severity','severity');
-  await expectMapping('hostname','hostname');
-  await expectMapping('localIP','hostip');
-  await expectMapping('userName','username');
-  await expectMapping('processName','process_name');
-  await expectMapping('commandLine','command');
-  await expectMapping('parentProcess','parent_proc_name');
-  await expectMapping('sha256','sha256');
-  await expectMapping('action','action');
-  // 'Detection' is a security event verb, not an enforcement action. Both
-  // fields must remain vendor-scoped even though the displayed value is kept.
-  const vendor=await editor.locator('article.normalization-map-row.custom input[aria-label^="Source field "]')
-    .evaluateAll(nodes=>nodes.map(node=>(node as HTMLInputElement).value));
-  expect(vendor).toContain('eventType');
-  expect(vendor).toContain('action');
+  expect(await officialMappings(editor)).toEqual({timestamp:'timestamp',userName:'username'});
+  // Every other source is one vendor row under its own name: nothing is lost and nothing is renamed.
+  const vendor=await editor.locator('article.normalization-map-row.custom').evaluateAll(nodes=>nodes.map(node=>[
+    node.getAttribute('data-source-path'),
+    (node.querySelector('input[aria-label^="Stellar field "]') as HTMLInputElement|null)?.value]));
+  expect(Object.fromEntries(vendor)).toEqual(Object.fromEntries(Object.keys(record)
+    .filter(name=>!['timestamp','userName'].includes(name)).map(name=>[name,name])));
 });
 
 test('single-line logs retain accurate event accounting without an obsolete multi-line tool',async({page})=>{

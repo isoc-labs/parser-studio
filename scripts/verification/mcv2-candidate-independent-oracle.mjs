@@ -2,8 +2,13 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const mod=await import('data:text/javascript;base64,'+readFileSync(0,'utf8').trim());
+// The reader that produced an event (its effective format) decides which containers hold the pairs of the record.
+const READER=new WeakMap();
+const readBy=(format,fields)=>{READER.set(fields,format);return fields;};
+const bodyOf=kv=>readBy('syslog_rfc3164',{body:kv});
 const suggest=(events,existing=[],groups={},options={})=>
-  mod.suggestNormalizationCandidatesFromSuite({events:events.map(fields=>({fields}))},
+  mod.suggestNormalizationCandidatesFromSuite({events:events.map(fields=>
+    ({fields,...(READER.has(fields)?{effectiveFormat:READER.get(fields)}:{})}))},
     existing,groups,options);
 const row=(fields,source,existing=[])=>suggest([fields],existing).find(c=>c.source===source);
 const high=(fields,source,target,type)=>{
@@ -51,12 +56,43 @@ assert.notEqual(row({severity:true},'severity')?.confidence,'HIGH','a non-numeri
 // A translated (NAT) address is not the original endpoint, like a translated port.
 absent({nat:{srcip:'203.0.113.7'}},'nat.srcip');
 absent({snat_dst_ip:'203.0.113.8'},'snat_dst_ip');
-high({national:{src_ip:'192.0.2.9'}},'national.src_ip','srcip','ip');
-high({duration_ms:1200},'duration_ms','duration','integer');
+// Default deny (owner decision 2026-11-28). A name is evidence only where it stands for the record: a member of an
+// object of the record names that object, whatever the object is called (no list of translated names decides it).
+absent({national:{src_ip:'192.0.2.9'}},'national.src_ip');
+absent({xlate:{srcip:'203.0.113.7'}},'xlate.srcip');
+absent({mapped:{dstip:'203.0.113.7'}},'mapped.dstip');
+absent({file:{timestamp:'2020-01-01T00:00:00Z'}},'file.timestamp');
+absent({referrer:{url:'https://a.example/x'}},'referrer.url');
+absent({previous:{action:'allow'}},'previous.action');
+absent({target:{username:'alice'}},'target.username');
+// An official field is proposed only when the shared policy lists it. Each of these was approved from its name.
+absent({duration_ms:1200},'duration_ms');
+absent({session_duration_ms:1200},'session_duration_ms');
+absent({policyid:7},'policyid');
+absent({appid:41},'appid');
+absent({file_size:1024},'file_size');
+absent({file_path:'/tmp/a.exe'},'file_path');
+absent({localIP:'10.30.5.23'},'localIP');
+absent({hostip:'10.30.5.23'},'hostip');
+absent({processName:'powershell.exe'},'processName');
+absent({commandLine:'powershell.exe -NoProfile'},'commandLine');
+absent({parentProcess:'WINWORD.EXE'},'parentProcess');
+absent({sha256:'6f5902ac237024bdd0c176cb93063dc46f5902ac237024bdd0c176cb93063dc4'},'sha256');
+absent({event_id:4625},'event_id');
+absent({computer_name:'WS-01'},'computer_name');
+absent({host:{name:'ecs-01'}},'host.name');
+absent({process:{name:'agent.exe'}},'process.name');
+// The listed fields that have no check of the value beyond its type.
+high({username:'alice'},'username','username','string');
+high({srcmac:'02:00:00:00:00:01'},'srcmac','srcmac','string');
+high({vlan:120},'vlan','vlan','integer');
+review({vlan:'guest'},'vlan','vlan');
+high({timestamp:'2026-11-27T10:00:00Z'},'timestamp','timestamp','timestamp');
 high({proto:6},'proto','proto','integer');
 high({protocol:'tcp'},'protocol','proto_name','string');
 high({action:'block'},'action','action','string');
-high({hostname:'sensor1'},'hostname','hostname','string');
+// hostname is not a listed field: a name does not say which host is meant (see the host block below).
+absent({hostname:'sensor1'},'hostname');
 review({src_ip:'invalid-ip'},'src_ip','srcip');
 review({'source-port':65536},'source-port','srcport');
 review({'source-port':-1},'source-port','srcport');
@@ -86,15 +122,18 @@ absent({type:'TRAFFIC',logid:'0001',vd:'root'},'type');
 absent({eventtype:'traffic',logid:'0001',vd:'root',type:'traffic'},'eventtype');
 absent({direction:'inbound',logid:'0001',vd:'root',type:'traffic'},'direction');
 absent({type:'traffic'},'type');
-high({type:4,provider_guid:'abc'},'type','type','string');
+// The Windows-agent type is not a listed field, with or without the fields of a Windows event beside it.
+absent({type:4,provider_guid:'abc'},'type');
 absent({event_type:'alert',alert:{signature_id:1,severity:2}},'alert.severity');
 // Generic Structural space_kv: an unquoted value runs to the next key, so a
 // destination port followed by free text is stored whole under kv and as
 // whitespace-separated pieces under atoms. A port/IP cannot contain whitespace,
 // hence ONLY the first piece of a port/IP key is a valid official source.
-const spaced=(key,pieces)=>({generic:{mode:'space_kv',
+const spaced=(key,pieces)=>readBy('generic_structural',{generic:{mode:'space_kv',
   kv:{[key]:pieces.join(' ')},
   atoms:Object.fromEntries(pieces.map((p,i)=>[key+'_'+String(i+1).padStart(3,'0'),p]))}});
+// The same atom in an event another reader produced is a member of an object of the log.
+absent({generic:{mode:'space_kv',kv:{dport:'53 x'},atoms:{dport_001:'53',dport_002:'x'}}},'generic.atoms.dport_001');
 high(spaced('dport',['53','pattern:','allow','all']),'generic.atoms.dport_001','dstport','integer');
 high(spaced('sport',['55719','extra']),'generic.atoms.sport_001','srcport','integer');
 high(spaced('src',['192.0.2.7','trailing']),'generic.atoms.src_001','srcip','ip');
@@ -103,7 +142,7 @@ review(spaced('dport',['abc','def']),'generic.atoms.dport_001','dstport');
 review(spaced('dport',['65536','x']),'generic.atoms.dport_001','dstport');
 review(spaced('dport',['53','pattern:','allow','all']),'generic.kv.dport','dstport');
 // The protocol that qualifies a port atom is recorded on the KV carrier, not on the atom.
-const withProtocol=(event,protocol)=>({generic:{...event.generic,kv:{...event.generic.kv,protocol}}});
+const withProtocol=(event,protocol)=>readBy('generic_structural',{generic:{...event.generic,kv:{...event.generic.kv,protocol}}});
 review(withProtocol(spaced('dport',['53','trailing']),'icmp'),'generic.atoms.dport_001','dstport');
 review(withProtocol(spaced('dport',['53','trailing']),'icmp reply'),'generic.atoms.dport_001','dstport');
 high(withProtocol(spaced('dport',['53','trailing']),'tcp'),'generic.atoms.dport_001','dstport','integer');
@@ -205,19 +244,21 @@ assert.equal(mod.valueFitsNormalizationTarget('srcport','integer',65535),true);
 assert.equal(mod.valueFitsNormalizationTarget('srcport','integer',65536),false);
 assert.equal(mod.valueFitsNormalizationTarget('srcport','integer',null),true);
 // Additional independently stated decision and explanation contracts.
-high({vendor:{url:'https://example.com/a'}},'vendor.url','url','string');
+absent({vendor:{url:'https://example.com/a'}},'vendor.url');
 high({rule:{name:'policy-1'}},'rule.name','rule.name','string');
-review({flow:{spt:443,protocol:'icmp'}},'flow.spt','srcport');
-high({flow:{spt:443,protocol:'tcp'}},'flow.spt','srcport','integer');
+absent({flow:{spt:443,protocol:'icmp'}},'flow.spt');
+absent({flow:{spt:443,protocol:'tcp'}},'flow.spt');
+// Protocol evidence in the container that holds the port: the body of a Syslog record is such a container.
+review(bodyOf({sport:443,dport:80,protocol:'icmp'}),'body.sport','srcport');
+high(bodyOf({sport:443,dport:80,protocol:'tcp'}),'body.sport','srcport','integer');
 review({action:'N/A'},'action','action');
 absent({hostname:'fg',logid:'001',vd:'root',type:'traffic'},'hostname');
-high({hostname:'fg',vd:'root',type:'traffic'},'hostname','hostname','string');
+absent({hostname:'fg',vd:'root',type:'traffic'},'hostname');
+// icmp_type is not a listed field: its value means something only in an ICMP event.
 absent({'icmp-type':8,'protocol-id':6},'icmp-type');
-high({'icmp-type':8,'protocol-id':1},'icmp-type','icmp_type','string');
-const sparseIcmp=suggest([{'icmp-type':8,'protocol-id':1},
-  {'protocol-id':6}]);
-assert.equal(sparseIcmp.find(r=>r.source==='icmp-type')?.confidence,'REVIEW',
-  'missing event cannot negate present ICMP evidence');
+absent({'icmp-type':8,'protocol-id':1},'icmp-type');
+assert.equal(suggest([{'icmp-type':8,'protocol-id':1},{'protocol-id':6}]).find(r=>r.source==='icmp-type'),undefined,
+  'an ICMP type is not proposed in a sparse sample either');
 absent({event_type:'alert',alert:{signature_id:99,severity:2}},'alert.severity');
 // A Suricata priority is not the 0-100 score inside an alert or outside one, whatever its value.
 absent({event_type:'alert',alert:{signature_id:99,severity:75}},'alert.severity');
@@ -258,7 +299,7 @@ assert.equal(mod.valueFitsMappingType('ip','\u00a0'),false);
 assert.equal(mod.valueFitsNormalizationTarget('srcport','integer',' '),true);
 assert.equal(mod.valueFitsNormalizationTarget('srcport','integer','\u00a0'),false);
 // Per-container protocol evidence must not disappear when root fields differ.
-review({flow:{spt:443,'protocol-id':1}},'flow.spt','srcport');
+review(bodyOf({sport:443,dport:80,'protocol-id':1}),'body.sport','srcport');
 // Audit G-13: protocol evidence written in other common ways; a protocol object's non-protocol member is not
 // evidence; another object of the record is another family; a bare transport= (FortiGate) is a port.
 review({spt:8,'protocol.name':'icmp'},'spt','srcport');
@@ -276,25 +317,26 @@ high({spt:443,proto:6,transport:8080},'spt','srcport','integer');
 high({spt:443,proto:6,network:{bytes:10}},'spt','srcport','integer');
 // A literal key written with a protocol-named prefix: only the sibling's own name is read ('proto.' is how the
 // source is written), and a list of transport names is transport evidence.
-// (sport is approved only beside a destination port, see the end of this file: the case has one.)
-high({'proto.sport':443,'proto.dport':8443,'proto.note':'x'},'proto.sport','srcport','integer');
+// Default deny: a literal key written with a prefix names an attribute of what the prefix names and is not proposed.
+absent({'proto.sport':443,'proto.dport':8443,'proto.note':'x'},'proto.sport');
 high({spt:443,protocol:['tcp','udp']},'spt','srcport','integer');
 review({spt:443,protocol:['tcp','icmp']},'spt','srcport');
 // A non-transport protocol at the root of the record keeps a port of a nested object in review.
-review({flow:{spt:443},protocol:'icmp'},'flow.spt','srcport');
+review(readBy('syslog_rfc3164',{body:{sport:443,dport:80},protocol:'icmp'}),'body.sport','srcport');
 // Re-audit A1: ECS network.protocol is the application protocol, not the IP protocol.
 high({spt:443,network:{transport:'tcp',protocol:'http'}},'spt','srcport','integer');
 high({spt:443,'network.transport':'udp','network.protocol':'dns'},'spt','srcport','integer');
 review({spt:8,network:{transport:'icmp',protocol:'http'}},'spt','srcport');
-review({flow:{spt:443,proto:1}},'flow.spt','srcport');
-review({flow:{spt:443,proto_name:'icmp'}},'flow.spt','srcport');
-high({flow:{spt:443,'protocol-id':6}},'flow.spt','srcport','integer');
+review(bodyOf({sport:443,dport:80,proto:1}),'body.sport','srcport');
+review(bodyOf({sport:443,dport:80,proto_name:'icmp'}),'body.sport','srcport');
+high(bodyOf({sport:443,dport:80,'protocol-id':6}),'body.sport','srcport','integer');
 absent({post_nat:{'destination-port':443}},'post_nat.destination-port');
 absent({translated_source:{'destination-port':443}},'translated_source.destination-port');
-high({icmp_type:'8','protocol-id':6},'icmp_type','icmp_type','string');
+absent({icmp_type:'8','protocol-id':6},'icmp_type');
 // The Junos structured-data reader writes icmp_type beside protocol_id: zero-filled on TCP/UDP, a type on ICMP.
-absent({junos_sd:{icmp_type:'0',protocol_id:'6'}},'junos_sd.icmp_type');
-high({junos_sd:{icmp_type:'8',protocol_id:'1'}},'junos_sd.icmp_type','icmp_type','string');
+absent(readBy('generic_structural',{junos_sd:{icmp_type:'0',protocol_id:'6'}}),'junos_sd.icmp_type');
+absent(readBy('generic_structural',{junos_sd:{icmp_type:'8',protocol_id:'1'}}),'junos_sd.icmp_type');
+high(readBy('generic_structural',{junos_sd:{source_address:'10.0.0.1',protocol_id:'6'}}),'junos_sd.source_address','srcip','ip');
 // A sample of several record families: an endpoint field that carries the official name itself is approved
 // although one family lacks it; an alias, or an official name of another kind, stays a review proposal.
 const families=suggest([{srcip:'192.0.2.1',srcport:51544,dstport:443,proto:6,md5:'69630e4574ec6798239b091cda43dca0'},
@@ -305,7 +347,14 @@ for(const name of ['srcip','srcport','dstport','proto']){
   assert.equal(found?.confidence,'HIGH','sparse official-name endpoint approved '+name);
   assert.equal(found?.safeForBulk,true,'sparse official-name endpoint bulk '+name);
 }
-assert.equal(families.find(r=>r.source==='md5')?.confidence,'REVIEW','sparse non-endpoint official name');
+assert.equal(families.find(r=>r.source==='md5'),undefined,'an official name the policy does not list is not proposed');
+// A listed field that is not an endpoint or URL field keeps the full-coverage rule.
+for(const [name,value] of [['username','alice'],['action','deny'],['vlan',120],['timestamp','2026-11-27T10:00:00Z']]){
+  const sparse=suggest([{srcip:'192.0.2.1',[name]:value},{note:'system record'}]).find(r=>r.source===name);
+  assert.equal(sparse?.target,name,'sparse listed name is proposed '+name);
+  assert.equal(sparse?.confidence,'REVIEW','sparse listed name stays a review proposal '+name);
+  assert.equal(sparse?.safeForBulk,false,'sparse listed name is not approved '+name);
+}
 // A source called proto: documented protocol names are the name field, numbers the number field.
 const target=(events,source)=>suggest(events).filter(r=>r.source===source).map(r=>r.target+':'+r.confidence);
 assert.deepEqual(target([{proto:'tcp'},{proto:'UDP'}],'proto'),['proto_name:HIGH'],'protocol names');
@@ -321,11 +370,12 @@ assert.deepEqual(rv([{srcport:51234,ipproto:6},{srcport:8,ipproto:1},{note:'x'}]
 assert.deepEqual(rv([{srcport:8},{note:'x'}],'srcport'),['REVIEW'],'sparse port, no protocol');
 assert.deepEqual(rv([{srcport:51234,l4proto:'tcp'},{note:'x'}],'srcport'),['HIGH'],'sparse port, l4proto=tcp');
 assert.deepEqual(rv([{srcport:51234,proto:6,transport:51234},{note:'x'}],'srcport'),['HIGH'],'FortiGate transport is a translated port, not a protocol');
-assert.deepEqual(rv([{xlate:{srcip:'203.0.113.5'}},{note:'x'}],'xlate.srcip'),['REVIEW'],'nested endpoint');
-assert.deepEqual(rv([{generic:{kv:{srcip:'203.0.113.5'}}},{note:'x'}],'generic.kv.srcip'),['REVIEW'],'a container of an unknown reading is not the record level');
+assert.deepEqual(rv([{xlate:{srcip:'203.0.113.5'}},{note:'x'}],'xlate.srcip'),[],'nested endpoint');
+assert.deepEqual(rv([{xlate:{srcip:'203.0.113.5'}},{xlate:{srcip:'203.0.113.6'}}],'xlate.srcip'),[],'nested endpoint that every event carries');
+assert.deepEqual(rv([{generic:{kv:{srcip:'203.0.113.5'}}},{note:'x'}],'generic.kv.srcip'),[],'a container of an unknown reading is not the record level');
 // Re-audit of 2026-11-21 (N2-N4).
-assert.deepEqual(rv([{proto:6,fields:{srcip:'203.0.113.5',srcport:40002}},{note:'x'}],'fields.srcip'),['REVIEW'],'JSON object called fields');
-assert.deepEqual(rv([{proto:6,fields:{srcip:'203.0.113.5',srcport:40002}},{note:'x'}],'fields.srcport'),['REVIEW'],'root proto is not evidence for a nested port');
+assert.deepEqual(rv([{proto:6,fields:{srcip:'203.0.113.5',srcport:40002}},{note:'x'}],'fields.srcip'),[],'JSON object called fields');
+assert.deepEqual(rv([{proto:6,fields:{srcip:'203.0.113.5',srcport:40002}},{note:'x'}],'fields.srcport'),[],'a port of a nested object is not proposed');
 assert.deepEqual(rv([{srcport:51234,dstport:443,service:'HTTPS'},{srcport:8,dstport:0,service:'PING'},{srcport:'-',dstport:'-',service:'-'}],'srcport'),['REVIEW'],'a placeholder is not coverage');
 assert.deepEqual(rv([{SrcPort:51234,Protocol:'TCP'},{SrcPort:8,Protocol:'ICMP'}],'SrcPort'),['REVIEW'],'protocol field name in another case');
 assert.deepEqual(rv([{SrcPort:51234,Protocol:'TCP'},{SrcPort:443,Protocol:'udp'}],'SrcPort'),['HIGH'],'TCP and UDP named in another case');
@@ -336,8 +386,18 @@ const read=(format,events,source)=>mod.suggestNormalizationCandidatesFromSuite(
 const inKv={generic:{kv:{srcip:'203.0.113.5',srcport:40002,proto:6}}},inBody={body:{srcip:'203.0.113.5',srcport:40002,proto:6}};
 const other={generic:{kv:{note:'x'}},body:{note:'x'}};
 assert.deepEqual(read('generic_structural',[inKv,other],'generic.kv.srcip'),['HIGH'],'generic reader container');
+// A normalized Generic Structural event keeps the source record under parserstudio_source: the same container
+// one level down is still the container of the reader.
+assert.deepEqual(read('generic_structural',[{parserstudio_source:inKv},{parserstudio_source:other}],
+  'parserstudio_source.generic.kv.srcip'),['HIGH'],'generic reader container in the source copy');
+// The single-event helper judges a container by the reader it is told; told none, a container is not one.
+assert.deepEqual(mod.suggestNormalizationCandidates(inKv,[],'generic_structural')
+  .filter(r=>r.source==='generic.kv.srcip').map(r=>r.confidence),['HIGH'],'single event, reader named');
+assert.deepEqual(mod.suggestNormalizationCandidates(inKv,[])
+  .filter(r=>r.source==='generic.kv.srcip').map(r=>r.confidence),[],'single event, no reader named');
 assert.deepEqual(read('generic_structural',[inKv,other],'generic.kv.srcport'),['HIGH'],'port with TCP in its own container');
-assert.deepEqual(read('json',[inKv,other],'generic.kv.srcip'),['REVIEW'],'the same path in a JSON log');
+assert.deepEqual(read('json',[inKv,other],'generic.kv.srcip'),[],'the same path in a JSON log');
+assert.deepEqual(read('json',[inKv,inKv],'generic.kv.srcip'),[],'the same path in a JSON log, in every event');
 assert.deepEqual(read('syslog_rfc3164',[inBody,other],'body.srcip'),['HIGH'],'RFC 3164 body');
 assert.deepEqual(read('syslog_rfc5424',[inBody,other],'body.srcip'),['HIGH'],'RFC 5424 body');
 // A mixed event is read by the grammar of its family (the router's reading family), never by the name 'mixed'.
@@ -346,8 +406,8 @@ const mixedRead=(families,events,source)=>mod.suggestNormalizationCandidatesFrom
   .filter(r=>r.source===source).map(r=>r.confidence);
 assert.deepEqual(mixedRead(['rfc5424_kv','rfc5424_kv'],[inBody,other],'body.srcip'),['HIGH'],'RFC 5424 body of a mixed reading');
 assert.deepEqual(mixedRead(['rfc3164_kv','rfc3164_kv'],[inBody,other],'body.srcip'),['HIGH'],'RFC 3164 body of a mixed reading');
-assert.deepEqual(mixedRead(['json','json'],[inBody,other],'body.srcip'),['REVIEW'],'a JSON object called body in a mixed reading');
-assert.deepEqual(read('mixed',[inBody,other],'body.srcip'),['REVIEW'],'a mixed event without its reading family');
+assert.deepEqual(mixedRead(['json','json'],[inBody,other],'body.srcip'),[],'a JSON object called body in a mixed reading');
+assert.deepEqual(read('mixed',[inBody,other],'body.srcip'),[],'a mixed event without its reading family');
 // CEF/LEEF extension keys the specification defines (src, dst, spt, dpt; LEEF srcPort, dstPort) are read like
 // a source named as its official field, inside a CEF or LEEF record only.
 const cefRecord={cef_version:'0',src:'192.0.2.1',dst:'198.51.100.2',spt:'40000',dpt:'443',proto:'TCP'};
@@ -394,70 +454,51 @@ const wgKv={generic:{mode:'watchguard_traffic_monitor'},watchguard:{protocol:'tc
 assert.deepEqual(read('generic_structural',[wgKv,wgIcmp],'watchguard.kv.src_port'),['REVIEW'],'a detail pair is not the layout position');
 assert.deepEqual(mod.suggestNormalizationCandidatesFromSuite({events:[inBody,other].map(fields=>
   ({fields,effectiveFormat:'json',readingFamily:'rfc5424_kv'}))},[]).filter(r=>r.source==='body.srcip').map(r=>r.confidence),
-  ['REVIEW'],'a reading family is read only for a mixed event');
-assert.deepEqual(read('json',[inBody,other],'body.srcip'),['REVIEW'],'a JSON object called body');
-assert.deepEqual(read('kv',[inBody,other],'body.srcip'),['REVIEW'],'no container in a key=value reading');
-assert.deepEqual(read('syslog_rfc3164',[inKv,other],'generic.kv.srcip'),['REVIEW'],'generic container under a Syslog reading');
-assert.deepEqual(read('generic_structural',[{xlate:{fields:{srcip:'203.0.113.5'}}},other],'xlate.fields.srcip'),['REVIEW'],'not a reader container');
-// A host field carried only by events that describe an HTTP request (a value is a method, a request line or an
-// HTTP version) is not established as the official hostname: offered for review, never approved.
-review({method:'GET',host:'example.com',uri:'/index.html',status_code:200},'host','hostname');
-review({request_method:'POST',host:'shop.example.com',user_agent:'curl/8.5.0'},'host','hostname');
-review({Method:'GET',host:'example.com',URI:'/'},'host','hostname');
-review({http:{method:'GET',host:'example.com',url:'/x'}},'http.host','hostname');
-review({host:'shop.example.com',request:'GET /cart HTTP/1.1',status:200},'host','hostname');
-review({http:{hostname:'example.com',http_method:'GET',protocol:'HTTP/1.1'}},'http.hostname','hostname');
-high({host:'fw01',msg:'link up'},'host','hostname','string');
-high({host:'fw01',method:'https'},'host','hostname','string');
-high({host:'fw01',url:'/admin'},'host','hostname','string');
-review({host:'proxy01',request:{method:'GET',uri:'/'}},'host','hostname');
-high({host:'api-node-3',method:'GetUser',status_code:0},'host','hostname','string');
-// Without a method or a version: a host inside an object of the record names that object's host, and an absolute
-// web URL beside the host is the same evidence of a request as a method.
-review({agent:{hostname:'collector-7'},message:'started'},'agent.hostname','hostname');
-review({'http.host':'example.com','http.uri':'/index.html','http.status_code':200},'http.host','hostname');
-review({client:'10.0.0.5',host:'example.com',url:'http://example.com/a',status:200},'host','hostname');
-high({host:'fw01',url:'/admin',action:'login'},'host','hostname','string');
-// The Syslog header host names the sender whatever the body is; the host of the request in the body is not
-// proposed beside it. The same holds in the source copy of a normalized event (parserstudio_source.*).
-assert.deepEqual(read('syslog_rfc3164',[{syslog_hostname:'web01',body:{method:'GET',host:'example.com',uri:'/'}}],'syslog_hostname'),['HIGH'],'Syslog header host beside an HTTP body');
-assert.deepEqual(read('syslog_rfc3164',[{syslog_hostname:'web01',body:{method:'GET',host:'example.com',uri:'/'}}],'body.host'),[],'host of the request beside a Syslog header host');
-high({parserstudio_source:{syslog:{host:'bigip-waf01',time:'00:14:27'}}},'parserstudio_source.syslog.host','hostname','string');
-assert.deepEqual(read('generic_structural',[{parserstudio_source:{syslog:{hostname:'web01'},generic:{kv:{method:'GET',host:'example.com'}}}}],'parserstudio_source.generic.kv.host'),[],'host of the request beside a header host, in the source copy');
-// A web URL beside the host in the container of the reading (a proxy line read by Generic Structural).
-assert.deepEqual(read('generic_structural',[{generic:{kv:{client:'10.0.0.5',host:'example.com',url:'http://example.com/a'}}}],'generic.kv.host'),['REVIEW'],'web URL beside the host in a reader container');
-assert.deepEqual(read('generic_structural',[{generic:{kv:{host:'fw01',action:'allow'}},note:'http://example.com/a'}],'generic.kv.host'),['HIGH'],'web URL outside the container of the host');
-// A URL of the event that names the host says whose host it is; a URL of another host says nothing (audit 2, G-08).
-high({client_ip:'192.0.2.70',action:'deny',host_name:'edge-01',url:'https://shop.example.invalid/login',severity:75},'host_name','hostname','string');
-high({host:'fw01',referer:'https://portal.example.com/start',action:'allow'},'host','hostname','string');
-high({host:'fw01',url:'https://fw01.example.com/a',action:'allow'},'host','hostname','string');
-high({host:'fw01',peer:'fw01',action:'allow'},'host','hostname','string');
-review({client:'10.0.0.5',host:'example.com:8443',url:'https://example.com:8443/a'},'host','hostname');
-review({client:'10.0.0.5',host:'Example.COM',url:'https://bob@example.com/a'},'host','hostname');
-review({src:'10.0.0.5',host:'example.com',url:'example.com/a'},'host','hostname');
-review({src:'10.0.0.5',host:'example.com',url:'example.com:8080/a'},'host','hostname');
-review({host:'example.com',request:{url:'https://example.com/a'}},'host','hostname');
-// The events of a request are those that carry the field which says so in some event; another record family
-// with the same host value confirms the host, one event with an unusual method does not (audit 2, G-04).
-assert.deepEqual(rv([{method:'GET',host:'a.example',uri:'/'},{method:'GET',host:'b.example',uri:'/'},{method:'PROPFIND',host:'c.example',uri:'/dav'}],'host'),['REVIEW'],'a method outside the known tokens');
-assert.deepEqual(rv([{method:'GET',host:'a.example',uri:'/'},{method:'-',host:'a.example',uri:'/'}],'host'),['REVIEW'],'a placeholder in the method field');
-assert.deepEqual(rv([{host:'example.com',method:'GET',uri:'/'},{host:'proxy01',type:'system',msg:'started'}],'host'),['REVIEW'],'requested host and device host in one field');
-assert.deepEqual(rv([{host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw01',type:'traffic',action:'allow'}],'host'),['HIGH'],'device host confirmed by another record family');
-assert.deepEqual(rv([{host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw02',type:'webfilter',method:'GET',url:'/y'},{host:'fw01',type:'traffic',action:'allow'}],'host'),['REVIEW'],'one request host without confirmation');
-review({method:'get',host:'example.com',uri:'/index.html'},'host','hostname');
-review({host:'shop.example.com',request:'GET /cart',status:200},'host','hostname');
-review({host:'shop.example.com',request:'post https://shop.example.com/cart HTTP/2'},'host','hostname');
-high({host:'fw01',level:'trace',msg:'link up'},'host','hostname','string');
-high({host:'fw01',msg:'Connect failed'},'host','hostname','string');
-high({host:'srv01',action:'delete',user:'bob'},'host','hostname','string');
-high({host:'srv01',msg:'GET lost'},'host','hostname','string');
-// A literal dotted protocol key in the object that holds the port (audit 2, G-07).
-assert.deepEqual(read('syslog_rfc3164',[{body:{'flow.sport':8,'flow.dport':0,'flow.proto':'icmp'}}],'body.flow.sport'),['REVIEW'],'literal dotted protocol key in a Syslog body');
-assert.deepEqual(read('syslog_rfc3164',[{body:{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'}}],'body.flow.sport'),['HIGH'],'literal dotted protocol key in a Syslog body that names TCP');
-// The header object of the WatchGuard reading holds the HOSTNAME of the Syslog header.
+  [],'a reading family is read only for a mixed event');
+assert.deepEqual(read('json',[inBody,other],'body.srcip'),[],'a JSON object called body');
+assert.deepEqual(read('kv',[inBody,other],'body.srcip'),[],'no container in a key=value reading');
+assert.deepEqual(read('syslog_rfc3164',[inKv,other],'generic.kv.srcip'),[],'generic container under a Syslog reading');
+assert.deepEqual(read('generic_structural',[{xlate:{fields:{srcip:'203.0.113.5'}}},other],'xlate.fields.srcip'),[],'not a reader container');
+// The other containers the readers write the record into.
+assert.deepEqual(read('generic_structural',[{asa:{src_ip:'10.0.0.1'}}],'asa.src_ip'),['HIGH'],'ASA reader node');
+assert.deepEqual(read('generic_structural',[{juniper:{'source-address':'10.0.0.1'}}],'juniper.source-address'),['HIGH'],'Juniper reader node');
+assert.deepEqual(read('generic_structural',[{body:{leef_extension:{src:'10.0.0.1'}}}],'body.leef_extension.src'),['HIGH'],'LEEF extension of the implicit-tab reading');
+assert.deepEqual(read('generic_structural',[{syslog:{timestamp:'2026-11-27T10:00:00Z'}}],'syslog.timestamp'),['HIGH'],'Syslog header of Generic Structural');
+assert.deepEqual(read('syslog_rfc5424',[{syslog_sd:{element_1:{params:{'source-address':'10.0.0.1'}}}}],'syslog_sd.element_1.params.source-address'),['HIGH'],'SD-PARAM of an RFC 5424 element');
+for(const format of ['json','kv','cef','syslog_rfc3164'])for(const [fields,path] of [[{asa:{src_ip:'10.0.0.1'}},'asa.src_ip'],
+  [{juniper:{'source-address':'10.0.0.1'}},'juniper.source-address'],[{syslog:{timestamp:'2026-11-27T10:00:00Z'}},'syslog.timestamp'],
+  [{syslog_sd:{element_1:{params:{'source-address':'10.0.0.1'}}}},'syslog_sd.element_1.params.source-address']])
+  assert.deepEqual(read(format,[fields],path),[],'the same path under another reading: '+format+' '+path);
+// hostname is not a listed field (default deny, owner decision 2026-11-28): a name does not say which host is meant,
+// and the 7.0 dictionary defines the field for one source only ("The host name (Linux Audit)."). The earlier rules
+// told a requested host from a device host by the values of the record (audits F-05, F-06, G-04, G-08); none of
+// their samples is proposed now, whichever host it holds.
+for(const sample of [
+  {method:'GET',host:'example.com',uri:'/index.html',status_code:200},
+  {host:'shop.example.com',request:'GET /cart HTTP/1.1',status:200},
+  {host:'fw01',msg:'link up'},{host:'fw01',url:'/admin',action:'login'},
+  {host:'fw01',referer:'https://portal.example.com/start',action:'allow'},
+  {host:'srv01',action:'delete',user:'bob'},
+  {client:'10.0.0.5',host:'example.com',url:'http://example.com/a',status:200}])absent(sample,'host');
+absent({http:{hostname:'example.com',http_method:'GET',protocol:'HTTP/1.1'}},'http.hostname');
+absent({agent:{hostname:'collector-7'},message:'started'},'agent.hostname');
+absent({'http.host':'example.com','http.uri':'/index.html'},'http.host');
+absent({client_ip:'192.0.2.70',action:'deny',host_name:'edge-01'},'host_name');
+absent({device_name:'ise-01',username:'alice'},'device_name');
+absent({deviceName:'vision-01'},'deviceName');
+// The host of a Syslog header is not proposed either, in any reading.
+assert.deepEqual(read('syslog_rfc3164',[{syslog_hostname:'web01',body:{method:'GET',host:'example.com',uri:'/'}}],'syslog_hostname'),[],'Syslog header host');
+assert.deepEqual(read('syslog_rfc3164',[{syslog_hostname:'web01',body:{method:'GET',host:'example.com',uri:'/'}}],'body.host'),[],'host of the request beside a Syslog header');
+assert.deepEqual(read('generic_structural',[{syslog:{hostname:'web01'},generic:{kv:{host:'fw01',action:'allow'}}}],'syslog.hostname'),[],'Syslog header host of Generic Structural');
+assert.deepEqual(read('generic_structural',[{syslog:{hostname:'web01'},generic:{kv:{host:'fw01',action:'allow'}}}],'generic.kv.host'),[],'host pair of Generic Structural');
+assert.deepEqual(read('generic_structural',[{parserstudio_source:{syslog:{host:'bigip-waf01',time:'00:14:27'}}}],'parserstudio_source.syslog.host'),[],'Syslog header host in the source copy');
+// A literal dotted key in the body of a Syslog record is two levels below the record and is not proposed.
+assert.deepEqual(read('syslog_rfc3164',[{body:{'flow.sport':8,'flow.dport':0,'flow.proto':'icmp'}}],'body.flow.sport'),[],'literal dotted key in a Syslog body');
+assert.deepEqual(read('syslog_rfc3164',[{body:{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'}}],'body.flow.sport'),[],'literal dotted key in a Syslog body, TCP');
+// The header object of the WatchGuard reading holds the HOSTNAME of the Syslog header: not proposed.
 const wg=kv=>({watchguard_header:{hostname:'WatchGuard-Firebox',app_tag:'firewall[10]'},watchguard:{kv}});
 const wgSample=[wg({msg_id:'3000-0148'}),wg({msg_id:'1AFF-0024',op:'GET',host:'www.example.com',arg:'/index.html'})];
-assert.deepEqual(read('generic_structural',wgSample,'watchguard_header.hostname'),['HIGH'],'Syslog header host of the WatchGuard reading');
+assert.deepEqual(read('generic_structural',wgSample,'watchguard_header.hostname'),[],'Syslog header host of the WatchGuard reading');
 assert.deepEqual(read('generic_structural',wgSample,'watchguard.kv.host'),[],'requested host beside the header host of the WatchGuard reading');
 // A protocol field without a value says nothing. One that holds an object or a list says what its scalar members
 // say, and an unknown protocol beside the port is evidence, never silence (independent audit 2026-11-21, F-04).
@@ -465,8 +506,8 @@ assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:null}],'srcport
 assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:{name:'x'}}],'srcport'),['REVIEW'],'object protocol field of an unknown protocol');
 assert.deepEqual(rv([{srcport:51234,dstport:443,proto:6,protocol:{name:'tcp'}}],'srcport'),['HIGH'],'object protocol field that names TCP');
 assert.deepEqual(rv([{sport:8,dport:0,protocol:{name:'icmp',number:1}}],'sport'),['REVIEW'],'object protocol field that names ICMP');
-assert.deepEqual(rv([{'flow.sport':8,'flow.dport':0,'flow.proto':'icmp'}],'flow.sport'),['REVIEW'],'literal dotted protocol key beside the port');
-assert.deepEqual(rv([{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'}],'flow.sport'),['HIGH'],'literal dotted protocol key that names TCP');
+assert.deepEqual(rv([{'flow.sport':8,'flow.dport':0,'flow.proto':'icmp'}],'flow.sport'),[],'a literal dotted key written with a prefix is not proposed');
+assert.deepEqual(rv([{'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'}],'flow.sport'),[],'a literal dotted key written with a prefix is not proposed, TCP');
 // Zeek conn.log: the port is a literal dotted key, the protocol a plain key of the same record.
 assert.deepEqual(rv([{'id.orig_h':'192.168.1.10','id.orig_p':51234,'id.resp_h':'8.8.8.8','id.resp_p':53,proto:'udp'}],'id.orig_p'),['HIGH'],'Zeek port alias beside proto');
 assert.deepEqual(rv([{'id.orig_h':'192.168.1.10','id.orig_p':8,'id.resp_h':'8.8.8.8','id.resp_p':0,proto:'icmp'}],'id.orig_p'),['REVIEW'],'Zeek port alias beside an ICMP proto');
@@ -503,9 +544,9 @@ absent({generic:{kv:{hostname:'bad.example.net',logid:'0316013056',srcintf:'inte
 absent({hostname:'bad.example.net',logid:'0316013056',srcintf:'internal',type:'utm'},'hostname');
 absent({body:{logid:'0316013056',vd:'root',type:'utm',request:{hostname:'bad.example.net'}}},'body.request.hostname');
 // generic.kv is the record itself under the reading that produces it, and only under that reading.
-assert.deepEqual(read('generic_structural',[{generic:{kv:{hostname:'sensor1',vd:'root',type:'utm'}}}],'generic.kv.hostname'),['HIGH'],'host in the reader container of its reading');
-assert.deepEqual(read('json',[{generic:{kv:{hostname:'sensor1',vd:'root',type:'utm'}}}],'generic.kv.hostname'),['REVIEW'],'host in an object of a JSON log');
-high({hostname:'sensor1',other:{logid:'0316013056',vd:'root',type:'utm'}},'hostname','hostname','string');
+assert.deepEqual(read('generic_structural',[{generic:{kv:{hostname:'sensor1',vd:'root',type:'utm'}}}],'generic.kv.hostname'),[],'host in the reader container of its reading');
+assert.deepEqual(read('json',[{generic:{kv:{hostname:'sensor1',vd:'root',type:'utm'}}}],'generic.kv.hostname'),[],'host in an object of a JSON log');
+absent({hostname:'sensor1',other:{logid:'0316013056',vd:'root',type:'utm'}},'hostname');
 assert.equal(mod.fortiGateFalseFriend('generic.kv.hostname',[{generic:{kv:fortiWeb}}]),true);
 assert.equal(mod.fortiGateFalseFriend('hostname',[fortiWeb]),true);
 assert.equal(mod.fortiGateFalseFriend('generic.kv.srcip',[{generic:{kv:{...fortiWeb,srcip:'192.0.2.1'}}}]),false);
@@ -515,16 +556,18 @@ absent({body:{event_type:'alert',alert:{signature_id:99,severity:75}}},'body.ale
 absent({body:{event_type:'flow',alert:{signature_id:99,severity:75}}},'body.alert.severity');
 // The evidence of a record is in one container: pieces at different levels do not make a FortiGate record, and
 // a key of the same name deeper inside does not hide the alert that contains it.
-// (Still proposed, so not taken for a FortiGate false friend; a host inside an object is offered for review.)
-review({type:'alert',agent:{logid:'0316013056',vd:'root',hostname:'sensor1'}},'agent.hostname','hostname');
+absent({type:'alert',agent:{logid:'0316013056',vd:'root',hostname:'sensor1'}},'agent.hostname');
 absent({event_type:'alert',alert:{signature_id:99,severity:75,event_type:'x'}},'alert.severity');
 // Imperva Cloud WAF writes the client port as cpt and uses spt for the server port: spt beside cpt is not the
 // source port. Without cpt the CEF dictionary stands (asserted above: spt with protocol tcp is srcport).
 absent({spt:443,cpt:40022,protocol:'tcp'},'spt');
-absent({body:{spt:443,cpt:40022,protocol:'tcp'}},'body.spt');
-high({body:{spt:443,protocol:'tcp'}},'body.spt','srcport','integer');
+absent(bodyOf({spt:443,cpt:40022,protocol:'tcp'}),'body.spt');
+high(bodyOf({spt:443,protocol:'tcp'}),'body.spt','srcport','integer');
 high({spt:443,protocol:'tcp',other:{cpt:40022}},'spt','srcport','integer');
-high({body:{spt:443,protocol:'tcp'},cpt:40022},'body.spt','srcport','integer');
+high(readBy('syslog_rfc3164',{body:{spt:443,protocol:'tcp'},cpt:40022}),'body.spt','srcport','integer');
+// A JSON object called body is an object of the log: its member is not the record's port.
+absent({body:{spt:443,protocol:'tcp'}},'body.spt');
+absent(readBy('json',{body:{spt:443,protocol:'tcp'}}),'body.spt');
 // `sport` is the source port beside a destination port, and the server port in records that name their endpoints
 // client and server (cip sip cport sport; W3C c-ip s-ip s-port). It is approved only when the same record has a
 // destination port; otherwise it is offered for review. Other source-port names are not affected.
@@ -534,13 +577,13 @@ review({client_ip_address:'10.2.2.1',server_ip_address:'192.0.2.20',sport:443},'
 review({client_hostname:'pc-1',server_hostname:'web-1',sport:443},'sport','srcport');
 review({remote_ip:'10.2.2.1',local_ip:'192.0.2.20',sport:443},'sport','srcport');
 review({category:'web',count:3,sport:52000},'sport','srcport');
-review({body:{cport:51000,sport:443}},'body.sport','srcport');
-review({meta:{dport:443},body:{sport:52000}},'body.sport','srcport');
+review(bodyOf({cport:51000,sport:443}),'body.sport','srcport');
+review(readBy('syslog_rfc3164',{meta:{dport:443},body:{sport:52000}}),'body.sport','srcport');
 high({sip:'10.3.3.5',dip:'192.0.2.30',sport:52000,dport:443},'sport','srcport','integer');
 high({cip:'10.2.2.5',sport:52000,dport:443},'sport','srcport','integer');
 high({cip:'10.2.2.5',sport:52000,dst_port:443},'sport','srcport','integer');
 high({sport:52000,dstport:443},'sport','srcport','integer');
-high({body:{sport:52000,dport:443}},'body.sport','srcport','integer');
+high(bodyOf({sport:52000,dport:443}),'body.sport','srcport','integer');
 high({cip:'10.2.2.5',src_port:52000},'src_port','srcport','integer');
 high({cport:51000,source_port:52000},'source_port','srcport','integer');
 assert.deepEqual(suggest([{sport:52000,dport:443},{sport:443}]).filter(c=>c.source==='sport').map(c=>c.confidence),['REVIEW'],

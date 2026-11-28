@@ -456,7 +456,7 @@ export default function NormalizationMappingReview({
       <div className="normalization-section-head">
         <div>
           <h3>Recommended matches <HelpTip label="Recommended matches"
-            text="Parser Studio compares field names and sample values with Stellar Cyber's published field dictionary. A recommendation is automatic only when the observed values fit the expected kind of data."/></h3>
+            text="Parser Studio recommends a Stellar Cyber field only for a short reviewed list of fields whose meaning a field name can carry (addresses, ports, protocol, URL, action, time, user), and only when the observed values fit. Every other field keeps its own name and value; map it with ChatGPT or by hand when you know what it means."/></h3>
           <p>Start with the recommended matches. Fields that are ambiguous or system-managed are left alone for you to review.</p>
         </div>
         <button type="button" className="auto-parser-primary"

@@ -32,16 +32,31 @@ describe('Canonical conformance contract — deterministic browser and authored 
     expect(policy.contract).toBe('parser-studio.semantic-policy.v1');
     expect(policy.transportPortProtocols.numeric).toEqual([6,17]);
     const ids=[...corpus.portEvidence,...corpus.explicitPortAliasEvidence,
-      ...corpus.kvWhitespace,...corpus.regexSafety,...corpus.reviewOnlyScoreTargets].map(x=>x.id);
+      ...corpus.kvWhitespace,...corpus.regexSafety,...corpus.defaultDeny,...corpus.memberOfObject].map(x=>x.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.length).toBeGreaterThanOrEqual(30);
   });
-  // A 0-100 score field (severity) is never official because of its name: no value shows the scale or direction.
-  it.each(corpus.reviewOnlyScoreTargets)('$id: a score is never official from its name',entry=>{
-    const candidates=suggestNormalizationCandidates({severity:entry.severity,srcip:'192.0.2.1'},[]);
+  // Default deny: a field is official from its name only when the shared policy lists it (and its value passes
+  // the protections). The Python preview answers the same cases (tests/test_semantic_conformance_corpus.py).
+  it.each(corpus.defaultDeny)('$id: official from the name only when the policy lists the field',entry=>{
+    const candidates=suggestNormalizationCandidates({[entry.field]:entry.value,srcip:'192.0.2.1'},[]);
     const official=candidates.filter(item=>item.confidence==='HIGH'&&item.safeForBulk).map(item=>item.target);
-    expect(official.includes('severity'),entry.id).toBe(entry.allow);
+    expect(official.includes(entry.field),entry.id).toBe(entry.allow);
     expect(official,entry.id).toContain('srcip');
+    if(entry.allow)expect(Object.keys(policy.autoApprovedTargets),entry.id).toContain(entry.field);
+  });
+  it.each(corpus.memberOfObject)('$id: a member of an object of the record is not a field of the record',entry=>{
+    const official=suggestNormalizationCandidates(entry.record as Record<string,unknown>,[],'json')
+      .map(item=>[item.source,item.target]);
+    expect(official,entry.id).toEqual([['dstip','dstip']]);
+  });
+  it('covers every field the policy lists or records as left out, in the shared cases',()=>{
+    const fields=new Set(corpus.defaultDeny.map(entry=>entry.field));
+    // rule.name is a nested name (a key=value record cannot write it); srcip stands beside every case.
+    for(const name of Object.keys(policy.autoApprovedTargets).filter(name=>!['rule.name','srcip','srcport','dstport'].includes(name)))
+      expect(fields,name).toContain(name);
+    for(const name of ['hostname','hostip','severity','fidelity','duration','icmp_type','event_type'])
+      expect(fields,name).toContain(name);
   });
   it.each(corpus.portEvidence)('$id: no unsupported protocol creates automatic ports',
     entry=>{

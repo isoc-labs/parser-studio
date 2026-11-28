@@ -34,8 +34,12 @@ describe('sport is the source port only beside a destination port',()=>{
     expect(sportOf(fields)).toMatchObject({target:'srcport',confidence:'REVIEW'});
   });
   it('looks at the names beside it, not at names of another object',()=>{
-    expect(sportOf({body:{sport:52000,dport:443}})).toMatchObject({source:'body.sport',confidence:'HIGH'});
-    expect(sportOf({meta:{dport:443},body:{sport:52000}})).toMatchObject({source:'body.sport',confidence:'REVIEW'});
+    const inBody=(fields:Record<string,unknown>)=>suggestNormalizationCandidates(fields,[],'syslog_rfc3164')
+      .find(item=>item.source.endsWith('sport'));
+    expect(inBody({body:{sport:52000,dport:443}})).toMatchObject({source:'body.sport',confidence:'HIGH'});
+    expect(inBody({meta:{dport:443},body:{sport:52000}})).toMatchObject({source:'body.sport',confidence:'REVIEW'});
+    // Without a reader that wrote it, body is an object of the log and its member is not proposed (default deny).
+    expect(sportOf({body:{sport:52000,dport:443}})).toBeUndefined();
   });
   it('is not approved when one event of the sample has no destination port beside it',()=>{
     const suite={events:[{fields:{sport:52000,dport:443}},{fields:{sport:443}}]} as unknown as SuiteResult;

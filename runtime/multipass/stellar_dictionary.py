@@ -36,7 +36,8 @@ _L4_NUMERIC=frozenset(_POLICY["transportPortProtocols"]["numeric"])
 _L4_NAMES=frozenset(_POLICY["transportPortProtocols"]["names"])
 _EXPLICIT_PORT_ALIASES=dict(_POLICY["explicitPortSourceAliases"])
 _DOCUMENTED_PROTO_NAMES=frozenset(_POLICY["officialProtocolNames"])
-_REVIEW_ONLY_SCORE_TARGETS=frozenset(_POLICY["reviewOnlyScoreTargets"])
+# Default deny: the official fields a name may be proposed for, each with its dictionary definition and basis.
+_AUTO_APPROVED_TARGETS=frozenset(_POLICY["autoApprovedTargets"])
 DICTIONARY_REVISION="stellar-standard-metadata-7.0.xs-2026-10-14"
 OFFICIAL_DICTIONARY_URL_65="https://docs.stellarcyber.ai/prod-docs/6.5.xs/Common/Metadata-Dictionary.htm?TocPath=REFERENCE%7C_____8"
 OFFICIAL_DICTIONARY_URL_70="https://docs.stellarcyber.ai/7.0.xs/Common/Metadata-Dictionary.htm"
@@ -50,7 +51,9 @@ class DictionaryField:
     data_type:str
     evidence_url:str
 
-# Deliberately small P0 contract. Additions require authoritative field/type evidence.
+# The fields this preview can coerce. Which of them may be proposed is decided by the shared policy
+# (autoApprovedTargets), the same list the browser mapping proposals read: a field the policy does not list is
+# never proposed here, whatever this table holds. Additions require authoritative field/type evidence there.
 FIELDS={
     item.name:item for item in (
         DictionaryField("action","string",STELLAR_DICTIONARY_URL),
@@ -60,12 +63,11 @@ FIELDS={
         DictionaryField("dstport","integer",STELLAR_DICTIONARY_URL),
         DictionaryField("proto","integer",STELLAR_DICTIONARY_URL),
         DictionaryField("proto_name","string",STELLAR_DICTIONARY_URL),
-        DictionaryField("hostname","string",STELLAR_DICTIONARY_URL),
         DictionaryField("username","string",STELLAR_DICTIONARY_URL),
         DictionaryField("url","string",STELLAR_DICTIONARY_URL),
-        DictionaryField("severity","integer",STELLAR_DICTIONARY_URL),
-    )
+    ) if item.name in _AUTO_APPROVED_TARGETS
 }
+# The CEF extension keys and the explicit port labels lead to listed fields only.
 
 # Only valid inside a CEF_STANDARD source tree. These are CEF extension roles,
 # not guesses from generic aliases appearing in other log formats.
@@ -76,6 +78,7 @@ CEF_ALIASES={
     "dpt":"dstport",
     "act":"action",
 }
+assert set(CEF_ALIASES.values())|set(_EXPLICIT_PORT_ALIASES.values())<=set(FIELDS)
 
 @dataclass(frozen=True)
 class SourceOccurrenceRef:
@@ -188,12 +191,29 @@ def _span_values(event:SourceEvent)->list[tuple[SourceOccurrenceRef,Any]]:
         rows.append((SourceOccurrenceRef(span.path,occurrence,span.start_byte,span.end_byte),value))
     return rows
 
-def _identity_target(path:str)->str|None:
-    if path in FIELDS:
+# The reader of a Syslog envelope writes the pairs of the record into `body`; a JSON or key=value log that has
+# an object called body does not.
+_ENVELOPE_SYNTAX=re.compile(r"^[A-Z0-9_]*(?:SYSLOG|ENVELOPE)[A-Z0-9_]*\+")
+
+def _record_name(path:str,syntax:str,sd_param:bool=False)->str|None:
+    """The name a path stands for the record under, or None.
+
+    A name is evidence only where it stands for the record itself (the rule of the browser proposals): at the
+    root, or in the body an envelope reader wrote. A member of any other object of the record (xlate.srcip,
+    event.source-port) names that object. `sd_param` also takes the SD-PARAM of an RFC 5424 structured-data
+    element, which this preview reads for the explicit port labels only.
+    """
+    if "." not in path:
         return path
-    if path.startswith("body.") and path[5:] in FIELDS:
+    if path.startswith("body.") and "." not in path[5:] and _ENVELOPE_SYNTAX.match(syntax):
         return path[5:]
+    if sd_param and syntax.startswith("SYSLOG_RFC5424") and path.startswith("syslog.structured_data."):
+        return path.rsplit(".",1)[1]
     return None
+
+def _identity_target(path:str,syntax:str)->str|None:
+    name=_record_name(path,syntax)
+    return name if name in FIELDS else None
 
 def _excluded_port_path(path:str)->bool:
     excluded=frozenset(_POLICY['excludedPortSourceSegments'])
@@ -207,13 +227,15 @@ def _excluded_port_path(path:str)->bool:
     return False
 
 
-def _explicit_port_target(path:str)->str|None:
+def _explicit_port_target(path:str,syntax:str)->str|None:
     # Same versioned source-identity rule as the browser: only the literal
-    # source leaf, never NAT/translated ancestors or ambiguous abbreviations.
-    # Keep the source occurrence and let the common integer/range guard apply.
+    # source label where it stands for the record, never NAT/translated
+    # ancestors or ambiguous abbreviations. Keep the source occurrence and
+    # let the common integer/range guard apply.
     if _excluded_port_path(path):
         return None
-    return _EXPLICIT_PORT_ALIASES.get(path.lower().split('.')[-1])
+    name=_record_name(path,syntax,sd_param=True)
+    return _EXPLICIT_PORT_ALIASES.get(name.lower()) if name else None
 
 def _cef_target(path:str,syntax:str)->str|None:
     # Multi-Pass syntax may preserve a base CEF result or name the accepted
@@ -242,7 +264,6 @@ def _coerce(field:str,value:Any)->tuple[bool,Any]:
         else:return False,value
         if field in ("srcport","dstport") and not 0<=number<=65535:return False,value
         if field=="proto" and not 0<=number<=255:return False,value
-        if field=="severity" and not 0<=number<=100:return False,value
         return True,number
     return False,value
 
@@ -250,7 +271,7 @@ def _coerce(field:str,value:Any)->tuple[bool,Any]:
 # Unknown values remain unchanged in vendor source, never inferred as policy.
 SECURITY_DISPOSITIONS=frozenset(_POLICY["securityDispositions"])
 
-def _semantic_rejection(target:str,value:Any,observed:list[tuple[str,Any]])->str|None:
+def _semantic_rejection(target:str,value:Any,observed:list[tuple[str,Any]],syntax:str)->str|None:
     if target=="action" and (
         not isinstance(value,str) or value.strip().lower() not in SECURITY_DISPOSITIONS
     ):
@@ -259,16 +280,13 @@ def _semantic_rejection(target:str,value:Any,observed:list[tuple[str,Any]])->str
         not isinstance(value,str) or value.strip().lower() not in _DOCUMENTED_PROTO_NAMES
     ):
         return "DICTIONARY_PROTOCOL_NAME_UNSUPPORTED"
-    # Neither the name nor a value inside 0-100 shows the scale, direction or meaning of a source score
-    # (shared reviewOnlyScoreTargets policy): never suggested from the name.
-    if target in _REVIEW_ONLY_SCORE_TARGETS:
-        return "DICTIONARY_SCORE_NEEDS_REVIEW"
     if target not in ("srcport","dstport"):
         return None
     numeric=set()
     names=set()
     for path,observed_value in observed:
-        field=_identity_target(path)
+        field=_record_name(path,syntax)
+        field=field if field in FIELDS else None
         if field=="proto":
             ok,number=_coerce("proto",observed_value)
             if not ok:return "DICTIONARY_PROTOCOL_UNCERTAIN"
@@ -306,13 +324,13 @@ def project_stellar_dictionary(candidate:CandidateResult)->DictionaryProjection:
     unmapped=0;issues=[]
     observed=[(item.display_path,item.value) for item in candidate.occurrences]
     for occurrence in candidate.occurrences:
-        target=_identity_target(occurrence.display_path)
+        target=_identity_target(occurrence.display_path,candidate.syntax)
         if target is None:
             unmapped+=1;continue
         ok,_=_coerce(target,occurrence.value)
         if not ok:
             issues.append("DICTIONARY_TYPE_REJECTED:"+target);unmapped+=1;continue
-        semantic=_semantic_rejection(target,occurrence.value,observed)
+        semantic=_semantic_rejection(target,occurrence.value,observed,candidate.syntax)
         if semantic:
             issues.append(semantic+":"+target);unmapped+=1;continue
         proposed[target].append(occurrence)
@@ -338,16 +356,16 @@ def normalize_stellar_dictionary(event:SourceEvent)->DictionaryNormalization:
     issues=[]
 
     for ref,value in rows:
-        target=(_identity_target(ref.path) or _cef_target(ref.path,event.syntax)
-                or _explicit_port_target(ref.path))
+        target=(_identity_target(ref.path,event.syntax) or _cef_target(ref.path,event.syntax)
+                or _explicit_port_target(ref.path,event.syntax))
         if target is None:
             unmapped.append(ref);continue
         ok,normalized=_coerce(target,value)
         if not ok:
             issues.append("DICTIONARY_TYPE_REJECTED:"+target)
             unmapped.append(ref);continue
-        semantic=(None if _explicit_port_target(ref.path)==target
-                  else _semantic_rejection(target,value,observed))
+        semantic=(None if _explicit_port_target(ref.path,event.syntax)==target
+                  else _semantic_rejection(target,value,observed,event.syntax))
         if semantic:
             issues.append(semantic+":"+target)
             unmapped.append(ref);continue
@@ -364,7 +382,7 @@ def normalize_stellar_dictionary(event:SourceEvent)->DictionaryNormalization:
         rule_id=("cef:"+ref.path+"->"+target
                  if _cef_target(ref.path,event.syntax)==target
                  else "explicit-source:"+ref.path+"->"+target
-                 if _explicit_port_target(ref.path)==target
+                 if _explicit_port_target(ref.path,event.syntax)==target
                  else "identity:"+ref.path+"->"+target)
         mappings.append(DictionaryMapping(
             ref,target,FIELDS[target].data_type,value,rule_id,

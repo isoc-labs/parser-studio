@@ -51,8 +51,9 @@ test('RFC5424 wrapped LEEF maps standard body aliases',async({page})=>{
     '<165>1 2026-10-16T03:11:02Z edge-13 security 12 EV13 - LEEF:2.0|Vendor|Firewall|1|102|^|src=192.0.2.22^dst=198.51.100.22^srcPort=52002^dstPort=53^action=allow',
   ];
   const map=await openMap(page,rows);
+  // timestamp is the RFC 5424 header time (official before as well); the helper compares the whole official set.
   await verifyOfficialMappings(map,
-    ['srcip','dstip','srcport','dstport','action'],'wrapped LEEF');
+    ['srcip','dstip','srcport','dstport','action','timestamp'],'wrapped LEEF');
 });
 
 test('IPv6 addresses are high-confidence when runtime conversion accepts them',async({page})=>{

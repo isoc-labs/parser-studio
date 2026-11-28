@@ -21,8 +21,13 @@ describe('MCV2 independent semantic source->Stellar target oracles',()=>{
     {name:'documented action',fields:{action:'allow'},path:'action',target:'action',high:true},
     {name:'oversized protocol number',fields:{proto:256},path:'proto',target:'proto',high:false},
     {name:'documented protocol number',fields:{proto:6},path:'proto',target:'proto',high:true},
-    {name:'milliseconds duration',fields:{duration_ms:1000},path:'duration_ms',target:'duration',high:true},
   ];
+  // Default deny, 2026-11-28: the policy does not list duration (a name states neither that a session was timed
+  // nor, without the suffix, the unit).
+  it('does not propose a duration from its name, with or without the unit',()=>{
+    expect(scan([{duration_ms:1000}])).toEqual([]);
+    expect(scan([{duration:1000}])).toEqual([]);
+  });
   it.each(independentCases)('$name has exact typed evidence, not a vendor prefix',row=>{
     const found=scan([row.fields]).find(c=>c.source===row.path);
     expect(found?.target).toBe(row.target);

@@ -54,11 +54,14 @@ assert.ok(checked>=20,'shared semantic positive coverage regressed: '+checked);
 const nestedPort='syslog_sd.element_1.params.source-port';
 const nestedDest='syslog_sd.element_1.params.destination-port';
 const multiEvents={events:[
-  {fields:{syslog_sd:{element_1:{params:{
+  {effectiveFormat:'syslog_rfc5424',fields:{syslog_sd:{element_1:{params:{
     'source-port':'594','destination-port':'10400'}}}}},
-  {fields:{syslog_sd:{element_1:{params:{
+  {effectiveFormat:'syslog_rfc5424',fields:{syslog_sd:{element_1:{params:{
     'source-port':'37233','destination-port':'161'}}}}},
 ]} as unknown as SuiteResult;
+// The same path in an event another reader produced is a member of an object of the log (default deny).
+assert.deepEqual(suggestNormalizationCandidatesFromSuite({events:multiEvents.events.map(event=>
+  ({...event,effectiveFormat:'json'}))} as unknown as SuiteResult,[]),[]);
 const multi=suggestNormalizationCandidatesFromSuite(multiEvents,[]);
 for(const [source,target] of [[nestedPort,'srcport'],[nestedDest,'dstport']] as const){
   assert.equal(multi.find(x=>x.source===source)?.target,target);

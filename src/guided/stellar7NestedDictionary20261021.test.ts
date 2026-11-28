@@ -34,18 +34,18 @@ describe('fixed Stellar Cyber 7.0 namespace contract, no cross-version fallback'
     expect(valueFitsNormalizationTarget('action','string','block')).toBe(true);
   });
 
-  it('proposes only full-sample typed nested 7.0 mappings',()=>{
+  // Default deny, 2026-11-28: a nested 7.0 name is proposed only when the policy lists it (rule.name). The other
+  // names of the namespace supplement (process, file, host, user) are documented fields a user or a reviewed
+  // ChatGPT mapping may write; a matching name is not a reason to write them automatically.
+  it('proposes a nested 7.0 name only when the policy lists it',()=>{
     const data={
       process:{name:'powershell.exe',pid:890,hash:{sha256:'a'.repeat(64)}},
       file:{hash:{sha256:'b'.repeat(64)}},
-      host:{ip:'198.51.100.25'},user:{name:'test.user'},
+      host:{ip:'198.51.100.25'},user:{name:'test.user'},rule:{name:'Block-PowerShell'},
     };
-    const suggestions=suggestNormalizationCandidates(data,[]);
-    for(const field of ['process.name','process.pid','process.hash.sha256','file.hash.sha256','host.ip','user.name'])
-      expect(suggestions).toContainEqual(expect.objectContaining({source:field,target:field,
-        confidence:'HIGH',safeForBulk:true,group:'ns_fields'}));
-    const malformed=suggestNormalizationCandidates({file:{hash:{sha256:'a'.repeat(32)}}},[]);
-    expect(malformed[0]).toMatchObject({target:'file.hash.sha256',confidence:'REVIEW',safeForBulk:false});
+    expect(suggestNormalizationCandidates(data,[]).map(item=>[item.source,item.target,item.confidence,item.group]))
+      .toEqual([['rule.name','rule.name','HIGH','ns_fields']]);
+    expect(suggestNormalizationCandidates({file:{hash:{sha256:'a'.repeat(32)}}},[])).toEqual([]);
   });
 
   it('writes reviewed namespace mapping to nested preview while respecting official type',()=>{

@@ -19,7 +19,7 @@
     },
     "docs/03_FUNCTIONAL_REQUIREMENTS.md": {
       "status": "active",
-      "sha256": "9c47217cef95d73c8f5f872f0a126099a06e19a63bc26bd540a027f3dd25021c"
+      "sha256": "270c5fe9c5943274404129aa6512b5318e1423e60ea5944d3722a595b03ed232"
     },
     "docs/04_ARCHITECTURE.md": {
       "status": "supporting",
@@ -549,6 +549,10 @@
       "status": "historical",
       "sha256": "65dadcd381ee9bca649bbbd04add94d97c9e16de881c50e0fbd853cb59192f43"
     },
+    "docs/verification/20261128-default-deny-automatic-mapping.md": {
+      "status": "supporting",
+      "sha256": "ba8194beea73bfd2ed2b1689924f6f685c9c516e1e87af5cf2e2b9efd928d70f"
+    },
     "docs/verification/20261126-owner-template-approval.md": {
       "status": "historical",
       "sha256": "adb31e6e2b8d6335ccb981d73615bb67bcae002fe8d6c092d1ec90cd01233a90"
@@ -742,12 +746,36 @@
         {
           "path": "src/guided/stellarMetadataCatalog.ts",
           "contains": "Fixed 7.0 nested-scalar supplement; this is not a cross-version catalog."
+        },
+        {
+          "path": "src/guided/normalizationCandidates.ts",
+          "contains": "if(!target||!AUTO_APPROVED_TARGETS.has(target))return null;"
+        },
+        {
+          "path": "src/guided/normalizationCandidates.ts",
+          "contains": "if(!wholePathListed&&!recordLevelSource(recordPathOf(source),carrierFormats))return null;"
+        },
+        {
+          "path": "runtime/multipass/stellar_dictionary.py",
+          "contains": ") if item.name in _AUTO_APPROVED_TARGETS"
         }
       ],
       "tests": [
         {
           "path": "src/guided/stellar7NestedDictionary20261021.test.ts",
           "contains": "fixed Stellar Cyber 7.0 namespace contract, no cross-version fallback"
+        },
+        {
+          "path": "src/guided/defaultDenyMapping20261128.test.ts",
+          "contains": "proposes a same-named, type-fitting source for the listed fields and for no other field of the dictionary"
+        },
+        {
+          "path": "src/guided/defaultDenyMapping20261128.test.ts",
+          "contains": "does not take a name inside an object of the record for a field of the record"
+        },
+        {
+          "path": "tests/test_semantic_conformance_corpus.py",
+          "contains": "test_a_field_is_official_from_its_name_only_when_the_policy_lists_it"
         }
       ]
     },
