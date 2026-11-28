@@ -59,8 +59,9 @@ describe('official-catalog normalization candidates',()=>{
       expect.objectContaining({source:'spt',target:'srcport',confidence:'REVIEW',safeForBulk:false}),
       expect.objectContaining({source:'dpt',target:'dstport',confidence:'REVIEW',safeForBulk:false}),
       expect.objectContaining({source:'act',target:'action',confidence:'HIGH'}),
-      expect.objectContaining({source:'deviceName',target:'hostname',confidence:'HIGH'}),
     ]));
+    // Default deny, 2026-11-28: the policy does not list hostname; a device name keeps its own name.
+    expect(suggestions.some(item=>item.source==='deviceName')).toBe(false);
     expect(suggestNormalizationCandidates({src:'not-an-ip'},[])[0])
       .toMatchObject({source:'src',target:'srcip',confidence:'REVIEW',safeForBulk:false});
   });
@@ -73,10 +74,10 @@ describe('official-catalog normalization candidates',()=>{
       .toMatchObject({source:'event_time',target:'timestamp',confidence:'REVIEW',safeForBulk:false});
     expect(suggestNormalizationCandidates({dst_port:65536},[])[0])
       .toMatchObject({source:'dst_port',target:'dstport',confidence:'REVIEW',safeForBulk:false});
-    expect(suggestNormalizationCandidates({severity:101},[])[0])
-      .toMatchObject({source:'severity',target:'severity',confidence:'REVIEW',safeForBulk:false});
-    expect(suggestNormalizationCandidates({severity:100},[])[0])
-      .toMatchObject({source:'severity',target:'severity',confidence:'HIGH',safeForBulk:true});
+    // A 0-100 score target is never proposed from its name, inside the range or outside it: neither shows the
+    // scale, direction or meaning of the source field (shared reviewOnlyScoreTargets policy).
+    expect(suggestNormalizationCandidates({severity:101},[])).toEqual([]);
+    expect(suggestNormalizationCandidates({severity:100},[])).toEqual([]);
   });
   it('uses the final segment of nested source paths while preserving the full source path',()=>{
     const suggestions=suggestNormalizationCandidates({
@@ -84,9 +85,10 @@ describe('official-catalog normalization candidates',()=>{
         syslog:{host:'bigip-waf01',time:'00:14:27'},
         generic:{fields:{ip_client:'203.0.113.210',dest_ip:'10.20.1.25',dest_port:'443',protocol:'HTTPS'}},
       },
-    },[]);
+    },[],'generic_structural');
+    // The Syslog header host is not proposed (the policy does not list hostname).
+    expect(suggestions.some(item=>item.source==='parserstudio_source.syslog.host')).toBe(false);
     expect(suggestions).toEqual(expect.arrayContaining([
-      expect.objectContaining({source:'parserstudio_source.syslog.host',target:'hostname',confidence:'HIGH'}),
       expect.objectContaining({source:'parserstudio_source.generic.fields.ip_client',target:'srcip',confidence:'HIGH'}),
       expect.objectContaining({source:'parserstudio_source.generic.fields.dest_ip',target:'dstip',confidence:'HIGH'}),
       expect.objectContaining({source:'parserstudio_source.generic.fields.dest_port',target:'dstport',confidence:'REVIEW',safeForBulk:false}),
@@ -111,20 +113,15 @@ describe('official-catalog normalization candidates',()=>{
       tactic:'Execution',technique:'PowerShell',techniqueId:'T1059.001',
       action:'Detection',
     },[]);
-    expect(suggestions).toEqual(expect.arrayContaining([
-      expect.objectContaining({source:'timestamp',target:'timestamp',confidence:'HIGH'}),
-      expect.objectContaining({source:'severity',target:'severity',confidence:'HIGH'}),
-      expect.objectContaining({source:'hostname',target:'hostname',confidence:'HIGH'}),
-      expect.objectContaining({source:'localIP',target:'hostip',confidence:'HIGH'}),
-      expect.objectContaining({source:'userName',target:'username',confidence:'HIGH'}),
-      expect.objectContaining({source:'processName',target:'process_name',confidence:'HIGH'}),
-      expect.objectContaining({source:'commandLine',target:'command',confidence:'HIGH'}),
-      expect.objectContaining({source:'parentProcess',target:'parent_proc_name',confidence:'HIGH'}),
-      expect.objectContaining({source:'sha256',target:'sha256',confidence:'HIGH'}),
-    ]));
+    // Default deny, 2026-11-28: of these names only the time and the user name are listed fields. The host, the
+    // host address, the process, its parent, the command line and the hash keep their own names (the policy
+    // records why hostname, hostip, process_name, parent_proc_name and command were left out).
+    expect(suggestions.map(item=>[item.source,item.target,item.confidence])).toEqual([
+      ['timestamp','timestamp','HIGH'],['userName','username','HIGH']]);
     // EDR event family and detection state are not Stellar ML event_type or enforcement action.
     expect(suggestions.some(item=>['eventType','action'].includes(item.source))).toBe(false);
-    expect(suggestions.some(item=>['severityName','tactic','technique','techniqueId'].includes(item.source))).toBe(false);
+    // The vendor's own severity number (80 here) keeps its name: its scale is the vendor's, not shown to be Stellar's.
+    expect(suggestions.some(item=>['severity','severityName','tactic','technique','techniqueId'].includes(item.source))).toBe(false);
   });
 
   it('abstains when another mapping owns the official destination',()=>{
@@ -138,7 +135,7 @@ describe('official-catalog normalization candidates',()=>{
       const fields=generic(
         {protocol:'udp',sport:'55719',dport:'53 pattern: allow all'},
         {dport_001:'53',dport_002:'pattern:',dport_003:'allow',dport_004:'all'});
-      const candidates=suggestNormalizationCandidates(fields,[]);
+      const candidates=suggestNormalizationCandidates(fields,[],'generic_structural');
       expect(candidates).toContainEqual(expect.objectContaining({
         source:'generic.atoms.dport_001',target:'dstport',type:'integer',
         confidence:'HIGH',safeForBulk:true}));
@@ -148,7 +145,7 @@ describe('official-catalog normalization candidates',()=>{
     });
     it('does not accept an atom whose own value is not a valid port',()=>{
       const fields=generic({dport:'abc def'},{dport_001:'abc',dport_002:'def'});
-      const high=suggestNormalizationCandidates(fields,[]).filter(item=>item.confidence==='HIGH');
+      const high=suggestNormalizationCandidates(fields,[],'generic_structural').filter(item=>item.confidence==='HIGH');
       expect(high.some(item=>item.target==='dstport')).toBe(false);
     });
     it('does not truncate free-text or timestamp values into official fields',()=>{
@@ -156,14 +153,14 @@ describe('official-catalog normalization candidates',()=>{
         {time:'2026-01-01 10:00:00',msg:'53 apples',bytes:'1024 KB'},
         {time_001:'2026-01-01',time_002:'10:00:00',msg_001:'53',msg_002:'apples',
           bytes_001:'1024',bytes_002:'KB'});
-      const high=suggestNormalizationCandidates(fields,[]).filter(item=>item.source.includes('atoms.'));
+      const high=suggestNormalizationCandidates(fields,[],'generic_structural').filter(item=>item.source.includes('atoms.'));
       expect(high).toEqual([]);
     });
     it('keeps non-transport protocol context for a first-atom port (review, never bulk)',()=>{
       const fields=generic(
         {protocol:'icmp',dport:'53 trailing text'},
         {dport_001:'53',dport_002:'trailing',dport_003:'text'});
-      const atom=suggestNormalizationCandidates(fields,[])
+      const atom=suggestNormalizationCandidates(fields,[],'generic_structural')
         .find(item=>item.source==='generic.atoms.dport_001');
       expect(atom).toMatchObject({confidence:'REVIEW',safeForBulk:false});
     });
@@ -171,13 +168,13 @@ describe('official-catalog normalization candidates',()=>{
       const fields=generic(
         {protocol:'icmp reply',sport:'1 x',dport:'53 trailing text'},
         {protocol_001:'icmp',protocol_002:'reply',dport_001:'53',dport_002:'trailing',dport_003:'text'});
-      const high=suggestNormalizationCandidates(fields,[])
+      const high=suggestNormalizationCandidates(fields,[],'generic_structural')
         .filter(item=>item.confidence==='HIGH'&&/^generic\.atoms\.(s|d)port_001$/.test(item.source));
       expect(high).toEqual([]);
     });
     it('does not use a non-first atom as the port value',()=>{
       const fields=generic({dport:'x 53'},{dport_001:'x',dport_002:'53'});
-      expect(suggestNormalizationCandidates(fields,[])
+      expect(suggestNormalizationCandidates(fields,[],'generic_structural')
         .some(item=>item.source==='generic.atoms.dport_002')).toBe(false);
     });
   });

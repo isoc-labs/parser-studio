@@ -16,6 +16,8 @@ interface Golden{
   confidence?:'HIGH'|'REVIEW';hint:'REVIEW_REQUIRED'|'DESTINATION_CONFLICT'|'EXISTING_MAPPING'|null;
   hintTarget?:string;safeForBulk:boolean;
   context?:Record<string,unknown>;existingDestinations?:string[];
+  /** The reader that produced the event, where the source sits in a container of that reader. */
+  reader?:string;
 }
 type Truth={
   contract:string;oracleOrigin:string;notDerivedFrom:string[];cases:Golden[];
@@ -63,7 +65,7 @@ for(const row of truth.cases){
   const existing=(row.existingDestinations??[]).map((target,i)=>({
     id:'occupied-'+i,source:'other_'+i,target,type:'string' as const,
   }));
-  const browser=suggestNormalizationCandidates(fields,existing);
+  const browser=suggestNormalizationCandidates(fields,existing,row.reader);
   const browserMatch=browser.find(x=>x.source===row.source);
   if(row.target===null){
     assert.equal(browserMatch,undefined,

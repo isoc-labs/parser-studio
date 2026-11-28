@@ -70,21 +70,42 @@ test('independent non-endpoint semantic entries cover every registered case and 
   const file=resolve(root,'evals/golden-corpus/stellar70-semantic-goldens.v1.json');
   const semantic=JSON.parse(readFileSync(file,'utf8')) as {
     contract:string; cases:Record<string,{source:string;target:string;value:string|number}[]>;
+    notOfficial:Record<string,{source:string;target:string;value:string|number}[]>;
+  };
+  const policy=JSON.parse(readFileSync(resolve(root,'runtime/multipass/semantic-policy.v1.json'),'utf8')) as {
+    autoApprovedTargets:Record<string,unknown>;
   };
   assert.equal(semantic.contract,'parserstudio.stellar70-semantic-goldens.v1');
   const all=registry.files.flatMap(file=>(JSON.parse(readFileSync(resolve(root,file),'utf8')) as {
     cases:{id:string;sampleClass:string;rawSample:string}[]
   }).cases).filter(c=>c.sampleClass.startsWith('VENDOR_DOCUMENTED'));
   assert.deepEqual(Object.keys(semantic.cases).sort(),all.map(c=>c.id).sort());
-  const integerTargets=new Set(['proto','appid','vlan','file_size']);
-  const stringTargets=new Set(['proto_name','fw_policy_id','srcmac','username','action','file_path']);
+  const integerTargets=new Set(['proto','vlan']);
+  const stringTargets=new Set(['proto_name','srcmac','action']);
   let count=0;
   for(const c of all)for(const entry of semantic.cases[c.id]!){
     assert.ok(entry.source);
     assert.ok(c.rawSample.includes(String(entry.value)),c.id+' '+entry.source);
     assert.ok(integerTargets.has(entry.target)?Number.isInteger(entry.value):
       stringTargets.has(entry.target)&&typeof entry.value==='string',entry.target);
+    // Default deny (owner decision 2026-11-28): an official value is expected only for a field the shared policy
+    // lists, from a source that stands for the record (not a member of an object of the record).
+    assert.ok(Object.hasOwn(policy.autoApprovedTargets,entry.target),c.id+' expects an official field the policy does not list: '+entry.target);
+    assert.ok(!entry.source.includes('.'),c.id+' expects an official value from a member of an object: '+entry.source);
     count++;
   }
-  assert.equal(count,20);
+  // 20 until 2026-11-28; eight rows moved to notOfficial.
+  assert.equal(count,12);
+  let declined=0;
+  for(const [id,rows] of Object.entries(semantic.notOfficial)){
+    const c=all.find(item=>item.id===id);
+    assert.ok(c,'notOfficial names an unregistered case: '+id);
+    for(const entry of rows){
+      assert.ok(c!.rawSample.includes(String(entry.value)),id+' '+entry.source);
+      assert.ok(!Object.hasOwn(policy.autoApprovedTargets,entry.target)||entry.source.includes('.'),
+        id+': '+entry.source+' -> '+entry.target+' is a listed field of the record and belongs in cases');
+      declined++;
+    }
+  }
+  assert.equal(declined,8);
 });

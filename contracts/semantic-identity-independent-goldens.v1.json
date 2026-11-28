@@ -12,9 +12,9 @@
     {"id":"literal-dest-port","source":"destination-port","value":"10400","target":"dstport","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true},
     {"id":"official-source-port","source":"srcport","value":"37233","target":"srcport","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true},
     {"id":"official-dest-port","source":"dstport","value":"161","target":"dstport","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true},
-    {"id":"nested-sd-source","source":"syslog_sd.element_1.params.source-port","value":"594","target":"srcport","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true},
-    {"id":"nested-sd-destination","source":"syslog_sd.element_1.params.destination-port","value":"10400","target":"dstport","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true},
-    {"id":"ordinary-non-nat-prefix","source":"national.source-port","value":"594","target":"srcport","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true},
+    {"id":"nested-sd-source","source":"syslog_sd.element_1.params.source-port","value":"594","target":"srcport","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true,"reader":"syslog_rfc5424"},
+    {"id":"nested-sd-destination","source":"syslog_sd.element_1.params.destination-port","value":"10400","target":"dstport","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true,"reader":"syslog_rfc5424"},
+    {"id":"ordinary-non-nat-prefix","source":"national.source-port","value":"594","target":null,"hint":"REVIEW_REQUIRED","hintTarget":"srcport","safeForBulk":false},
     {"id":"action-allow","source":"action","value":"allow","target":"action","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true},
     {"id":"action-detection-unverified","source":"action","value":"Detection","target":null,"hint":"REVIEW_REQUIRED","safeForBulk":false},
     {"id":"username-identity","source":"username","value":"alice","target":"username","confidence":"HIGH","hint":"REVIEW_REQUIRED","safeForBulk":true},
@@ -46,5 +46,6 @@
     "expectedSafeForBulk": false,
     "expectedBackendStatus": "REVIEW_REQUIRED"
   },
+  "defaultDeny": "Owner decision 2026-11-28. A name is evidence only where it stands for the record: 'reader' names the reader that wrote the SD-PARAMs of nested-sd-*; ordinary-non-nat-prefix (a port label inside an object called national) is no longer a browser proposal - it was HIGH while a member of any object was taken for a field of the record.",
   "targetIndexedProof": false
 }

@@ -32,6 +32,47 @@ class SharedSemanticConformance(unittest.TestCase):
                 self.assertEqual("SOURCE_PARSED",result["status"])
                 self.assertEqual("594",str(result["fields"]["srcport"]))
 
+    def test_a_field_is_official_from_its_name_only_when_the_policy_lists_it(self):
+        # Same corpus and same answers as the browser (src/conformanceCorpus20261107.test.ts). An entry marked
+        # "preview": false is a listed field this preview cannot coerce: the preview stays silent, never the reverse.
+        from stellar_dictionary import FIELDS
+        self.assertLessEqual(set(FIELDS),set(POLICY["autoApprovedTargets"]))
+        self.assertFalse(set(FIELDS)&set(POLICY["autoApprovalDeclined"]))
+        for item in CASES["defaultDeny"]:
+            with self.subTest(id=item["id"]):
+                field=item["field"]
+                result=preview(f'{field}={item["value"]} srcip=192.0.2.1')
+                mapped={m["targetField"] for m in result["dictionary"]["mapped"]}
+                expected=item["allow"] and item.get("preview",True)
+                self.assertEqual(expected,field in mapped,item["id"])
+                if item["allow"]:
+                    self.assertIn(field,POLICY["autoApprovedTargets"],item["id"])
+                else:
+                    self.assertNotIn(field,mapped,item["id"])
+                self.assertIn("srcip",mapped)
+                self.assertEqual("SOURCE_PARSED",result["status"])
+                self.assertEqual(item["value"],str(result["fields"][field]))
+
+    def test_a_member_of_an_object_of_the_record_is_not_a_field_of_the_record(self):
+        # Same corpus and same answers as the browser: a name inside an object of a JSON log names that object.
+        for item in CASES["memberOfObject"]:
+            with self.subTest(id=item["id"]):
+                result=preview(json.dumps(item["record"]))
+                mapped={m["sourcePath"]:m["targetField"] for m in result["dictionary"]["mapped"]}
+                self.assertEqual("SOURCE_PARSED",result["status"])
+                self.assertNotIn(item["path"],mapped,item["id"])
+                self.assertEqual({"dstip":"dstip"},mapped,item["id"])
+
+    def test_an_sd_param_is_read_for_the_explicit_port_labels_only(self):
+        # The browser accepts an EXACT_DICTIONARY_NAME projection at the root or in the body only
+        # (src/guided/multipassPreviewClient.ts); a listed name among the SD-PARAMs is left to the browser proposals.
+        raw=('<14>1 2019-11-14T11:12:46.573+01:00 SRX-GW1 RT_FLOW - RT_FLOW_SESSION_CREATE '
+             '[junos@67.43.156.15 source-port="37233" destination-port="161" username="alice" action="deny"]')
+        result=preview(raw)
+        self.assertEqual("SOURCE_PARSED",result["status"])
+        self.assertEqual({"srcport":"EXPLICIT_SOURCE_ALIAS","dstport":"EXPLICIT_SOURCE_ALIAS"},
+                         {m["targetField"]:m["mappingClass"] for m in result["dictionary"]["mapped"]})
+
     def test_versioned_named_source_aliases_are_cross_engine_and_value_guarded(self):
         self.assertEqual({'source-port':'srcport','destination-port':'dstport'},
                          POLICY['explicitPortSourceAliases'])

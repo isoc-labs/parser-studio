@@ -25,7 +25,11 @@ test('Issue #232 original tutorial: shared numeric port aliases compile to DRAFT
     await review.click();
     await page.getByLabel('Review Fields stage').getByRole('button',{name:'Map Fields'}).click();
     const stage=page.getByLabel('Map Fields stage');
-    await expect(stage.getByLabel('Field mapping summary')).toContainText('Matched to Stellar8');
+    // Default deny (owner decision 2026-11-28): 7, not 8. The syslog header host is no longer written as hostname
+    // (the policy does not list hostname: the header names the sender, which may be a relay); it stays a vendor field.
+    await expect(stage.getByLabel('Field mapping summary')).toContainText('Matched to Stellar7');
+    await expect(stage.locator('article.normalization-map-row.verified[data-source-path="syslog_hostname"]')).toHaveCount(0);
+    await expect(stage.locator('article.normalization-map-row.custom[data-source-path="syslog_hostname"]')).toHaveCount(1);
     await expect(stage.getByLabel('Protocol-aware mapping explanation')).toHaveCount(0);
     await expect(stage.getByText(/Conditional official field:/)).toHaveCount(0);
     const rows=await stage.locator('article.normalization-map-row').evaluateAll(nodes=>nodes.map(node=>({

@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {fireEvent,render,screen} from '@testing-library/react';
+import {act,fireEvent,render,screen} from '@testing-library/react';
 import {describe,it,expect,vi} from 'vitest';
 import {preview} from '../parser';
 import {createDraft,type MappingRule,type ParserDraft} from '../model';
@@ -52,6 +52,44 @@ describe('Map Fields vendor-only list',()=>{
     expect(after.open).toBe(true);
     expect(after.querySelector('summary')).toHaveTextContent('Vendor-only fields (13)');
   });
+
+  // The list a row is shown in follows its destination (matched fields first, vendor-only fields folded). While
+  // the destination is being typed the row must stay where it is: "dstip" is an official name on the way to
+  // "dstip_host", and "srcip_" is not one on the way to "srcip_host".
+  it('keeps a vendor row in place while an official name is typed key by key, then lists it with the matched fields',()=>{
+    const {container}=render(<Harness vendorCount={14}/>);
+    const details=container.querySelector('details.normalization-vendor-list') as HTMLDetailsElement;
+    details.open=true;
+    fireEvent(details,new Event('toggle'));
+    const input=screen.getByLabelText('Stellar field 3') as HTMLInputElement;
+    act(()=>input.focus());
+    const text='dstip_host';
+    for(let length=1;length<=text.length;length++){
+      fireEvent.change(input,{target:{value:text.slice(0,length)}});
+      expect(input.isConnected,text.slice(0,length)).toBe(true);
+      expect(document.activeElement,text.slice(0,length)).toBe(input);
+    }
+    expect(input).toHaveValue('dstip_host');
+    expect(details.contains(input)).toBe(true);
+    act(()=>input.blur());
+    const listed=screen.getByLabelText('Stellar field 3');
+    expect(listed).toHaveValue('dstip_host');
+    expect(container.querySelector('details.normalization-vendor-list')!.contains(listed)).toBe(false);
+    expect(container.querySelector('details.normalization-vendor-list summary')).toHaveTextContent('Vendor-only fields (13)');
+  },30_000);
+
+  it('keeps a matched row in place while its name passes through text that is not an official name',()=>{
+    const {container}=render(<Harness vendorCount={14}/>);
+    const input=screen.getByLabelText('Stellar field 0') as HTMLInputElement;
+    act(()=>input.focus());
+    for(const text of ['srcip_','srcip_h','srcip_ho','srcip_hos','srcip_host']){
+      fireEvent.change(input,{target:{value:text}});
+      expect(input.isConnected,text).toBe(true);
+      expect(document.activeElement,text).toBe(input);
+      expect(container.querySelector('details.normalization-vendor-list')!.contains(input),text).toBe(false);
+    }
+    expect(input).toHaveValue('srcip_host');
+  },30_000);
 
   it('does not fold a short list, so small samples look exactly as before',()=>{
     const {container}=render(<Harness vendorCount={5}/>);

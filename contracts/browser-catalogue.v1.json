@@ -659,7 +659,7 @@
     },
     {
       "file": "tests/common-security-logs.spec.ts",
-      "title": "common EDR JSON gets automatic Stellar mappings instead of leaving every field vendor-only",
+      "title": "common EDR JSON: the time and the user become Stellar fields, every other field keeps its own name",
       "disposition": "REQUIRED"
     },
     {
@@ -695,6 +695,16 @@
     {
       "file": "tests/d2-pri-cef-journey-20261125.spec.ts",
       "title": "a bare PRI before CEF (<189>CEF:0| and <189>CEF: 0|) is read as CEF with the PRI",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/default-deny-mapping-20261128.spec.ts",
+      "title": "default deny: only listed fields become official, on the screen and in the downloaded Ruby",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/default-deny-mapping-20261128.spec.ts",
+      "title": "default deny: a field that is not listed is mapped only by ChatGPT with the user's confirmation or by hand",
       "disposition": "REQUIRED"
     },
     {
@@ -1219,6 +1229,16 @@
       "disposition": "REQUIRED"
     },
     {
+      "file": "tests/keyboard-fill-harness.spec.ts",
+      "title": "fill() on a text input is carried out with one key press per character",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/keyboard-fill-harness.spec.ts",
+      "title": "fill() fails when the control being edited is replaced or removed by its own value, and when the value is cut",
+      "disposition": "REQUIRED"
+    },
+    {
       "file": "tests/kv-bare-token-verdict-20261125.spec.ts",
       "title": "key=value text with a bare token is not reported as parsed; Fix with ChatGPT gives a parser with stable fields",
       "disposition": "REQUIRED"
@@ -1365,7 +1385,7 @@
     },
     {
       "file": "tests/normalization-security-edge.spec.ts",
-      "title": "severity outside documented 0-100 range stays REVIEW",
+      "title": "severity is never recommended from its name, outside or inside the 0-100 range",
       "disposition": "REQUIRED"
     },
     {
@@ -2329,6 +2349,21 @@
       "disposition": "REQUIRED"
     },
     {
+      "file": "tests/parser-details-lifecycle-20261127.spec.ts",
+      "title": "Auto Parser: the final-step identity card stays while its values are typed and names the created files",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/parser-details-lifecycle-20261127.spec.ts",
+      "title": "ChatGPT Assisted: parser details typed after the reply keep the reply, its test and its approval",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/parser-details-lifecycle-20261127.spec.ts",
+      "title": "Map Fields: a row stays under the keyboard while a Stellar field name is typed through other official names",
+      "disposition": "REQUIRED"
+    },
+    {
       "file": "tests/parser-listener-port-6801.spec.ts",
       "title": "Auto and ChatGPT Assisted use one editable port before logs are supplied",
       "disposition": "REQUIRED"
@@ -2572,7 +2607,7 @@
     },
     {
       "file": "tests/stellar7-normalization-safety-20261021.spec.ts",
-      "title": "fixed Stellar 7.0 Dictionary: official nested process, file, host and user fields require proper types",
+      "title": "fixed Stellar 7.0 Dictionary: a nested name that equals a dictionary name is kept as a vendor field",
       "disposition": "REQUIRED"
     },
     {

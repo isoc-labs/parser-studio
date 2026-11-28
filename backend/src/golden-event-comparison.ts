@@ -38,7 +38,9 @@ export type GoldenProblemCode =
   | 'REQUIRED_FIELD_MISSING_IN_EVENT'
   | 'REQUIRED_FIELD_VALUE_MISMATCH'
   | 'AMBIGUOUS_VENDOR_NAMESPACE'
-  | 'CANONICAL_DESTINATION_MISMATCH';
+  | 'CANONICAL_DESTINATION_MISMATCH'
+  | 'DECLINED_DESTINATION_WRITTEN'
+  | 'DECLINED_VALUE_LOST';
 
 export interface GoldenProblem {
   readonly code: GoldenProblemCode;
@@ -84,6 +86,13 @@ function walk(root: Record<string, unknown>, path: string): { found: boolean; va
 }
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : JSON.stringify(value));
+/** Every scalar the record holds, at any depth, as text. */
+function leafValues(value: unknown, out: string[] = []): string[] {
+  if (Array.isArray(value)) for (const item of value) leafValues(item, out);
+  else if (isPlainObject(value)) for (const item of Object.values(value)) leafValues(item, out);
+  else if (value !== null && value !== undefined) out.push(String(value));
+  return out;
+}
 
 // Normalization may legitimately re-render a timestamp (for example adding
 // milliseconds or writing the offset with a colon). Two timestamps are the same
@@ -172,6 +181,8 @@ export function compareEventToGolden(input: {
   readonly events: readonly EmittedEvent[];
   /** Independently authored official root values; never supplied by browser mapping rows. */
   readonly expectedDestinations?: Readonly<Record<string, string | number>>;
+  /** Documented values the event must keep but must not write to the named official root field. */
+  readonly declinedDestinations?: readonly { readonly source: string; readonly target: string; readonly value: string | number }[];
 }): GoldenComparison {
   const problems: GoldenProblem[] = [];
   const matched: { sourcePath: string; target: string; value: string }[] = [];
@@ -194,6 +205,17 @@ export function compareEventToGolden(input: {
     if (!Object.prototype.hasOwnProperty.call(record, target) || record[target] !== expected) {
       problems.push({ code: 'CANONICAL_DESTINATION_MISMATCH', sourcePath: target,
         detail: target + ' expected ' + text(expected) + ' but the event holds ' + text(record[target]) });
+    }
+  }
+
+  for (const declined of input.declinedDestinations ?? []) {
+    if (Object.prototype.hasOwnProperty.call(record, declined.target)) {
+      problems.push({ code: 'DECLINED_DESTINATION_WRITTEN', sourcePath: declined.source,
+        detail: declined.target + ' is not a listed official field but the event holds ' + text(record[declined.target]) });
+    }
+    if (!leafValues(record).includes(String(declined.value))) {
+      problems.push({ code: 'DECLINED_VALUE_LOST', sourcePath: declined.source,
+        detail: 'the event does not keep the documented value ' + text(declined.value) });
     }
   }
 

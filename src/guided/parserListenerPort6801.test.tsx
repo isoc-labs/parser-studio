@@ -48,4 +48,20 @@ describe('novice source identity listener port',()=>{
     expect(field).toHaveAttribute('aria-invalid','true');
     expect(screen.getByTestId('backend-port')).toHaveTextContent('INVALID');
   });
+  // The field shows what is typed. An emptied field stays empty (it is not rewritten to "0", which would turn
+  // the next digits into "06819"); the port number is derived from the text and shown again on leaving the field.
+  it('keeps the port field as typed while it is edited, including when it is emptied',()=>{
+    render(<NoviceEntry/>);
+    const field=screen.getAllByRole('spinbutton',{name:'Parser listener port'})[0]!;
+    fireEvent.focus(field);
+    fireEvent.change(field,{target:{value:''}});
+    expect(field).toHaveDisplayValue('');
+    expect(field).toHaveAttribute('aria-invalid','true');
+    expect(screen.getByTestId('backend-port')).toHaveTextContent('INVALID');
+    fireEvent.change(field,{target:{value:'6819'}});
+    expect(field).toHaveDisplayValue('6819');
+    expect(screen.getByTestId('backend-port')).toHaveTextContent('6819');
+    fireEvent.blur(field);
+    expect(field).toHaveDisplayValue('6819');
+  });
 });

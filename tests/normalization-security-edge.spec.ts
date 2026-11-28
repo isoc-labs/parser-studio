@@ -51,8 +51,9 @@ test('RFC5424 wrapped LEEF maps standard body aliases',async({page})=>{
     '<165>1 2026-10-16T03:11:02Z edge-13 security 12 EV13 - LEEF:2.0|Vendor|Firewall|1|102|^|src=192.0.2.22^dst=198.51.100.22^srcPort=52002^dstPort=53^action=allow',
   ];
   const map=await openMap(page,rows);
+  // timestamp is the RFC 5424 header time (official before as well); the helper compares the whole official set.
   await verifyOfficialMappings(map,
-    ['srcip','dstip','srcport','dstport','action'],'wrapped LEEF');
+    ['srcip','dstip','srcport','dstport','action','timestamp'],'wrapped LEEF');
 });
 
 test('IPv6 addresses are high-confidence when runtime conversion accepts them',async({page})=>{
@@ -92,14 +93,15 @@ test('out-of-range L4 destination port stays REVIEW',async({page})=>{
   await expect(dpt).toContainText('Check first');
 });
 
-test('severity outside documented 0-100 range stays REVIEW',async({page})=>{
-  const map=await openMap(page,[
-    '{"hostname":"sensor-01","severity":101,"action":"alert"}',
-    '{"hostname":"sensor-02","severity":150,"action":"alert"}',
-    '{"hostname":"sensor-03","severity":999,"action":"alert"}',
-  ]);
-  const severity=map.getByLabel('Recommended field matches').filter({hasText:'severity'});
-  await expect(severity).toContainText('Check first');
+// A field called severity is never recommended for the official 0-100 score from its name: no value, inside the
+// documented range or outside it, shows the scale or direction of the source. It stays a vendor field.
+test('severity is never recommended from its name, outside or inside the 0-100 range',async({page})=>{
+  for(const values of [[101,150,999],[75,60,90]]){
+    const map=await openMap(page,values.map((value,index)=>
+      '{"hostname":"sensor-0'+(index+1)+'","severity":'+value+',"action":"alert"}'));
+    await expect(map.getByLabel('Recommended field matches')).not.toContainText('severity');
+    await expect(map.locator('article.normalization-map-row.custom[data-source-path="severity"]')).toHaveCount(1);
+  }
 });
 
 test('array-valued source IP is preserved in extracted JSON but not falsely scalar-mapped',async({page})=>{

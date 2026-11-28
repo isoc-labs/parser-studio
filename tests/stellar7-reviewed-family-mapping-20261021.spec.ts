@@ -3,12 +3,12 @@ import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 
 const source=[
-  {event_type:'threat',src_ip:'192.0.2.50',action:'block',sha256:'a'.repeat(32)},
-  {event_type:'threat',src_ip:'192.0.2.51',action:'deny',sha256:'b'.repeat(32)},
+  {event_type:'threat',src_ip:'192.0.2.50',action:'block',dst_ip:'gateway-a',sha256:'a'.repeat(32)},
+  {event_type:'threat',src_ip:'192.0.2.51',action:'deny',dst_ip:'gateway-b',sha256:'b'.repeat(32)},
   {event_type:'user',username:'김민수',login_result:'failure'},
   {event_type:'user',username:'山田',login_result:'success'},
-  {event_type:'asset',host:{name:'asset-01'},process:{name:'sensor.exe'}},
-  {event_type:'asset',host:{name:'asset-02'},process:{name:'sensor2.exe'}},
+  {event_type:'asset',host:{name:'asset-01'},process:{name:'sensor.exe'},rule:{name:'inventory-a'}},
+  {event_type:'asset',host:{name:'asset-02'},process:{name:'sensor2.exe'},rule:{name:'inventory-b'}},
 ].map(value=>JSON.stringify(value)).join('\n');
 
 test('novice explicitly reviews 7.0 type-specific suggestions and downloads one conditional DRAFT',async({page})=>{
@@ -37,7 +37,11 @@ test('novice explicitly reviews 7.0 type-specific suggestions and downloads one 
   // Auto Parser may preserve its first vendor-only field as src_ip
   // instead of custom.src_ip; neither is yet an official 7.0 srcip.
   expect(await threat.getByLabel('threat output for src_ip').inputValue()).not.toBe('srcip');
+  // Default deny (owner decision 2026-11-28): sha256 is not a listed field and gets no proposal at all. dst_ip
+  // is listed, but here it holds names, not addresses: the proposal is shown for review and cannot be used.
   await expect(threat.getByRole('button',{name:'Use Stellar 7.0 threat sha256'})).toHaveCount(0);
+  await expect(threat).not.toContainText('sha256 \u2192');
+  await expect(threat.getByRole('button',{name:'Use Stellar 7.0 threat dst_ip'})).toHaveCount(0);
   await expect(threat).toContainText('Review only');
   await threat.getByRole('button',{name:'Use Stellar 7.0 threat src_ip'}).click();
   await expect(threat.getByLabel('threat output for src_ip')).toHaveValue('srcip');
@@ -47,7 +51,8 @@ test('novice explicitly reviews 7.0 type-specific suggestions and downloads one 
   await user.getByRole('button',{name:'Use Stellar 7.0 user username'}).click();
   const asset=panel.locator('details[aria-label="Type-specific mappings for asset"]');
   await asset.locator('summary').click();
-  await asset.getByRole('button',{name:'Use Stellar 7.0 asset host.name'}).click();
+  await expect(asset.getByRole('button',{name:'Use Stellar 7.0 asset host.name'})).toHaveCount(0);
+  await asset.getByRole('button',{name:'Use Stellar 7.0 asset rule.name'}).click();
   await panel.getByLabel('Approve explicit family routing changes').check();
   await panel.getByRole('button',{name:'Apply reviewed event types to this parser'}).click();
   await expect(panel.getByLabel('Configured event profiles')).toContainText('3 explicit event types');
@@ -76,9 +81,11 @@ test('novice explicitly reviews 7.0 type-specific suggestions and downloads one 
     .toMatchObject({normalized_name:'action',data_type:'string'});
   expect(find('user').topFields.username)
     .toMatchObject({normalized_name:'username',data_type:'string'});
-  expect(find('asset').nsFields['host.name'])
-    .toMatchObject({normalized_name:'host.name',data_type:'string'});
+  expect(find('asset').nsFields['rule.name'])
+    .toMatchObject({normalized_name:'rule.name',data_type:'string'});
+  expect(find('asset').nsFields['host.name']).toBeUndefined();
   expect(find('threat').topFields.sha256).toBeUndefined();
+  expect(find('threat').topFields.dst_ip).toBeUndefined();
   expect(project.normalization.eventProfiles.unknown).toBe('reject');
   expect(JSON.stringify(project)).not.toContain('김민수');
   expect(JSON.stringify(project)).not.toContain('山田');

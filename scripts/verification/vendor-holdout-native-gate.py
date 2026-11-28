@@ -54,9 +54,15 @@ ALIASES = {
     "h_sophos_xg_fw": {"device_name": ("hostname",), "protocol": ("proto_name",)},
     "h_srx_sd_close_deny": {"policy-name": ("rule.name",)},
 }
+# Default deny (owner decision 2026-11-28): hostname is not a listed field. The Syslog header host of these
+# samples is kept under its own name in the vendor fields, and the value must still be there.
 FALLBACK = {
     "h_checkpoint_logexporter": {"srcport": "s_port", "dstport": "service"},
     "h_fortigate_mixed": {"username": "user", "action": "action"},
+    "h_panos_threat_url": {"hostname": "hostname"},
+    "h_panos_traffic": {"hostname": "hostname"},
+    "h_srx_sd_close_deny": {"hostname": "syslog_hostname"},
+    "h_suricata_rfc5424": {"hostname": "syslog_hostname"},
     "h_sonicwall_fw": {"username": "usr", "action": "fw_action"},
     "h_sophos_xg_fw": {"username": "user_name"},
     "h_stormshield_filter": {"srcport": "srcport", "dstport": "dstport", "username": "user"},

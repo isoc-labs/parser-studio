@@ -222,5 +222,286 @@
       "srcport": null,
       "dstport": 443
     }
+  ],
+  "defaultDeny": [
+    {
+      "id": "score-value-0",
+      "field": "severity",
+      "value": "0",
+      "allow": false
+    },
+    {
+      "id": "score-value-2",
+      "field": "severity",
+      "value": "2",
+      "allow": false
+    },
+    {
+      "id": "score-value-6",
+      "field": "severity",
+      "value": "6",
+      "allow": false
+    },
+    {
+      "id": "score-value-10",
+      "field": "severity",
+      "value": "10",
+      "allow": false
+    },
+    {
+      "id": "score-value-11",
+      "field": "severity",
+      "value": "11",
+      "allow": false
+    },
+    {
+      "id": "score-value-15",
+      "field": "severity",
+      "value": "15",
+      "allow": false
+    },
+    {
+      "id": "score-value-55",
+      "field": "severity",
+      "value": "55",
+      "allow": false
+    },
+    {
+      "id": "score-value-80",
+      "field": "severity",
+      "value": "80",
+      "allow": false
+    },
+    {
+      "id": "score-value-100",
+      "field": "severity",
+      "value": "100",
+      "allow": false
+    },
+    {
+      "id": "deny-hostname",
+      "field": "hostname",
+      "value": "fw01",
+      "allow": false
+    },
+    {
+      "id": "deny-hostip",
+      "field": "hostip",
+      "value": "10.0.0.9",
+      "allow": false
+    },
+    {
+      "id": "deny-fidelity",
+      "field": "fidelity",
+      "value": "87",
+      "allow": false
+    },
+    {
+      "id": "deny-threat-score",
+      "field": "threat_score",
+      "value": "40",
+      "allow": false
+    },
+    {
+      "id": "deny-duration",
+      "field": "duration",
+      "value": "1500",
+      "allow": false
+    },
+    {
+      "id": "deny-file-size",
+      "field": "file_size",
+      "value": "1024",
+      "allow": false
+    },
+    {
+      "id": "deny-appid",
+      "field": "appid",
+      "value": "41",
+      "allow": false
+    },
+    {
+      "id": "deny-icmp-type",
+      "field": "icmp_type",
+      "value": "8",
+      "allow": false
+    },
+    {
+      "id": "deny-process-name",
+      "field": "process_name",
+      "value": "sshd",
+      "allow": false
+    },
+    {
+      "id": "deny-command",
+      "field": "command",
+      "value": "whoami",
+      "allow": false
+    },
+    {
+      "id": "deny-event-type",
+      "field": "event_type",
+      "value": "alert",
+      "allow": false
+    },
+    {
+      "id": "deny-direction",
+      "field": "direction",
+      "value": "inbound",
+      "allow": false
+    },
+    {
+      "id": "deny-event-id",
+      "field": "event_id",
+      "value": "4625",
+      "allow": false
+    },
+    {
+      "id": "allow-username",
+      "field": "username",
+      "value": "alice",
+      "allow": true
+    },
+    {
+      "id": "allow-action",
+      "field": "action",
+      "value": "deny",
+      "allow": true
+    },
+    {
+      "id": "allow-url",
+      "field": "url",
+      "value": "https://a.example/x",
+      "allow": true
+    },
+    {
+      "id": "allow-proto",
+      "field": "proto",
+      "value": "6",
+      "allow": true
+    },
+    {
+      "id": "allow-proto-name",
+      "field": "proto_name",
+      "value": "tcp",
+      "allow": true
+    },
+    {
+      "id": "allow-dstip",
+      "field": "dstip",
+      "value": "198.51.100.7",
+      "allow": true
+    },
+    {
+      "id": "deny-action-verb",
+      "field": "action",
+      "value": "login",
+      "allow": false
+    },
+    {
+      "id": "deny-proto-name-service",
+      "field": "proto_name",
+      "value": "https",
+      "allow": false
+    },
+    {
+      "id": "allow-vlan",
+      "field": "vlan",
+      "value": "120",
+      "allow": true,
+      "preview": false
+    },
+    {
+      "id": "allow-srcmac",
+      "field": "srcmac",
+      "value": "02:00:00:00:00:01",
+      "allow": true,
+      "preview": false
+    },
+    {
+      "id": "allow-timestamp",
+      "field": "timestamp",
+      "value": "2026-11-27T10:00:00Z",
+      "allow": true,
+      "preview": false
+    }
+  ],
+  "memberOfObject": [
+    {
+      "id": "member-translated-address",
+      "record": {
+        "xlate": {
+          "srcip": "203.0.113.7"
+        },
+        "dstip": "198.51.100.2"
+      },
+      "path": "xlate.srcip"
+    },
+    {
+      "id": "member-port-label",
+      "record": {
+        "event": {
+          "destination-port": 10400
+        },
+        "dstip": "198.51.100.2"
+      },
+      "path": "event.destination-port"
+    },
+    {
+      "id": "member-body-object",
+      "record": {
+        "body": {
+          "srcip": "203.0.113.7",
+          "action": "deny"
+        },
+        "dstip": "198.51.100.2"
+      },
+      "path": "body.srcip"
+    },
+    {
+      "id": "member-body-action",
+      "record": {
+        "body": {
+          "srcip": "203.0.113.7",
+          "action": "deny"
+        },
+        "dstip": "198.51.100.2"
+      },
+      "path": "body.action"
+    },
+    {
+      "id": "member-user",
+      "record": {
+        "target": {
+          "username": "alice"
+        },
+        "dstip": "198.51.100.2"
+      },
+      "path": "target.username"
+    },
+    {
+      "id": "member-url",
+      "record": {
+        "referrer": {
+          "url": "https://a.example/x"
+        },
+        "dstip": "198.51.100.2"
+      },
+      "path": "referrer.url"
+    },
+    {
+      "id": "member-sd-shaped",
+      "record": {
+        "syslog": {
+          "structured_data": {
+            "x": {
+              "source-port": 594
+            }
+          }
+        },
+        "dstip": "198.51.100.2"
+      },
+      "path": "syslog.structured_data.x.source-port"
+    }
   ]
 }

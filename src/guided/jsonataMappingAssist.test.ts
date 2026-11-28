@@ -184,4 +184,20 @@ describe('review-only JSONata source selector mapping',()=>{
   expect(result.ok).toBe(true);
   if(result.ok)expect(result.rows[0]).toMatchObject({status:'BLOCKED'});
  });
+ // A 0-100 score target is never proposed automatically; the reviewed ChatGPT path still reaches it, and only
+ // through the explicit confirmation of a "check first" row, whatever the values look like.
+ it('offers a ChatGPT severity, fidelity or threat_score mapping only for explicit confirmation',async()=>{
+  const base=createDraft();
+  const draft:ParserDraft={...base,format:'json',mappings:[],guided:{...base.guided!,groups:{}}};
+  const suite=preview('{"severity":75,"fidelity":90,"threat_score":80}\n{"severity":60,"fidelity":85,"threat_score":70}',draft);
+  const {sha256}=await createJsonataMappingPrompt(suite,draft);
+  const result=await reviewJsonataMapping(answer(sha256,2,[
+   {expression:'severity',target:'severity'},
+   {expression:'fidelity',target:'fidelity'},
+   {expression:'threat_score',target:'threat_score'},
+  ]),suite,draft,sha256);
+  expect(result.ok).toBe(true);
+  if(!result.ok)return;
+  expect(result.rows.map(r=>r.status)).toEqual(['CHECK_FIRST','CHECK_FIRST','CHECK_FIRST']);
+ });
 });

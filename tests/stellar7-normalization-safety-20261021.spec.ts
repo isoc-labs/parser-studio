@@ -2,6 +2,7 @@ import {enterSyntheticParserIdentity} from './support/parserIdentity';
 import {test,expect} from './support/downloadSink';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
+import {officialMappings} from './normalizationAcceptance';
 
 async function goToMapFields(page:import('@playwright/test').Page,raw:string){
   await page.goto('/');
@@ -40,7 +41,11 @@ test('fixed Stellar 7.0 Dictionary: conflicting address aliases cannot be bulk-a
   await expect(page.getByLabel('Auto Parser raw logs')).toHaveCount(0);
 });
 
-test('fixed Stellar 7.0 Dictionary: official nested process, file, host and user fields require proper types',async({page})=>{
+// Default deny (owner decision 2026-11-28): process.name, process.pid, file.hash.sha256, host.ip and user.name are
+// names of the 7.0 dictionary, and until then the equal name alone made them Stellar fields. The policy lists
+// none of them (which process, which host and whose file a record means is not said by the name), so they keep
+// their own names as vendor fields and the user or the ChatGPT assistant decides.
+test('fixed Stellar 7.0 Dictionary: a nested name that equals a dictionary name is kept as a vendor field',async({page})=>{
   const row=(pid:number,ip:string)=>({
     process:{name:'powershell.exe',pid},file:{hash:{sha256:'a'.repeat(64)}},
     host:{ip},user:{name:'test.user'},
@@ -49,17 +54,15 @@ test('fixed Stellar 7.0 Dictionary: official nested process, file, host and user
     .map(item=>JSON.stringify(item)).join('\n');
   const map=await goToMapFields(page,raw);
   const suggested=map.getByLabel('Recommended field matches');
-  // Auto Parser has already adopted all five unambiguous official names
-  // before opening Map Fields; no redundant review suggestion should remain.
-  await expect(map.getByLabel('Field mapping summary')).toContainText('Matched to Stellar5');
+  await expect(map.getByLabel('Field mapping summary')).toContainText('Matched to Stellar0');
+  await expect(map.getByLabel('Field mapping summary')).toContainText('Vendor fields retained5');
+  await expect(map.getByLabel('Field mapping summary')).toContainText('Left out of output0');
   await expect(suggested.getByRole('button',{name:'Apply 0 recommended matches'})).toBeDisabled();
-  const approvedPaths=await map.locator('input[aria-label^="Stellar field "]')
-    .evaluateAll(inputs=>inputs.map(input=>(input as HTMLInputElement).value));
-  expect(approvedPaths.sort()).toEqual(
+  expect(await officialMappings(map.getByLabel('Field mapping editor'))).toEqual({});
+  const vendor=await map.locator('article.normalization-map-row.custom')
+    .evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-source-path')));
+  expect(vendor.sort()).toEqual(
     ['process.name','process.pid','file.hash.sha256','host.ip','user.name'].sort());
-  await expect(map.getByLabel('Field mapping checks')).toContainText('All current field mappings passed the sample checks');
-  await expect(map.getByLabel('Field changes only')).toContainText('process.name');
-  await expect(map.getByLabel('Field changes only')).toContainText('host.ip');
   await map.getByRole('button',{name:'Back to Review Fields'}).click();
   await page.getByLabel('Review Fields stage').getByRole('button',{name:'Back to Logs'}).click();
   await expect(page.getByLabel('Auto Parser raw logs')).toHaveValue(raw);
@@ -67,9 +70,11 @@ test('fixed Stellar 7.0 Dictionary: official nested process, file, host and user
 
 
 test('7.0 nested field mappings generate real backend DRAFT files with checked digests',async({page})=>{
+  // Default deny (2026-11-28): rule.name is the nested dictionary name the policy lists; the other five nested
+  // names are carried as vendor fields.
   const raw=[
-    {process:{name:'safe.exe',pid:100},file:{hash:{sha256:'a'.repeat(64)}},host:{ip:'192.0.2.11'},user:{name:'synthetic_a'}},
-    {process:{name:'safe2.exe',pid:101},file:{hash:{sha256:'b'.repeat(64)}},host:{ip:'192.0.2.12'},user:{name:'synthetic_b'}},
+    {rule:{name:'allow-web'},process:{name:'safe.exe',pid:100},file:{hash:{sha256:'a'.repeat(64)}},host:{ip:'192.0.2.11'},user:{name:'synthetic_a'}},
+    {rule:{name:'allow-dns'},process:{name:'safe2.exe',pid:101},file:{hash:{sha256:'b'.repeat(64)}},host:{ip:'192.0.2.12'},user:{name:'synthetic_b'}},
   ].map(item=>JSON.stringify(item)).join('\n');
   const requests:string[]=[];
   page.on('request',req=>{
@@ -80,7 +85,9 @@ test('7.0 nested field mappings generate real backend DRAFT files with checked d
     }
   });
   const map=await goToMapFields(page,raw);
-  await expect(map.getByLabel('Field mapping summary')).toContainText('Matched to Stellar5');
+  await expect(map.getByLabel('Field mapping summary')).toContainText('Matched to Stellar1');
+  await expect(map.getByLabel('Field mapping summary')).toContainText('Vendor fields retained5');
+  expect(await officialMappings(map.getByLabel('Field mapping editor'))).toEqual({'rule.name':'rule.name'});
   await expect(map.getByLabel('Field mapping checks')).toContainText('All current field mappings passed the sample checks');
   await map.getByRole('button',{name:'Create Parser',exact:true}).click();
   await expect(page.getByLabel('Create Parser stage')).toBeVisible();
@@ -102,16 +109,23 @@ test('7.0 nested field mappings generate real backend DRAFT files with checked d
   const encoded=ruby!.content.match(/Base64\.strict_decode64\('([A-Za-z0-9+/=]+)'\)/)?.[1];
   expect(encoded).toBeTruthy();
   const embedded=JSON.parse(Buffer.from(encoded!,'base64').toString('utf8')) as {
-    normalization:{nsFields:Record<string,{normalized_name:string;data_type:string}>};
+    normalization:{
+      topFields:Record<string,{normalized_name:string;data_type:string}>;
+      nsFields:Record<string,{normalized_name:string;data_type:string}>;
+      vendorFields:Record<string,{normalized_name:string;data_type:string}>;
+    };
   };
+  expect(embedded.normalization.nsFields['rule.name']).toMatchObject({normalized_name:'rule.name',data_type:'string'});
+  expect(Object.keys(embedded.normalization.topFields)).toEqual([]);
+  expect(Object.keys(embedded.normalization.nsFields)).toEqual(['rule.name']);
   for(const [field,type] of [
     ['process.name','string'],['process.pid','integer'],
     ['file.hash.sha256','string'],['host.ip','ip'],['user.name','string'],
   ]){
-    expect(embedded.normalization.nsFields[field]).toMatchObject({
-      normalized_name:field,data_type:type,
-    });
+    expect(embedded.normalization.vendorFields[field]).toMatchObject({data_type:type});
   }
+  // Five sources, five different vendor names: process.name and user.name do not fall on one output name.
+  expect(new Set(Object.values(embedded.normalization.vendorFields).map(item=>item.normalized_name)).size).toBe(5);
   expect(ruby!.content).not.toContain('synthetic_a');
   const sha=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex');
   for(const file of pair.files){

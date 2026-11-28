@@ -11,7 +11,7 @@
 //
 // Scope: Parser Studio output only. This is not a Stellar Cyber import, Syslog
 // reception or indexing result.
-import {loadGoldenDestinationExpectations} from '../backend/src/golden-destination-expectations';
+import {loadGoldenDestinationExpectations,loadGoldenDeclinedDestinations} from '../backend/src/golden-destination-expectations';
 import { test, expect } from './support/downloadSink';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -29,6 +29,8 @@ const loadCases = (path: string) => (JSON.parse(readFileSync(resolve(path), 'utf
 const corpusFiles = (JSON.parse(readFileSync(resolve('evals/golden-corpus/corpus-files.v1.json'), 'utf8')) as { files: string[] }).files;
 const vendorCases = corpusFiles.flatMap(loadCases).filter(item => item.sampleClass.startsWith('VENDOR_DOCUMENTED'));
 const endpointGoldens = loadGoldenDestinationExpectations();
+// Documented values the event must keep and must not write to an official field the policy does not list.
+const declinedGoldens = loadGoldenDeclinedDestinations();
 const RUNNER = resolve('scripts/verification/ruby-golden-event-runner.rb');
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -75,6 +77,7 @@ for (const vendorCase of vendorCases) {
     }));
     const browserStage = compareEventToGolden({
       golden: vendorCase.goldenSourceValues, rows, required, expectedDestinations,
+      declinedDestinations: declinedGoldens[vendorCase.id],
       events: [{ time: null, record: normalized }],
     });
     expect(browserStage.problems, vendorCase.id + ' browser Stellar preview vs documented values').toEqual([]);
@@ -113,6 +116,7 @@ for (const vendorCase of vendorCases) {
     const calls = out.results[vendorCase.id]!.calls;
     const rubyStage = compareEventToGolden({
       golden: vendorCase.goldenSourceValues, rows, required, expectedDestinations,
+      declinedDestinations: declinedGoldens[vendorCase.id],
       events: calls.map(([time, record]) => ({ time, record })),
     });
     expect(rubyStage.problems, vendorCase.id + ' downloaded Ruby event (ruby ' + out.ruby + ') vs documented values').toEqual([]);

@@ -29,9 +29,11 @@ function extracted(raw:string){
   expect(result.errors).toEqual([]);
   return result.fields;
 }
+// The SD-PARAMs of a structured-data element are the pairs of the record for the reader that read them as such.
+const read=(...fields:Record<string,unknown>[])=>suggestNormalizationCandidatesFromSuite(
+  {events:fields.map(value=>({fields:value,effectiveFormat:'syslog_rfc5424'}))} as unknown as SuiteResult,[]);
 function candidates(...raw:string[]){
-  return suggestNormalizationCandidatesFromSuite(
-    {events:raw.map(item=>({fields:extracted(item)}))} as unknown as SuiteResult,[]);
+  return read(...raw.map(extracted));
 }
 describe('Juniper RFC5424 SD semantic mappings with Stellar 7.0 catalog evidence',()=>{
   it('maps the true IP tuple, transport protocol and rule name, leaving NAT and application names intact',()=>{
@@ -74,8 +76,7 @@ describe('Juniper RFC5424 SD semantic mappings with Stellar 7.0 catalog evidence
   it('applies the same named-port contract without a vendor-specific rule',()=>{
     const other=extracted(source('1','icmp','CREATE')
       .replace('junos@67.43.156.15','another@67.43.156.15'));
-    const accepted=suggestNormalizationCandidatesFromSuite(
-      {events:[{fields:other}]} as unknown as SuiteResult,[]);
+    const accepted=read(other);
     expect(accepted.find(c=>c.source===prefix+'source-port')).toMatchObject({
       target:'srcport',confidence:'HIGH',safeForBulk:true,
     });
@@ -104,13 +105,14 @@ describe('Juniper RFC5424 SD semantic mappings with Stellar 7.0 catalog evidence
 
   });
 
-  it('offers sparse ICMP type only for manual review while preserving unrelated event types',()=>{
+  // Default deny, 2026-11-28: the policy does not list icmp_type, so the field is not proposed at all (it was
+  // offered for review while it was sparse).
+  it('does not propose an ICMP type while preserving unrelated event types',()=>{
     const s1=source('1','icmp','DENY').replace('service-name="icmp"',
       'service-name="icmp" icmp-type="8"');
     const suggestions=candidates(s1,source('6','junos-https','CREATE'));
-    const icmp=suggestions.find(item=>item.source===prefix+'icmp-type');
-    expect(icmp).toMatchObject({target:'icmp_type',confidence:'REVIEW',safeForBulk:false,
-      observed:1,total:2,type:'string'});
+    expect(suggestions.find(item=>item.source===prefix+'icmp-type')).toBeUndefined();
+    expect(suggestions.find(item=>item.source===prefix+'source-address')).toMatchObject({target:'srcip',confidence:'HIGH'});
   });
 
   it('keeps distinct competing structured-data elements review-only instead of overwriting the IP target',()=>{
@@ -118,8 +120,7 @@ describe('Juniper RFC5424 SD semantic mappings with Stellar 7.0 catalog evidence
       element_1:{params:{'source-address':'10.0.0.1'}},
       element_2:{params:{'source-address':'198.51.100.21'}},
     }};
-    const suggestions=suggestNormalizationCandidatesFromSuite(
-      {events:[{fields}]} as unknown as SuiteResult,[]);
+    const suggestions=read(fields);
     expect(suggestions).toHaveLength(2);
     expect(suggestions.every(candidate=>candidate.target==='srcip'&&
       candidate.confidence==='REVIEW'&&!candidate.safeForBulk)).toBe(true);

@@ -28,7 +28,7 @@ const examples=[
   ['action','action',{action:'block'},true],
   ['proto','proto',{proto:256},false],
   ['proto','proto',{proto:6},true],
-  ['duration_ms','duration',{duration_ms:2000},true],
+  ['username','username',{username:'alice'},true],
 ];
 const forbidden=[
   ['post_nat.source-port',{post_nat:{'source-port':4411}}],
@@ -38,6 +38,19 @@ const forbidden=[
   ['duration',{duration:2000}],
   ['action',{action:'admin-login'}],
   ['syslog.severity',{syslog:{severity:4}}],
+  // Default deny (owner decision 2026-11-28): a field the shared policy does not list is not proposed from its name.
+  ['duration_ms',{duration_ms:2000}],
+  ['hostname',{hostname:'sensor1'}],
+  ['host',{host:'fw01',msg:'link up'}],
+  ['severity',{severity:75}],
+  ['policyid',{policyid:7}],
+  ['file_size',{file_size:1024}],
+  ['icmp_type',{icmp_type:'8','protocol-id':1}],
+  // ... and a member of an object of the record is not a field of the record, whatever the object is called.
+  ['xlate.srcip',{xlate:{srcip:'203.0.113.5'}}],
+  ['file.timestamp',{file:{timestamp:'2020-01-01T00:00:00Z'}}],
+  ['alert.action',{alert:{action:'allowed'}}],
+  ['generic.kv.srcip',{generic:{kv:{srcip:'203.0.113.5'}}}],
 ];
 function runSuite(mod,events,existing=[],options={}){
   return mod.suggestNormalizationCandidatesFromSuite({events:events.map(fields=>({fields}))},
@@ -91,77 +104,48 @@ function oracle(mod){
   assert.equal(nested.filter(c=>['srcip','srcport'].includes(c.target)).every(c=>!c.safeForBulk),true,
     'sparse endpoint inside a nested object');
   assert.equal(families.find(c=>c.source==='srcport')?.safeForBulk,true,'sparse official-name endpoint field');
-  assert.equal(families.find(c=>c.source==='md5')?.safeForBulk,false,'sparse official name of another kind');
-  // A host field carried only by events that describe an HTTP request (a value is a method, a request line or
-  // an HTTP version) is offered for review, whatever its fields are called; a record whose field called method
-  // holds another value keeps its host name.
-  for(const fields of [{host:'shop.example.com',request:'GET /cart HTTP/1.1',status:200},
-    {http:{hostname:'example.com',http_method:'GET',protocol:'HTTP/1.1'}},{host:'example.com',verb:'POST',path:'/x'}]){
-    const hosts=runSuite(mod,[fields]).filter(c=>c.target==='hostname');
-    assert.equal(hosts.length===1&&hosts[0].confidence==='REVIEW'&&!hosts[0].safeForBulk,true,
-      'host field of an HTTP request record '+JSON.stringify(fields));
-  }
-  assert.equal(runSuite(mod,[{host:'api-node-3',method:'GetUser',status_code:0}]).find(c=>c.source==='host')?.safeForBulk,true,
-    'host field beside a method that is not an HTTP method');
-  // Neither a method nor a version: a host inside an object of the record, and a host beside an absolute web URL.
-  for(const fields of [{agent:{hostname:'collector-7'},message:'started'},
-    {client:'10.0.0.5',host:'example.com',url:'http://example.com/a',status:200}]){
-    const hosts=runSuite(mod,[fields]).filter(c=>c.target==='hostname');
-    assert.equal(hosts.length===1&&hosts[0].confidence==='REVIEW'&&!hosts[0].safeForBulk,true,
-      'host field without request words '+JSON.stringify(fields));
-  }
-  assert.equal(runSuite(mod,[{host:'fw01',url:'/admin',action:'login'}]).find(c=>c.source==='host')?.safeForBulk,true,
-    'host field beside a path, which is not a web URL');
-  // A URL of another host says nothing about the host beside it; the host of request events is confirmed only by
-  // another record family that carries the same value; one event with an unusual method confirms nothing.
-  assert.equal(runSuite(mod,[{client_ip:'192.0.2.70',action:'deny',host_name:'edge-01',url:'https://shop.example.invalid/login'}])
-    .find(c=>c.source==='host_name')?.safeForBulk,true,'device host beside a web URL of another host');
-  const hostOf=events=>runSuite(mod,events).find(c=>c.source==='host');
-  assert.equal(hostOf([{method:'GET',host:'a.example',uri:'/'},{method:'-',host:'a.example',uri:'/'}])?.confidence,'REVIEW',
-    'requested host beside a placeholder method');
-  assert.equal(hostOf([{host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw02',type:'webfilter',method:'GET',url:'/y'},
-    {host:'fw01',type:'traffic',action:'allow'}])?.confidence,'REVIEW','one request host that no other record family carries');
-  assert.equal(hostOf([{host:'fw01',type:'webfilter',method:'GET',url:'/x'},{host:'fw01',type:'traffic',action:'allow'}])?.safeForBulk,true,
-    'device host confirmed by another record family');
-  // A literal dotted protocol key is read in the object that holds the port (the body of a Syslog reading).
-  const inBody=kv=>({fields:{body:kv},effectiveFormat:'syslog_rfc3164'});
-  assert.equal(mod.suggestNormalizationCandidatesFromSuite({events:[
-    inBody({'flow.sport':51234,'flow.dport':443,'flow.proto':'tcp'}),inBody({'flow.sport':8,'flow.dport':0,'flow.proto':'icmp'})]},[])
-    .find(c=>c.source==='body.flow.sport')?.confidence,'REVIEW','ICMP named by a literal dotted key in a Syslog body');
+  assert.equal(families.some(c=>c.source==='md5'),false,'an official name the policy does not list');
+  assert.equal(runSuite(mod,[{url:'category-db-2026.11'},{note:'system record'}]).find(c=>c.source==='url')?.safeForBulk,false,
+    'a sparse field called url whose value is not a URL');
+  assert.equal(runSuite(mod,[{url:'https://example.com/a'},{note:'system record'}]).find(c=>c.source==='url')?.safeForBulk,true,
+    'a sparse field called url that holds a URL');
+  // A listed field that is not an endpoint or URL field keeps the full-coverage rule: sparse, it is a review proposal.
+  const sparseUser=runSuite(mod,[{srcport:51544,proto:6,username:'alice'},{note:'system record'}]).find(c=>c.source==='username');
+  assert.equal(sparseUser?.target,'username','sparse listed name is still proposed');
+  assert.equal(sparseUser?.safeForBulk,false,'sparse listed name of another kind is not approved');
+  // The container of the reader holds the pairs of the record: the body of a Syslog reading, the key=value node
+  // of Generic Structural. Protocol evidence is read in that container.
+  const read=(format,...events)=>mod.suggestNormalizationCandidatesFromSuite(
+    {events:events.map(fields=>({fields,effectiveFormat:format}))},[]);
+  assert.equal(read('syslog_rfc3164',{body:{src_ip:'192.0.2.9'}}).find(c=>c.source==='body.src_ip')?.safeForBulk,true,
+    'a name in the body of a Syslog reading');
+  assert.equal(read('generic_structural',{generic:{kv:{srcip:'192.0.2.9'}}}).find(c=>c.source==='generic.kv.srcip')?.safeForBulk,true,
+    'a name in the key=value node of Generic Structural');
+  assert.equal(read('json',{body:{src_ip:'192.0.2.9'}}).length,0,'the same path in a JSON log is an object of the log');
+  assert.equal(read('syslog_rfc3164',{body:{sport:51234,dport:443,protocol:'tcp'}},{body:{sport:8,dport:0,protocol:'icmp'}})
+    .find(c=>c.source==='body.sport')?.confidence,'REVIEW','ICMP named in the body that holds the port');
   assert.deepEqual(runSuite(mod,[]),[],'empty data has no candidates');
 }
 const variants=[
-  ['allow NAT-derived source port',
-    'if((target===\'srcport\'||target===\'dstport\')&&sourceHasExcludedPortSegment(source))return null;',
-    'if(false)return null;'],
   ['allow vendor false friend',
     'if(incompatibleVendorMeaning(source,target,events))return null;',
     'if(false)return null;'],
   ['pretend no type-compatible observations',
     'const compatibleObserved=informativeValues.filter(result=>',
     'const compatibleObserved=informativeValues.filter(result=>false&&'],
-  ['approve a host field of an HTTP request record as the official hostname',
-    "const unconfirmedHost=target==='hostname'&&hostNameUnconfirmed(source,events,formats);",
-    'const unconfirmedHost=false;'],
-  ['approve a host field that lives inside an object of the record',
-    'if(!recordLevelSource(local,carrierFormats))return true;',
+  ['propose an official field the policy does not list',
+    'if(!target||!AUTO_APPROVED_TARGETS.has(target))return null;',
+    'if(!target)return null;'],
+  ['take a member of an object of the record for a field of the record',
+    'if(!wholePathListed&&!recordLevelSource(recordPathOf(source),carrierFormats))return null;',
     ''],
-  ['ignore a URL of the record that names the host',
-    'if(carriers.some(({host,leaves})=>leaves.some(([,text])=>urlHost(text)===host)))return true;',
-    ''],
-  ['take any web URL beside a host for a request to that host',
-    'leaves.some(([,text])=>urlHost(text)===host)',
-    'leaves.some(([,text])=>urlHost(text)!==undefined)'],
-  ['take a field called method for an HTTP request whatever its value says',
-    'HTTP_METHOD_TOKENS.has(targeted?text.toUpperCase():text)).map(([path])=>path);',
-    'text.length>0).map(([path])=>path);'],
-  ['approve the requested host when one event carries no known method',
-    'return carriers.some(({host,leaves})=>ofRequest(leaves)&&!elsewhere.has(host));',
-    'return carriers.length>0&&carriers.every(({leaves})=>requestEvidencePaths(leaves).length>0);'],
-  ['let any event of another family confirm the host of a request',
-    'ofRequest(leaves)&&!elsewhere.has(host));',
-    'ofRequest(leaves)&&elsewhere.size===0);'],
-  ['look for the protocol of a literal dotted key at the root of the event only',
+  ['take any container for the container of the reader',
+    "return formats.length>0&&formats.every(format=>RECORD_CONTAINERS[format??'']?.test(source)===true);",
+    'return true;'],
+  ['take no container for the container of the reader',
+    "return formats.length>0&&formats.every(format=>RECORD_CONTAINERS[format??'']?.test(source)===true);",
+    'return false;'],
+  ['look for the protocol of a port at the root of the event only',
     'const containers=new Map<Record<string,unknown>,string>([[holder.container,holder.written]]);',
     "const containers=new Map<Record<string,unknown>,string>([[fields,source.slice(0,source.lastIndexOf('.')+1).toLowerCase()]]);"],
   ['ignore a non-transport protocol beside the port',
@@ -171,22 +155,22 @@ const variants=[
     'compatibleObserved===informative&&(values.length===events.length||namedAsTarget)&&',
     'compatibleObserved===informative&&'],
   ['approve every sparse source',
-    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&\n    (leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeSource(source,target,informativeValues,carrierFormats);',
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&\n    (leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeValues(target,informativeValues);',
     'const namedAsTarget=true;'],
   ['approve a sparse source for any official name',
-    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&\n    (leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeSource(source,target,informativeValues,carrierFormats);',
-    'const namedAsTarget=(leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeSource(source,target,informativeValues,carrierFormats);'],
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&\n    (leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeValues(target,informativeValues);',
+    'const namedAsTarget=(leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeValues(target,informativeValues);'],
   ['approve a sparse alias of an endpoint field',
-    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&\n    (leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeSource(source,target,informativeValues,carrierFormats);',
-    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&sparseSafeSource(source,target,informativeValues,carrierFormats);'],
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&\n    (leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeValues(target,informativeValues);',
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&sparseSafeValues(target,informativeValues);'],
   ['approve a sparse port without TCP or UDP named by the record',
     'informative>0&&!nonTransportPort&&!lacksTransportEvidence;',
     'informative>0&&!nonTransportPort;'],
-  ['approve a sparse endpoint inside a nested object or a sparse url of any shape',
-    'if(!recordLevelSource(source,formats)||sourceHasExcludedPortSegment(source))return false;',
-    'if(false)return false;'],
+  ['approve a sparse url of any shape',
+    "return target!=='url'||values.every(result=>result.found&&typeof result.value==='string'&&\n    URL_SHAPED.test(result.value.trim()));",
+    'return true;'],
   ['never approve a sparse official-name endpoint field',
-    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&\n    (leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeSource(source,target,informativeValues,carrierFormats);',
+    'const namedAsTarget=SPARSE_SAFE_TARGETS.has(target)&&\n    (leaf.toLowerCase()===target||specDefinedTargets(source,events,readings).includes(target))&&\n    sparseSafeValues(target,informativeValues);',
     'const namedAsTarget=false;'],
   ['ignore abnormal port protocol',
     'const nonTransportPort=!explicitPort&&(target===\'srcport\'||target===\'dstport\')&&',
