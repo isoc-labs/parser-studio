@@ -1219,6 +1219,16 @@
       "disposition": "REQUIRED"
     },
     {
+      "file": "tests/keyboard-fill-harness.spec.ts",
+      "title": "fill() on a text input is carried out with one key press per character",
+      "disposition": "REQUIRED"
+    },
+    {
+      "file": "tests/keyboard-fill-harness.spec.ts",
+      "title": "fill() fails when the control being edited is replaced or removed by its own value, and when the value is cut",
+      "disposition": "REQUIRED"
+    },
+    {
       "file": "tests/kv-bare-token-verdict-20261125.spec.ts",
       "title": "key=value text with a bare token is not reported as parsed; Fix with ChatGPT gives a parser with stable fields",
       "disposition": "REQUIRED"

@@ -1,4 +1,4 @@
-import type {Dispatch,SetStateAction} from 'react';
+import {useState,type Dispatch,type SetStateAction} from 'react';
 import type {ParserDraft} from '../model';
 import {DEFAULT_PARSER_LISTENER_PORT,defaultGuidedOptions} from './contract';
 
@@ -14,11 +14,18 @@ export default function ParserListenerPortInput({draft,setDraft}:Props){
       format.startsWith('rfc5424_')||format.startsWith('rfc3164_')))?6800:1024;
   const port=draft.guided?.receiver.port??DEFAULT_PARSER_LISTENER_PORT;
   const valid=Number.isInteger(port)&&port>=minimum&&port<=65535;
+  // While the field is edited it shows the text as typed. The port is a number, so an emptied field cannot be
+  // shown from it (it would read "0" and the next digits would follow that zero); the number is derived from
+  // the text, never the other way round, until the field is left or the port is changed from elsewhere.
+  const [typed,setTyped]=useState<string|null>(null);
   return <label>Parser listener port (.conf)
     <input aria-label="Parser listener port" type="number" min={minimum} max={65535} step={1}
-      value={port} aria-invalid={!valid}
+      value={typed!==null&&Number(typed)===port?typed:port} aria-invalid={!valid}
+      onBlur={()=>setTyped(null)}
       onChange={event=>{
-        const changed=Number(event.currentTarget.value);
+        const text=event.currentTarget.value;
+        setTyped(text);
+        const changed=Number(text);
         setDraft(old=>{
           const guided=old.guided??defaultGuidedOptions();
           return {...old,guided:{...guided,receiver:{...guided.receiver,port:changed}}};

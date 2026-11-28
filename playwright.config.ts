@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { installKeyboardFill } from './tests/support/keyboardFill';
+
+// Every fill() on a single-line input is typed key by key and must keep the control it edits.
+installKeyboardFill();
 
 const port = Number(process.env.PARSER_STUDIO_TEST_PORT || 5180);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid isolated browser test port');
