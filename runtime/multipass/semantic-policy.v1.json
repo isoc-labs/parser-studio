@@ -48,7 +48,7 @@
     13,
     32
   ],
-  "notes": "Transport evidence is permitted only when a source record identifies a known L4 carrier. Unknown protocol evidence never authorizes automatic official port mapping. No-protocol logs retain existing source-specific review policy; raw bytes are never discarded. Explicitly labeled source-port/destination-port fields are eligible for owner-requested integer mapping to srcport/dstport after range validation; on ICMP the numeric value may be a vendor identifier, not a transport port. Ambiguous alias names remain subject to protocol evidence. NAT/translated ancestor tokens are blocked across dot, underscore, hyphen and camelCase source path spellings before any explicit port identity approval. The same translated-segment tokens keep a NAT address out of srcip/dstip in the browser mapping proposals. scoreScaleEvidence: the listed targets are documented on a 0-100 scale where a higher value means more; ordinal scales of other systems (Syslog levels 0-7 with 0 the most severe, IDS priorities 1-4, CEF and CVSS 0-10) lie inside that range, so a matching name is official only when a value above ordinalScaleCeiling shows the 0-100 scale. No conversion between scales is applied; an unshown scale keeps the source field name and value.",
+  "notes": "Transport evidence is permitted only when a source record identifies a known L4 carrier. Unknown protocol evidence never authorizes automatic official port mapping. No-protocol logs retain existing source-specific review policy; raw bytes are never discarded. Explicitly labeled source-port/destination-port fields are eligible for owner-requested integer mapping to srcport/dstport after range validation; on ICMP the numeric value may be a vendor identifier, not a transport port. Ambiguous alias names remain subject to protocol evidence. NAT/translated ancestor tokens are blocked across dot, underscore, hyphen and camelCase source path spellings before any explicit port identity approval. The same translated-segment tokens keep a NAT address out of srcip/dstip in the browser mapping proposals. reviewOnlyScoreTargets: the listed targets are documented on a 0-100 scale where a higher value means more. Neither a matching name nor a value inside that range shows the scale, the direction or the meaning of a source field (Syslog levels 0-7 with 0 the most severe, IDS priorities 1-4, CEF and CVSS 0-10, 0-20 and 0-255 scales, counts and percentages all fit), so these targets are never approved automatically from a name. The source field keeps its name and value; a reviewed ChatGPT mapping the user confirms or a manual mapping may still write the target. No conversion between scales is applied.",
   "explicitPortSourceAliases": {
     "source-port": "srcport",
     "destination-port": "dstport"
@@ -66,14 +66,11 @@
     "natted",
     "network-address-translation"
   ],
-  "scoreScaleEvidence": {
-    "targets": [
-      "severity",
-      "fidelity",
-      "threat_score"
-    ],
-    "ordinalScaleCeiling": 10
-  },
+  "reviewOnlyScoreTargets": [
+    "severity",
+    "fidelity",
+    "threat_score"
+  ],
   "normalizationAliases": {
     "src": "srcip",
     "src_ip": "srcip",

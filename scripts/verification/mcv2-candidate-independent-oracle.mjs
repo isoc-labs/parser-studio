@@ -35,19 +35,16 @@ high({'destination-port':'10400'},'destination-port','dstport','integer');
 high({destination_port:65535},'destination_port','dstport','integer');
 high({spt:443,protocol:'tcp'},'spt','srcport','integer');
 high({event_time:'2026-10-16T12:30:00Z'},'event_time','timestamp','timestamp');
-high({severity:100},'severity','severity','integer');
-// severity, fidelity and threat_score are 0-100 scores where higher means more. A Syslog level (0-7, 0 the most
-// severe), an IDS priority (1-4) or a CEF score (0-10) lies inside that range: a value inside 0-10 does not show
-// the 0-100 scale, whatever the vendor or the path, and the field keeps its own name.
-high({severity:11},'severity','severity','integer');
-high({threat_score:80},'threat_score','threat_score','integer');
-absent({severity:10},'severity');
-absent({severity:0},'severity');
+// severity, fidelity and threat_score are 0-100 scores where higher means more. A source field of the same name may
+// use another scale (Syslog 0-7 with 0 the most severe, IDS 1-4, CEF 0-10, 0-20, 0-255), run the other way or count
+// something else, and no value inside the range shows which. The name is never evidence (owner principle of
+// 2026-11-28: no automatic approval without a specification, a verified field definition or the user's approval).
+for(const value of [0,2,6,10,11,15,55,80,100,'high'])absent({severity:value},'severity');
 absent({asa:{severity:'6'}},'asa.severity');
-absent({fidelity:7},'fidelity');
-assert.equal(suggest([{severity:5},{severity:60}]).find(r=>r.source==='severity')?.confidence,'HIGH',
-  'one value above the ordinal range shows the scale of the sample');
-review({severity:'high'},'severity','severity');
+absent({fidelity:7},'fidelity');absent({fidelity:87},'fidelity');
+absent({threat_score:80},'threat_score');absent({threat_score:250},'threat_score');
+assert.equal(suggest([{severity:5},{severity:60}]).find(r=>r.source==='severity'),undefined,
+  'a larger value elsewhere in the sample is not evidence of the scale either');
 assert.equal(suggest([{severity:5},{severity:'-'}]).find(r=>r.source==='severity'),undefined,
   'a placeholder value does not show the scale');
 assert.notEqual(row({severity:true},'severity')?.confidence,'HIGH','a non-numeric severity is never approved');
@@ -71,7 +68,7 @@ review({protocol:'HTTPS'},'protocol','proto_name');
 review({proto:256},'proto','proto');
 review({proto:-1},'proto','proto');
 review({event_time:'2026-10-16T12:30:00'},'event_time','timestamp');
-review({severity:101},'severity','severity');
+absent({severity:101},'severity');
 review({src_ip:''},'src_ip','srcip');
 review({src_ip:'N/A'},'src_ip','srcip');
 absent({post_nat:{'source-port':443}},'post_nat.source-port');
@@ -222,12 +219,10 @@ const sparseIcmp=suggest([{'icmp-type':8,'protocol-id':1},
 assert.equal(sparseIcmp.find(r=>r.source==='icmp-type')?.confidence,'REVIEW',
   'missing event cannot negate present ICMP evidence');
 absent({event_type:'alert',alert:{signature_id:99,severity:2}},'alert.severity');
-// The Suricata refusal needs the alert evidence and holds for any priority; outside an alert the name is judged
-// by the scale its value shows (2 does not show the 0-100 scale, 75 does).
+// A Suricata priority is not the 0-100 score inside an alert or outside one, whatever its value.
 absent({event_type:'alert',alert:{signature_id:99,severity:75}},'alert.severity');
 absent({event_type:'flow',alert:{signature_id:99,severity:2}},'alert.severity');
-high({event_type:'flow',alert:{signature_id:99,severity:75}},
-  'alert.severity','severity','integer');
+absent({event_type:'flow',alert:{signature_id:99,severity:75}},'alert.severity');
 const policyCandidate=row({'policy-name':'policy-1'},'policy-name');
 assert.equal(policyCandidate?.target,'rule.name','policy-name official alias');
 assert.equal(row({'policy-name':'policy-1'},'policy-name',
@@ -517,7 +512,7 @@ assert.equal(mod.fortiGateFalseFriend('generic.kv.srcip',[{generic:{kv:{...forti
 assert.equal(mod.fortiGateFalseFriend('generic.kv.hostname',[{generic:{kv:{hostname:'sensor1',type:'utm'}}}]),false);
 absent({body:{event_type:'alert',alert:{signature_id:99,severity:2}}},'body.alert.severity');
 absent({body:{event_type:'alert',alert:{signature_id:99,severity:75}}},'body.alert.severity');
-high({body:{event_type:'flow',alert:{signature_id:99,severity:75}}},'body.alert.severity','severity','integer');
+absent({body:{event_type:'flow',alert:{signature_id:99,severity:75}}},'body.alert.severity');
 // The evidence of a record is in one container: pieces at different levels do not make a FortiGate record, and
 // a key of the same name deeper inside does not hide the alert that contains it.
 // (Still proposed, so not taken for a FortiGate false friend; a host inside an object is offered for review.)

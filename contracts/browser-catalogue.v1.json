@@ -1365,7 +1365,7 @@
     },
     {
       "file": "tests/normalization-security-edge.spec.ts",
-      "title": "severity outside documented 0-100 range stays REVIEW",
+      "title": "severity is never recommended from its name, outside or inside the 0-100 range",
       "disposition": "REQUIRED"
     },
     {

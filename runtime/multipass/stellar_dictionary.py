@@ -36,8 +36,7 @@ _L4_NUMERIC=frozenset(_POLICY["transportPortProtocols"]["numeric"])
 _L4_NAMES=frozenset(_POLICY["transportPortProtocols"]["names"])
 _EXPLICIT_PORT_ALIASES=dict(_POLICY["explicitPortSourceAliases"])
 _DOCUMENTED_PROTO_NAMES=frozenset(_POLICY["officialProtocolNames"])
-_SCORE_SCALE_TARGETS=frozenset(_POLICY["scoreScaleEvidence"]["targets"])
-_ORDINAL_SCALE_CEILING=int(_POLICY["scoreScaleEvidence"]["ordinalScaleCeiling"])
+_REVIEW_ONLY_SCORE_TARGETS=frozenset(_POLICY["reviewOnlyScoreTargets"])
 DICTIONARY_REVISION="stellar-standard-metadata-7.0.xs-2026-10-14"
 OFFICIAL_DICTIONARY_URL_65="https://docs.stellarcyber.ai/prod-docs/6.5.xs/Common/Metadata-Dictionary.htm?TocPath=REFERENCE%7C_____8"
 OFFICIAL_DICTIONARY_URL_70="https://docs.stellarcyber.ai/7.0.xs/Common/Metadata-Dictionary.htm"
@@ -260,11 +259,10 @@ def _semantic_rejection(target:str,value:Any,observed:list[tuple[str,Any]])->str
         not isinstance(value,str) or value.strip().lower() not in _DOCUMENTED_PROTO_NAMES
     ):
         return "DICTIONARY_PROTOCOL_NAME_UNSUPPORTED"
-    # A 0-100 score is official only when the value shows that scale; Syslog levels, IDS priorities
-    # and CEF scores lie inside 0-10 and may run the other way (shared scoreScaleEvidence policy).
-    if target in _SCORE_SCALE_TARGETS:
-        ok,number=_coerce(target,value)
-        return "DICTIONARY_SCORE_SCALE_NOT_SHOWN" if ok and number<=_ORDINAL_SCALE_CEILING else None
+    # Neither the name nor a value inside 0-100 shows the scale, direction or meaning of a source score
+    # (shared reviewOnlyScoreTargets policy): never suggested from the name.
+    if target in _REVIEW_ONLY_SCORE_TARGETS:
+        return "DICTIONARY_SCORE_NEEDS_REVIEW"
     if target not in ("srcport","dstport"):
         return None
     numeric=set()

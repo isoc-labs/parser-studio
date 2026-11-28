@@ -61,32 +61,32 @@ describe('cross-vendor Stellar 7.0 semantic false-friend oracle, 2026-11-06',()=
     expect(official(src)).toContainEqual(['alert.action','action']);
   });
   // The 7.0 dictionary defines severity, fidelity and threat_score on a 0-100 scale where a higher value means more.
-  // Syslog levels (0-7, 0 the most severe), IDS priorities (1-4) and CEF or CVSS scores (0-10) all lie inside that
-  // range, so a matching name and a value in range do not show which scale a source uses.
-  it('accepts a 0-100 score field only when the sample itself shows that scale',()=>{
+  // A source field of the same name may use any other scale, run the other way or count something else, and no
+  // value inside the range shows which: the name is never evidence, so the sample cannot make it official.
+  it('never takes a field for a 0-100 score because of its name, whatever values the sample holds',()=>{
     // The level digit of a Cisco ASA/FTD tag such as %ASA-6-302013, under the name the ASA reader gives it.
     const levels=[{asa:{severity:'6',src_ip:'10.0.0.1'}},{asa:{severity:'4',src_ip:'10.0.0.2'}}];
-    expect(official(...levels)).not.toContainEqual(['asa.severity','severity']);
-    expect(official(...levels)).toContainEqual(['asa.src_ip','srcip']);
-    // No vendor or reader is named by the rule: the same values under any path, and every 0-100 target.
-    expect(official({severity:3},{severity:7})).not.toContainEqual(['severity','severity']);
-    expect(official({event:{severity:10}})).not.toContainEqual(['event.severity','severity']);
-    expect(official({syslog:{severity:5}})).not.toContainEqual(['syslog.severity','severity']);
-    expect(official({fidelity:3,threat_score:4})).toEqual([]);
-    // A sample that shows the 0-100 scale keeps the direct official mapping.
-    expect(official({severity:25},{severity:60})).toContainEqual(['severity','severity']);
-    expect(official({severity:5},{severity:60})).toContainEqual(['severity','severity']);
-    expect(official({fidelity:90,threat_score:80})).toEqual([['fidelity','fidelity'],['threat_score','threat_score']]);
-  });
-  it('does not offer the unproven score field as a recommendation; a qualitative severity is still shown for review',()=>{
-    expect(candidates({asa:{severity:'6'}}).map(candidate=>candidate.source)).not.toContain('asa.severity');
-    expect(candidates({severity:'high'},{severity:'low'}).map(candidate=>[candidate.source,candidate.confidence]))
-      .toEqual([['severity','REVIEW']]);
+    expect(official(...levels)).toEqual([['asa.src_ip','srcip']]);
+    const samples:Record<string,unknown>[][]=[
+      [{severity:3},{severity:7}],                    // Syslog level, 0 the most severe
+      [{severity:15},{severity:12},{severity:18}],    // a 0-20 scale
+      [{severity:80},{severity:60},{severity:90}],    // a 0-255 scale
+      [{severity:90},{severity:75},{severity:20}],    // 0-100 where a lower value is more severe
+      [{severity:3},{severity:75}],                   // two scales in one sample
+      [{severity:100}],[{severity:0}],[{severity:'high'},{severity:'low'}],
+      [{event:{severity:10}}],[{syslog:{severity:5}}],[{event_type:'flow',alert:{signature_id:1,severity:75}}],
+      [{fidelity:87},{fidelity:92}],                  // some other percentage
+      [{threat_score:250},{threat_score:31}],         // a count
+    ];
+    for(const sample of samples){
+      const proposed=candidates(...sample.map(fields=>({...fields,srcip:'192.0.2.1'})));
+      expect(proposed.map(candidate=>candidate.target),JSON.stringify(sample)).toEqual(['srcip']);
+    }
   });
   it('names every catalog field that the 7.0 dictionary documents on the 0-100 scale',()=>{
     const documented=STELLAR_METADATA_CATALOG.filter(entry=>entry.mappable&&
-      entry.descriptions.some(text=>text.includes('0–100'))).map(entry=>entry.name).sort();
-    expect([...policy.scoreScaleEvidence.targets].sort()).toEqual(documented);
+      entry.descriptions.some(text=>text.includes('0\u2013100'))).map(entry=>entry.name).sort();
+    expect([...policy.reviewOnlyScoreTargets].sort()).toEqual(documented);
     expect(documented).toEqual(['fidelity','severity','threat_score']);
   });
   // A translated (NAT) address is not the original endpoint of the session. The exclusion that already keeps

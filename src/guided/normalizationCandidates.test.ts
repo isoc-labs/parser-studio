@@ -73,10 +73,10 @@ describe('official-catalog normalization candidates',()=>{
       .toMatchObject({source:'event_time',target:'timestamp',confidence:'REVIEW',safeForBulk:false});
     expect(suggestNormalizationCandidates({dst_port:65536},[])[0])
       .toMatchObject({source:'dst_port',target:'dstport',confidence:'REVIEW',safeForBulk:false});
-    expect(suggestNormalizationCandidates({severity:101},[])[0])
-      .toMatchObject({source:'severity',target:'severity',confidence:'REVIEW',safeForBulk:false});
-    expect(suggestNormalizationCandidates({severity:100},[])[0])
-      .toMatchObject({source:'severity',target:'severity',confidence:'HIGH',safeForBulk:true});
+    // A 0-100 score target is never proposed from its name, inside the range or outside it: neither shows the
+    // scale, direction or meaning of the source field (shared reviewOnlyScoreTargets policy).
+    expect(suggestNormalizationCandidates({severity:101},[])).toEqual([]);
+    expect(suggestNormalizationCandidates({severity:100},[])).toEqual([]);
   });
   it('uses the final segment of nested source paths while preserving the full source path',()=>{
     const suggestions=suggestNormalizationCandidates({
@@ -113,7 +113,6 @@ describe('official-catalog normalization candidates',()=>{
     },[]);
     expect(suggestions).toEqual(expect.arrayContaining([
       expect.objectContaining({source:'timestamp',target:'timestamp',confidence:'HIGH'}),
-      expect.objectContaining({source:'severity',target:'severity',confidence:'HIGH'}),
       expect.objectContaining({source:'hostname',target:'hostname',confidence:'HIGH'}),
       expect.objectContaining({source:'localIP',target:'hostip',confidence:'HIGH'}),
       expect.objectContaining({source:'userName',target:'username',confidence:'HIGH'}),
@@ -124,7 +123,8 @@ describe('official-catalog normalization candidates',()=>{
     ]));
     // EDR event family and detection state are not Stellar ML event_type or enforcement action.
     expect(suggestions.some(item=>['eventType','action'].includes(item.source))).toBe(false);
-    expect(suggestions.some(item=>['severityName','tactic','technique','techniqueId'].includes(item.source))).toBe(false);
+    // The vendor's own severity number (80 here) keeps its name: its scale is the vendor's, not shown to be Stellar's.
+    expect(suggestions.some(item=>['severity','severityName','tactic','technique','techniqueId'].includes(item.source))).toBe(false);
   });
 
   it('abstains when another mapping owns the official destination',()=>{

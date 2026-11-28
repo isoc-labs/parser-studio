@@ -133,23 +133,12 @@ export function ignored(value:unknown):boolean{
 // Published 7.0 proto_name is a transport protocol, not a vendor application
 // or service label. An unknown name is still reviewable, never auto-approved.
 const DOCUMENTED_PROTO_NAMES=new Set(semanticPolicy.officialProtocolNames);
-const SCORE_SCALE_TARGETS=new Set<string>(semanticPolicy.scoreScaleEvidence.targets);
-const ORDINAL_SCALE_CEILING:number=semanticPolicy.scoreScaleEvidence.ordinalScaleCeiling;
 /** The 7.0 dictionary defines severity, fidelity and threat_score on a 0-100 scale where a higher value means
- * more. Ordinal scales of other systems (Syslog levels 0-7 with 0 the most severe, IDS priorities 1-4, CEF and
- * CVSS 0-10) lie inside that range, so the range check cannot tell them apart and a matching name does not show
- * which scale a source uses. The sample has to show it: a source whose every usable value is an integer inside the
- * ordinal range keeps its own name. No conversion between scales is attempted. */
-function scoreScaleNotShown(source:string,target:string,events:readonly Record<string,unknown>[]):boolean{
-  if(!SCORE_SCALE_TARGETS.has(target))return false;
-  const usable=events.map(fields=>lookupFieldValue(fields,source))
-    .flatMap(result=>result.found&&!ignored(result.value)?[result.value]:[]);
-  return usable.length>0&&usable.every(value=>{
-    const score=typeof value==='number'?value:
-      typeof value==='string'&&/^\d+$/u.test(value.trim())?Number(value.trim()):NaN;
-    return Number.isInteger(score)&&score>=0&&score<=ORDINAL_SCALE_CEILING;
-  });
-}
+ * more. A source field of the same name may use any other scale (Syslog levels 0-7 with 0 the most severe, IDS
+ * priorities 1-4, CEF and CVSS 0-10, 0-20, 0-255), run the other way, or count something else. Neither the name
+ * nor a value inside the range shows which, so no sample is evidence: these targets are never proposed from a
+ * name. The field keeps its own name and value; reviewed ChatGPT mapping and manual mapping remain. */
+const REVIEW_ONLY_SCORE_TARGETS=new Set<string>(semanticPolicy.reviewOnlyScoreTargets);
 const TRANSPORT_NUMERIC=new Set<string>(
   semanticPolicy.transportPortProtocols.numeric.map(String));
 const TRANSPORT_NAMES=new Set<string>(semanticPolicy.transportPortProtocols.names);
@@ -292,13 +281,6 @@ function windowsAgentEvidence(fields:Record<string,unknown>):boolean{
   return ['provider_guid','record_number','log_name','event_data'].some(name=>
     lookupFieldValue(fields,name).found);
 }
-function suricataAlertEvidence(fields:Record<string,unknown>,source:string):boolean{
-  return recordPrefixes(source).some(prefix=>{
-    const kind=lookupFieldValue(fields,prefix+'event_type');
-    return kind.found&&String(kind.value).toLowerCase()==='alert'&&
-      lookupFieldValue(fields,prefix+'alert.signature_id').found;
-  });
-}
 // HTTP request methods (RFC 9110 section 9, and PATCH of RFC 5789), a request target (origin form or absolute
 // form, RFC 9112 section 3.2), a request line and a protocol version: what a VALUE of the record says, whatever
 // the field that holds it is called.
@@ -393,7 +375,6 @@ function incompatibleVendorMeaning(
   source:string,target:string,events:Record<string,unknown>[],
 ):boolean{
   const leaf=(source.split('.').at(-1)??source).toLowerCase();
-  const lower=source.toLowerCase();
   // An exact dictionary field-name match cannot establish vendor semantics.
   // event_type is an ML-job event type in the 7.0 dictionary, not the
   // manufacturer's record family (Suricata alert, Okta session, etc.).
@@ -411,9 +392,8 @@ function incompatibleVendorMeaning(
     return result.found&&!ignored(result.value)&&
       !SECURITY_DISPOSITIONS.has(String(result.value).trim().toLowerCase());
   }))return true;
-  // Suricata IDS priority severity (1-4) is not Stellar's 0-100 score.
-  if(target==='severity'&&lower.endsWith('alert.severity')&&
-    events.some(fields=>suricataAlertEvidence(fields,source)))return true;
+  // A Syslog level, an IDS priority, a CEF score or any other number called severity, fidelity or threat_score.
+  if(REVIEW_ONLY_SCORE_TARGETS.has(target))return true;
   if(fortiGateFalseFriend(source,events))return true;
   // CEF names spt the source port. Imperva Cloud WAF (Incapsula) writes the client port as cpt and uses spt for the
   // SERVER port (its log file structure reference), with src still the client address: spt mapped to srcport would
@@ -421,8 +401,6 @@ function incompatibleVendorMeaning(
   if(target==='srcport'&&leaf==='spt'&&events.some(fields=>
     lookupFieldValue(fields,source).found&&
     lookupFieldValue(fields,source.slice(0,source.lastIndexOf('.')+1)+'cpt').found))return true;
-  // A Syslog PRI severity (0-7), a device level digit and every other ordinal scale: see scoreScaleNotShown.
-  if(scoreScaleNotShown(source,target,events))return true;
   // A reviewed PAN-OS positional CSV category is not the unrelated Stellar
   // Windows-agent 'type' field, even when a structural profile names it type.
   if(leaf==='type'&&source.toLowerCase().includes('generic.fields.')&&

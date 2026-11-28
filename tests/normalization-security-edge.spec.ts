@@ -92,14 +92,15 @@ test('out-of-range L4 destination port stays REVIEW',async({page})=>{
   await expect(dpt).toContainText('Check first');
 });
 
-test('severity outside documented 0-100 range stays REVIEW',async({page})=>{
-  const map=await openMap(page,[
-    '{"hostname":"sensor-01","severity":101,"action":"alert"}',
-    '{"hostname":"sensor-02","severity":150,"action":"alert"}',
-    '{"hostname":"sensor-03","severity":999,"action":"alert"}',
-  ]);
-  const severity=map.getByLabel('Recommended field matches').filter({hasText:'severity'});
-  await expect(severity).toContainText('Check first');
+// A field called severity is never recommended for the official 0-100 score from its name: no value, inside the
+// documented range or outside it, shows the scale or direction of the source. It stays a vendor field.
+test('severity is never recommended from its name, outside or inside the 0-100 range',async({page})=>{
+  for(const values of [[101,150,999],[75,60,90]]){
+    const map=await openMap(page,values.map((value,index)=>
+      '{"hostname":"sensor-0'+(index+1)+'","severity":'+value+',"action":"alert"}'));
+    await expect(map.getByLabel('Recommended field matches')).not.toContainText('severity');
+    await expect(map.locator('article.normalization-map-row.custom[data-source-path="severity"]')).toHaveCount(1);
+  }
 });
 
 test('array-valued source IP is preserved in extracted JSON but not falsely scalar-mapped',async({page})=>{

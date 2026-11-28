@@ -32,10 +32,10 @@ class SharedSemanticConformance(unittest.TestCase):
                 self.assertEqual("SOURCE_PARSED",result["status"])
                 self.assertEqual("594",str(result["fields"]["srcport"]))
 
-    def test_score_fields_are_official_only_when_the_scale_is_shown(self):
-        # Same corpus and same answers as the browser: a severity inside 0-10 does not show the 0-100 scale.
-        self.assertEqual(["fidelity","severity","threat_score"],sorted(POLICY["scoreScaleEvidence"]["targets"]))
-        for item in CASES["scoreScaleEvidence"]:
+    def test_score_fields_are_never_official_from_their_name(self):
+        # Same corpus and same answers as the browser: no value shows the scale or direction of a source score.
+        self.assertEqual(["fidelity","severity","threat_score"],sorted(POLICY["reviewOnlyScoreTargets"]))
+        for item in CASES["reviewOnlyScoreTargets"]:
             with self.subTest(id=item["id"]):
                 result=preview(f'severity={item["severity"]} srcip=192.0.2.1')
                 mapped={m["targetField"] for m in result["dictionary"]["mapped"]}

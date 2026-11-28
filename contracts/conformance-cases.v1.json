@@ -223,45 +223,50 @@
       "dstport": 443
     }
   ],
-  "scoreScaleEvidence": [
+  "reviewOnlyScoreTargets": [
     {
-      "id": "score-level-0",
+      "id": "score-value-0",
       "severity": "0",
       "allow": false
     },
     {
-      "id": "score-level-2",
+      "id": "score-value-2",
       "severity": "2",
       "allow": false
     },
     {
-      "id": "score-level-6",
+      "id": "score-value-6",
       "severity": "6",
       "allow": false
     },
     {
-      "id": "score-level-10",
+      "id": "score-value-10",
       "severity": "10",
       "allow": false
     },
     {
-      "id": "score-shown-11",
+      "id": "score-value-11",
       "severity": "11",
-      "allow": true
+      "allow": false
     },
     {
-      "id": "score-shown-55",
+      "id": "score-value-15",
+      "severity": "15",
+      "allow": false
+    },
+    {
+      "id": "score-value-55",
       "severity": "55",
-      "allow": true
+      "allow": false
     },
     {
-      "id": "score-shown-100",
+      "id": "score-value-80",
+      "severity": "80",
+      "allow": false
+    },
+    {
+      "id": "score-value-100",
       "severity": "100",
-      "allow": true
-    },
-    {
-      "id": "score-out-of-range-101",
-      "severity": "101",
       "allow": false
     }
   ]

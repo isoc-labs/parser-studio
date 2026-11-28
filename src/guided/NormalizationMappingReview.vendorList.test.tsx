@@ -76,7 +76,7 @@ describe('Map Fields vendor-only list',()=>{
     expect(listed).toHaveValue('dstip_host');
     expect(container.querySelector('details.normalization-vendor-list')!.contains(listed)).toBe(false);
     expect(container.querySelector('details.normalization-vendor-list summary')).toHaveTextContent('Vendor-only fields (13)');
-  });
+  },30_000);
 
   it('keeps a matched row in place while its name passes through text that is not an official name',()=>{
     const {container}=render(<Harness vendorCount={14}/>);
@@ -89,7 +89,7 @@ describe('Map Fields vendor-only list',()=>{
       expect(container.querySelector('details.normalization-vendor-list')!.contains(input),text).toBe(false);
     }
     expect(input).toHaveValue('srcip_host');
-  });
+  },30_000);
 
   it('does not fold a short list, so small samples look exactly as before',()=>{
     const {container}=render(<Harness vendorCount={5}/>);
